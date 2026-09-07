@@ -1,0 +1,93 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    
+    <!-- Background Gradient: Deep Indigo / Violet Anime Theme -->
+    <path
+        android:pathData="M0,0h320v180h-320z"
+        android:fillColor="#0f0c20" />
+        
+    <path
+        android:pathData="M0,0h320v180h-320z"
+        android:fillColor="#5A2E98"
+        android:fillAlpha="0.35" />
+
+    <!-- Decorative polygon / glowing accent -->
+    <path
+        android:pathData="M-40,90 L160,-20 L240,200 Z"
+        android:fillColor="#7B2CBF"
+        android:fillAlpha="0.25" />
+
+    <!-- Play Shield Icon Background -->
+    <path
+        android:pathData="M160,35 C178,35 200,45 200,68 C200,105 160,125 160,125 C160,125 120,105 120,68 C120,45 142,35 160,35 Z"
+        android:fillColor="#7B2CBF" />
+
+    <!-- Shield Ad-Block Inner Accent -->
+    <path
+        android:pathData="M160,42 C173,42 192,50 192,70 C192,100 160,117 160,117 C160,117 128,100 128,70 C128,50 147,42 160,42 Z"
+        android:fillColor="#9D4EDD" />
+
+    <!-- Play Triangle Inside Shield -->
+    <path
+        android:pathData="M153,62 L172,74 L153,86 Z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Top Badge Accent "TV" -->
+    <path
+        android:pathData="M185,42 h30 a4,4 0 0 1 4,4 v14 a4,4 0 0 1 -4,4 h-30 a4,4 0 0 1 -4,-4 v-14 a4,4 0 0 1 4,-4 z"
+        android:fillColor="#E0AAFF" />
+
+    <!-- TV Letters in Badge -->
+    <path
+        android:pathData="M190,48 h8 v2 h-3 v8 h-2 v-8 h-3 z M201,48 l2.5,7 l2.5,-7 h2.5 l-3.5,10 h-2 l-3.5,-10 z"
+        android:fillColor="#10002B" />
+
+    <!-- Bottom Text: 9Anime TV -->
+    <!-- Stylized '9' -->
+    <path
+        android:pathData="M100,140 a7,7 0 1 1 0,-14 a7,7 0 0 1 7,7 v7 h-7 z M100,132 a3,3 0 1 0 0,6 a3,3 0 0 0 0,-6 z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Stylized 'A' -->
+    <path
+        android:pathData="M115,147 l6,-18 h3 l6,18 h-3.5 l-1.5,-4.5 h-6 l-1.5,4.5 z M120,138 h4 l-2,-6 z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Stylized 'N' -->
+    <path
+        android:pathData="M136,129 h3 l6,12 v-12 h3 v18 h-3 l-6,-12 v12 h-3 z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Stylized 'I' -->
+    <path
+        android:pathData="M154,129 h3 v18 h-3 z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Stylized 'M' -->
+    <path
+        android:pathData="M163,129 h3.5 l4,9 l4,-9 h3.5 v18 h-3 v-11 l-3.5,8 h-2 l-3.5,-8 v11 h-3 z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Stylized 'E' -->
+    <path
+        android:pathData="M185,129 h10 v3 h-7 v4 h6 v3 h-6 v5 h7 v3 h-10 z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Dot / Bullet -->
+    <path
+        android:pathData="M202,138 a2,2 0 1 1 4,0 a2,2 0 0 1 -4,0 z"
+        android:fillColor="#FF79C6" />
+
+    <!-- TV Pill Highlight -->
+    <path
+        android:pathData="M213,131 h24 a3,3 0 0 1 3,3 v10 a3,3 0 0 1 -3,3 h-24 a3,3 0 0 1 -3,-3 v-10 a3,3 0 0 1 3,-3 z"
+        android:fillColor="#9D4EDD" />
+
+    <path
+        android:pathData="M217,135 h6 v2 h-2 v6 h-2 v-6 h-2 z M225,135 l2,5 l2,-5 h2 l-2.5,8 h-1.5 l-2.5,-8 z"
+        android:fillColor="#FFFFFF" />
+
+</vector>
