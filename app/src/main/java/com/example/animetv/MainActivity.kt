@@ -98,10 +98,18 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Load starting URL
+        val startUrl = intent?.dataString ?: TARGET_URL
         if (savedInstanceState == null) {
-            webView.loadUrl(TARGET_URL)
+            webView.loadUrl(startUrl)
         } else {
             webView.restoreState(savedInstanceState)
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        intent.dataString?.let { newUrl ->
+            webView.loadUrl(newUrl)
         }
     }
 
@@ -247,6 +255,10 @@ class MainActivity : AppCompatActivity() {
                 window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 enableImmersiveMode()
                 Toast.makeText(this, "⛶ Fullscreen Active (Press BACK to exit)", Toast.LENGTH_SHORT).show()
+                // Auto-play the video if paused / waiting on overlay play button
+                handler.postDelayed({
+                    playVideo()
+                }, 300L)
             } else {
                 btnFullscreen.text = "⛶ Fullscreen"
                 btnFullscreen.setTextColor(android.graphics.Color.parseColor("#FFD600"))
@@ -498,38 +510,56 @@ class MainActivity : AppCompatActivity() {
     }
 
 
-    private fun toggleVideoPlayback() {
+    private fun sendPlayerCommand(action: String, seconds: Int = 0) {
         val js = """
             (function() {
+                var payload = { action: '$action', seconds: $seconds };
+                var strPayload = JSON.stringify(payload);
+                
+                // 1. Broadcast to all iframes in the document (cross-origin embed players)
+                var iframes = document.querySelectorAll('iframe');
+                for (var i = 0; i < iframes.length; i++) {
+                    try {
+                        iframes[i].contentWindow.postMessage(payload, '*');
+                        iframes[i].contentWindow.postMessage(strPayload, '*');
+                    } catch(e) {}
+                }
+                
+                // 2. Control top-level video elements if any
                 var videos = document.querySelectorAll('video');
-                if (videos.length > 0) {
-                    for (var i = 0; i < videos.length; i++) {
-                        var v = videos[i];
-                        if (v.paused) { v.play(); } else { v.pause(); }
-                    }
-                } else {
-                    var ifr = document.getElementById('iframe-embed');
-                    if (ifr && ifr.contentWindow) {
-                        try {
-                            ifr.contentWindow.postMessage('{"type":"toggle"}', '*');
-                        } catch(e) {}
-                    }
+                for (var j = 0; j < videos.length; j++) {
+                    var v = videos[j];
+                    try {
+                        if ('$action' === 'toggle') {
+                            if (v.paused) v.play(); else v.pause();
+                        } else if ('$action' === 'play') {
+                            if (v.paused) v.play();
+                        } else if ('$action' === 'pause') {
+                            if (!v.paused) v.pause();
+                        } else if ('$action' === 'seek') {
+                            v.currentTime = Math.max(0, v.currentTime + $seconds);
+                        }
+                    } catch(e) {}
                 }
             })();
         """.trimIndent()
         webView.evaluateJavascript(js, null)
     }
 
+    private fun toggleVideoPlayback() {
+        sendPlayerCommand("toggle")
+    }
+
+    private fun playVideo() {
+        sendPlayerCommand("play")
+    }
+
+    private fun pauseVideo() {
+        sendPlayerCommand("pause")
+    }
+
     private fun seekVideo(seconds: Int) {
-        val js = """
-            (function() {
-                var videos = document.querySelectorAll('video');
-                for (var i = 0; i < videos.length; i++) {
-                    videos[i].currentTime += $seconds;
-                }
-            })();
-        """.trimIndent()
-        webView.evaluateJavascript(js, null)
+        sendPlayerCommand("seek", seconds)
     }
 
     private fun triggerNextEpisode() {

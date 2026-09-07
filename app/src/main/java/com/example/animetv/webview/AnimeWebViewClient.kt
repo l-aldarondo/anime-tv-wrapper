@@ -35,8 +35,11 @@ class AnimeWebViewClient : WebViewClient() {
             )
         }
 
-        // Sanitize player iframe embeds to purge in-frame ad scripts before they can execute
-        if (url.contains("/play/") && (host.contains("1anime.site") || host.contains("megacloud") || host.contains("rapid-cloud"))) {
+        // Sanitize player iframe embeds to purge in-frame ad scripts and inject remote playback controls
+        val isPlayerUrl = url.contains("/play/") || url.contains("/embed") || url.contains("/e-") || url.contains("/v/") || url.contains("stream")
+        val isPlayerHost = AdBlocker.ALLOWED_VIDEO_HOSTS.any { host.contains(it) }
+        val isMediaFile = url.contains(".m3u8") || url.contains(".mp4") || url.contains(".ts") || url.contains(".m4s") || url.contains(".js") || url.contains(".css")
+        if (isPlayerUrl && isPlayerHost && !isMediaFile) {
             val sanitized = sanitizePlayerResponse(url, request)
             if (sanitized != null) return sanitized
         }
@@ -80,25 +83,117 @@ class AnimeWebViewClient : WebViewClient() {
                 ""
             )
 
-            // Inject anti-overlay style and auto-fullscreen postMessage
+            // Inject anti-overlay style and bidirectional TV remote control bridge
             val injection = """
                 <style>
                     iframe[src*="furudloof"], iframe[src*="ad"], iframe[src*="pop"], iframe[src*="doubleclick"],
                     div[data-area], .wrapper[data-area], div[class*="popup"], div[class*="popunder"] { display: none !important; }
                 </style>
                 <script>
-                    function notifyPlay() {
-                        try { window.top.postMessage({event: 'play'}, '*'); } catch(e) {}
-                    }
-                    document.addEventListener('click', notifyPlay, true);
-                    document.addEventListener('touchstart', notifyPlay, true);
-                    window.addEventListener('load', function() {
-                        var v = document.querySelector('video');
-                        if (v) {
-                            v.addEventListener('play', notifyPlay);
-                            v.addEventListener('playing', notifyPlay);
+                    (function() {
+                        function getMedia() {
+                            return document.querySelector('video') || document.querySelector('audio');
                         }
-                    });
+                        function getPlayBtn() {
+                            return document.querySelector('.plyr__control--overlaid') ||
+                                   document.querySelector('button[data-plyr="play"]') ||
+                                   document.querySelector('.play-btn') ||
+                                   document.querySelector('.play-button');
+                        }
+
+                        function doPlay() {
+                            var v = getMedia();
+                            var btn = getPlayBtn();
+                            if (v && v.plyr && typeof v.plyr.play === 'function') {
+                                v.plyr.play();
+                            } else if (v && v.paused) {
+                                if (btn && btn.offsetParent !== null) {
+                                    btn.click();
+                                } else {
+                                    v.play().catch(function(){});
+                                }
+                            } else if (btn) {
+                                btn.click();
+                            }
+                        }
+
+                        function doPause() {
+                            var v = getMedia();
+                            if (v && v.plyr && typeof v.plyr.pause === 'function') {
+                                v.plyr.pause();
+                            } else if (v && !v.paused) {
+                                v.pause();
+                            }
+                        }
+
+                        function doToggle() {
+                            var v = getMedia();
+                            var btn = getPlayBtn();
+                            if (v && v.plyr && typeof v.plyr.togglePlay === 'function') {
+                                v.plyr.togglePlay();
+                            } else if (v) {
+                                if (v.paused) {
+                                    if (btn && btn.offsetParent !== null) {
+                                        btn.click();
+                                    } else {
+                                        v.play().catch(function(){});
+                                    }
+                                } else {
+                                    v.pause();
+                                }
+                            } else if (btn) {
+                                btn.click();
+                            }
+                        }
+
+                        function doSeek(seconds) {
+                            var v = getMedia();
+                            if (!v) return;
+                            try {
+                                if (v.plyr && typeof v.plyr.currentTime !== 'undefined') {
+                                    v.plyr.currentTime = Math.max(0, Math.min(v.plyr.duration || 999999, v.plyr.currentTime + seconds));
+                                } else {
+                                    v.currentTime = Math.max(0, Math.min(v.duration || 999999, v.currentTime + seconds));
+                                }
+                            } catch(e) {
+                                try { v.currentTime += seconds; } catch(err) {}
+                            }
+                        }
+
+                        // Listen for remote control commands from MainActivity
+                        window.addEventListener('message', function(e) {
+                            try {
+                                var data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+                                if (!data) return;
+                                var action = data.action || data.type || data.command;
+                                if (action === 'toggle' || action === 'play-pause') {
+                                    doToggle();
+                                } else if (action === 'play') {
+                                    doPlay();
+                                } else if (action === 'pause') {
+                                    doPause();
+                                } else if (action === 'seek') {
+                                    var secs = Number(data.seconds != null ? data.seconds : data.value);
+                                    if (!isNaN(secs)) {
+                                        doSeek(secs);
+                                    }
+                                }
+                            } catch(err) {}
+                        }, false);
+
+                        function notifyPlay() {
+                            try { window.top.postMessage({event: 'play'}, '*'); } catch(e) {}
+                        }
+                        document.addEventListener('click', notifyPlay, true);
+                        document.addEventListener('touchstart', notifyPlay, true);
+                        window.addEventListener('load', function() {
+                            var v = getMedia();
+                            if (v) {
+                                v.addEventListener('play', notifyPlay);
+                                v.addEventListener('playing', notifyPlay);
+                            }
+                        });
+                    })();
                 </script>
             """.trimIndent()
 

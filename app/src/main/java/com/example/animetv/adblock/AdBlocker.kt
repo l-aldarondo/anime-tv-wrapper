@@ -272,6 +272,18 @@ object AdBlocker {
                 overflow: hidden !important;
             }
 
+            /* Hide '9anime is back' domain notice banner and announcements */
+            .ts-announcement, .ts-announcement-general, div[class*="ts-announcement"],
+            div[class*="announcement"], .notice-bar, .domain-alert, #notice {
+                display: none !important;
+                visibility: hidden !important;
+                height: 0 !important;
+                max-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: hidden !important;
+            }
+
             /* Ensure 9anime player container and embed iframe are ALWAYS visible, sized, and interactive */
             .wb_-playerarea {
                 position: relative !important;
@@ -413,6 +425,12 @@ object AdBlocker {
                         var sliderWrap = document.querySelector('.deslide-wrap') || document.getElementById('slider');
                         if (sliderWrap && sliderWrap.style.display !== 'none') {
                             sliderWrap.style.display = 'none';
+                        }
+
+                        // Remove '9anime is back' announcement banner
+                        var announcements = document.querySelectorAll('.ts-announcement, div[class*="ts-announcement"], div[class*="announcement"]');
+                        for (var i = 0; i < announcements.length; i++) {
+                            try { announcements[i].remove(); } catch(e) {}
                         }
 
                         // Purge fixed high z-index screen-covering click traps
