@@ -110,6 +110,7 @@ class MainActivity : AppCompatActivity() {
         videoContainer = findViewById(R.id.videoContainer)
         pageLoadingBar = findViewById(R.id.pageLoadingBar)
         virtualCursorView = findViewById(R.id.virtualCursorView)
+        virtualCursorView.targetView = webView
         osdTopBar = findViewById(R.id.osdTopBar)
         osdControlsGuide = findViewById(R.id.osdControlsGuide)
         txtAdBlockBadge = findViewById(R.id.txtAdBlockBadge)
@@ -275,16 +276,17 @@ class MainActivity : AppCompatActivity() {
 
     private fun toggleNavigationMode() {
         currentNavMode = if (currentNavMode == MODE_POINTER) MODE_SCROLL else MODE_POINTER
+        virtualCursorView.isDirectScrollMode = (currentNavMode == MODE_SCROLL)
         if (currentNavMode == MODE_POINTER) {
             virtualCursorView.isCursorVisible = true
             txtNavModeBadge.text = "🖱️ Pointer Mode"
             txtNavModeBadge.setTextColor(android.graphics.Color.parseColor("#E0AAFF"))
-            Toast.makeText(this, "Pointer Mode: D-Pad moves cursor, OK clicks", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Pointer Mode: D-Pad glides cursor, OK clicks", Toast.LENGTH_SHORT).show()
         } else {
             virtualCursorView.isCursorVisible = false
             txtNavModeBadge.text = "📜 Scroll Mode"
             txtNavModeBadge.setTextColor(android.graphics.Color.parseColor("#80D8FF"))
-            Toast.makeText(this, "Scroll Mode: D-Pad scrolls page directly", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Scroll Mode: D-Pad glides page directly", Toast.LENGTH_SHORT).show()
         }
         scheduleGuideDismiss()
     }
@@ -429,8 +431,11 @@ class MainActivity : AppCompatActivity() {
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
                 if (isDown) {
                     scheduleGuideDismiss()
-                    handleDirectionalKey(event.keyCode, event.repeatCount)
+                    if (!virtualCursorView.isCursorVisible && currentNavMode == MODE_POINTER) {
+                        virtualCursorView.isCursorVisible = true
+                    }
                 }
+                virtualCursorView.onDpadKey(event.keyCode, isDown)
                 return true
             }
 
@@ -439,7 +444,7 @@ class MainActivity : AppCompatActivity() {
             KeyEvent.KEYCODE_ENTER,
             KeyEvent.KEYCODE_NUMPAD_ENTER,
             KeyEvent.KEYCODE_BUTTON_A -> {
-                if (currentNavMode == MODE_POINTER && isTv) {
+                if (currentNavMode == MODE_POINTER && (isTv || virtualCursorView.isCursorVisible)) {
                     if (isUp) {
                         scheduleGuideDismiss()
                         virtualCursorView.dispatchClick(webView)
@@ -492,34 +497,6 @@ class MainActivity : AppCompatActivity() {
         return super.onGenericMotionEvent(event)
     }
 
-    private fun handleDirectionalKey(keyCode: Int, repeatCount: Int) {
-        val density = resources.displayMetrics.density
-        // Dynamic acceleration on continuous hold
-        val accel = (1f + (repeatCount * 0.35f)).coerceAtMost(3.0f)
-
-        if (currentNavMode == MODE_POINTER) {
-            val step = 26f * density * accel
-            var dx = 0f
-            var dy = 0f
-
-            when (keyCode) {
-                KeyEvent.KEYCODE_DPAD_UP -> dy = -step
-                KeyEvent.KEYCODE_DPAD_DOWN -> dy = step
-                KeyEvent.KEYCODE_DPAD_LEFT -> dx = -step
-                KeyEvent.KEYCODE_DPAD_RIGHT -> dx = step
-            }
-            virtualCursorView.moveBy(dx, dy, webView)
-        } else {
-            // Direct scroll mode
-            val scrollStep = (80 * density * accel).toInt()
-            when (keyCode) {
-                KeyEvent.KEYCODE_DPAD_UP -> webView.scrollBy(0, -scrollStep)
-                KeyEvent.KEYCODE_DPAD_DOWN -> webView.scrollBy(0, scrollStep)
-                KeyEvent.KEYCODE_DPAD_LEFT -> webView.scrollBy(-scrollStep, 0)
-                KeyEvent.KEYCODE_DPAD_RIGHT -> webView.scrollBy(scrollStep, 0)
-            }
-        }
-    }
 
     private fun toggleVideoPlayback() {
         val js = """

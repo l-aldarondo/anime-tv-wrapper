@@ -7,19 +7,22 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.os.SystemClock
 import android.util.AttributeSet
+import android.view.Choreographer
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.animation.DecelerateInterpolator
 
 /**
- * Virtual mouse cursor overlay for Google TV / Android TV remotes.
- * Allows TV remote D-Pad navigation to click video controls, server chips, and episode lists.
+ * High-performance virtual pointer overlay for Google TV & Android TV remotes.
+ * Features 60/120 FPS continuous velocity physics, smooth acceleration,
+ * fractional sub-pixel edge scrolling, and responsive remote click simulation.
  */
 class VirtualCursorView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0
-) : View(context, attrs, defStyleAttr) {
+) : View(context, attrs, defStyleAttr), Choreographer.FrameCallback {
 
     var cursorX = 0f
         private set
@@ -33,16 +36,42 @@ class VirtualCursorView @JvmOverloads constructor(
             invalidate()
         }
 
-    private val baseRadius = 14f * resources.displayMetrics.density
+    var targetView: View? = null
+
+    private val density = resources.displayMetrics.density
+    private val baseRadius = 14f * density
+
+    // Velocities in pixels per second
+    private var vx = 0f
+    private var vy = 0f
+    private var targetVx = 0f
+    private var targetVy = 0f
+
+    // Held direction keys
+    private var upHeld = false
+    private var downHeld = false
+    private var leftHeld = false
+    private var rightHeld = false
+    private var holdDurationMs = 0L
+    private var lastFrameTimeNanos = 0L
+
+    // Edge scroll accumulator
+    private var scrollAccumulatorY = 0f
+
+    // Direct scroll mode velocities
+    var isDirectScrollMode = false
+    private var directScrollVy = 0f
+    private var directScrollAccumulatorY = 0f
+
+    // Ripple effect on click
     private var rippleRadius = 0f
     private var rippleAlpha = 0
 
-    // Paints
+    // Hardware-accelerated Paints
     private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 3f * resources.displayMetrics.density
+        strokeWidth = 3f * density
         color = Color.parseColor("#9D4EDD") // Anime purple glow
-        setShadowLayer(8f * resources.displayMetrics.density, 0f, 0f, Color.parseColor("#7B2CBF"))
     }
 
     private val innerDotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -52,49 +81,170 @@ class VirtualCursorView @JvmOverloads constructor(
 
     private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 2f * resources.displayMetrics.density
+        strokeWidth = 2f * density
         color = Color.WHITE
     }
 
     private val ripplePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 2f * resources.displayMetrics.density
+        strokeWidth = 2.5f * density
         color = Color.parseColor("#00E676")
     }
 
-    init {
-        setLayerType(LAYER_TYPE_SOFTWARE, null)
+    private var isLoopRunning = false
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        startLoop()
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        stopLoop()
+    }
+
+    fun startLoop() {
+        if (!isLoopRunning) {
+            isLoopRunning = true
+            lastFrameTimeNanos = 0L
+            Choreographer.getInstance().postFrameCallback(this)
+        }
+    }
+
+    fun stopLoop() {
+        isLoopRunning = false
+        Choreographer.getInstance().removeFrameCallback(this)
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        if (cursorX == 0f && cursorY == 0f) {
-            // Position cursor at center of TV screen initially
+        if (cursorX == 0f && cursorY == 0f && w > 0 && h > 0) {
             cursorX = w / 2f
             cursorY = h / 2f
         }
     }
 
-    /**
-     * Move the cursor by a delta. Clamps to view bounds and returns edge-scroll deltas.
-     */
-    fun moveBy(dx: Float, dy: Float, targetView: View? = null): Boolean {
-        cursorX = (cursorX + dx).coerceIn(10f, width - 10f)
-        cursorY = (cursorY + dy).coerceIn(10f, height - 10f)
-        invalidate()
+    fun onDpadKey(keyCode: Int, isDown: Boolean) {
+        when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP -> upHeld = isDown
+            KeyEvent.KEYCODE_DPAD_DOWN -> downHeld = isDown
+            KeyEvent.KEYCODE_DPAD_LEFT -> leftHeld = isDown
+            KeyEvent.KEYCODE_DPAD_RIGHT -> rightHeld = isDown
+        }
 
-        // Edge scrolling: if cursor is near edges, scroll target view
-        if (targetView != null && height > 0 && width > 0) {
-            val edgeThreshold = 80f * resources.displayMetrics.density
-            val scrollSpeed = 24 * resources.displayMetrics.density.toInt()
+        if (isDown) {
+            startLoop()
+        }
 
-            if (cursorY < edgeThreshold) {
-                targetView.scrollBy(0, -scrollSpeed)
-            } else if (cursorY > height - edgeThreshold) {
-                targetView.scrollBy(0, scrollSpeed)
+        updateTargetVelocity()
+    }
+
+    private fun updateTargetVelocity() {
+        val anyHeld = upHeld || downHeld || leftHeld || rightHeld
+        if (!anyHeld) {
+            holdDurationMs = 0L
+            targetVx = 0f
+            targetVy = 0f
+            directScrollVy = 0f
+            return
+        }
+
+        if (isDirectScrollMode) {
+            // Direct scroll velocity: smoothly glides page at 950dp/s to 2000dp/s
+            val scrollSpeed = (950f + (holdDurationMs * 0.9f).coerceAtMost(1050f)) * density
+            var sDirY = 0f
+            if (upHeld) sDirY -= 1f
+            if (downHeld) sDirY += 1f
+            directScrollVy = sDirY * scrollSpeed
+            return
+        }
+
+        // Pointer mode speed: begins at a responsive 800dp/s, smoothly accelerating up to 1700dp/s
+        val currentSpeed = (800f + (holdDurationMs * 0.8f).coerceAtMost(900f)) * density
+
+        var dirX = 0f
+        var dirY = 0f
+        if (leftHeld) dirX -= 1f
+        if (rightHeld) dirX += 1f
+        if (upHeld) dirY -= 1f
+        if (downHeld) dirY += 1f
+
+        if (dirX != 0f && dirY != 0f) {
+            val invSqrt = 0.7071f
+            dirX *= invSqrt
+            dirY *= invSqrt
+        }
+
+        targetVx = dirX * currentSpeed
+        targetVy = dirY * currentSpeed
+    }
+
+    override fun doFrame(frameTimeNanos: Long) {
+        if (!isLoopRunning) return
+
+        if (lastFrameTimeNanos != 0L) {
+            val dt = ((frameTimeNanos - lastFrameTimeNanos) / 1_000_000_000f).coerceIn(0.001f, 0.05f)
+
+            if (upHeld || downHeld || leftHeld || rightHeld) {
+                holdDurationMs += (dt * 1000).toLong()
+                updateTargetVelocity()
+            }
+
+            if (isDirectScrollMode) {
+                val target = targetView
+                if (target != null && directScrollVy != 0f) {
+                    directScrollAccumulatorY += directScrollVy * dt
+                    val px = directScrollAccumulatorY.toInt()
+                    if (px != 0) {
+                        target.scrollBy(0, px)
+                        directScrollAccumulatorY -= px
+                    }
+                }
+            } else {
+                val lerpFactor = (1.0 - Math.exp(-22.0 * dt)).toFloat()
+                vx += (targetVx - vx) * lerpFactor
+                vy += (targetVy - vy) * lerpFactor
+
+                if (Math.abs(vx) < 1f && targetVx == 0f) vx = 0f
+                if (Math.abs(vy) < 1f && targetVy == 0f) vy = 0f
+
+                if (vx != 0f || vy != 0f) {
+                    val pad = 12f * density
+                    cursorX = (cursorX + (vx * dt)).coerceIn(pad, (width - pad).coerceAtLeast(pad))
+                    cursorY = (cursorY + (vy * dt)).coerceIn(pad, (height - pad).coerceAtLeast(pad))
+                    invalidate()
+                }
+
+                // Ultra-smooth edge scrolling while pointer is near borders
+                val target = targetView
+                if (target != null && height > 0 && width > 0 && isCursorVisible) {
+                    val edgeZone = 110f * density
+                    var scrollRate = 0f
+
+                    if (cursorY < edgeZone) {
+                        val penetration = ((edgeZone - cursorY) / edgeZone).coerceIn(0f, 1f)
+                        scrollRate = -((450f + (penetration * 1250f)) * density)
+                    } else if (cursorY > height - edgeZone) {
+                        val penetration = ((cursorY - (height - edgeZone)) / edgeZone).coerceIn(0f, 1f)
+                        scrollRate = ((450f + (penetration * 1250f)) * density)
+                    }
+
+                    if (scrollRate != 0f) {
+                        scrollAccumulatorY += scrollRate * dt
+                        val scrollPixels = scrollAccumulatorY.toInt()
+                        if (scrollPixels != 0) {
+                            target.scrollBy(0, scrollPixels)
+                            scrollAccumulatorY -= scrollPixels
+                        }
+                    } else {
+                        scrollAccumulatorY = 0f
+                    }
+                }
             }
         }
-        return true
+
+        lastFrameTimeNanos = frameTimeNanos
+        Choreographer.getInstance().postFrameCallback(this)
     }
 
     /**
@@ -119,12 +269,12 @@ class VirtualCursorView @JvmOverloads constructor(
 
     private fun startClickRipple() {
         val animator = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 300
+            duration = 320
             interpolator = DecelerateInterpolator()
             addUpdateListener { anim ->
                 val fraction = anim.animatedFraction
-                rippleRadius = baseRadius + (fraction * 28f * resources.displayMetrics.density)
-                rippleAlpha = ((1f - fraction) * 220).toInt()
+                rippleRadius = baseRadius + (fraction * 30f * density)
+                rippleAlpha = ((1f - fraction) * 230).toInt()
                 invalidate()
             }
         }
@@ -138,9 +288,9 @@ class VirtualCursorView @JvmOverloads constructor(
         // Draw outer glow ring
         canvas.drawCircle(cursorX, cursorY, baseRadius, glowPaint)
         // Draw inner white ring
-        canvas.drawCircle(cursorX, cursorY, baseRadius * 0.75f, ringPaint)
+        canvas.drawCircle(cursorX, cursorY, baseRadius * 0.72f, ringPaint)
         // Draw sharp center dot
-        canvas.drawCircle(cursorX, cursorY, 3.5f * resources.displayMetrics.density, innerDotPaint)
+        canvas.drawCircle(cursorX, cursorY, 4f * density, innerDotPaint)
 
         // Draw click ripple effect if active
         if (rippleAlpha > 0) {

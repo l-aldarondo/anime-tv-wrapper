@@ -260,6 +260,18 @@ object AdBlocker {
                 opacity: 0 !important;
             }
 
+            /* Hide 'Watch Now' featured carousel / slider on main page */
+            .deslide-wrap, #slider, .swiper-container#slider, .deslide-item, .top-slider,
+            div[class*="deslide"] {
+                display: none !important;
+                visibility: hidden !important;
+                height: 0 !important;
+                max-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: hidden !important;
+            }
+
             /* Ensure 9anime player container and embed iframe are ALWAYS visible, sized, and interactive */
             .wb_-playerarea {
                 position: relative !important;
@@ -395,6 +407,12 @@ object AdBlocker {
                         var badElements = document.querySelectorAll('iframe:not(#iframe-embed):not([id^="dsq"]), div[data-area], .wrapper[data-area], div[class*="popup"], div[class*="popunder"]');
                         for (var i = 0; i < badElements.length; i++) {
                             try { badElements[i].remove(); } catch(e) {}
+                        }
+
+                        // Hide main page Watch Now carousel
+                        var sliderWrap = document.querySelector('.deslide-wrap') || document.getElementById('slider');
+                        if (sliderWrap && sliderWrap.style.display !== 'none') {
+                            sliderWrap.style.display = 'none';
                         }
 
                         // Purge fixed high z-index screen-covering click traps
