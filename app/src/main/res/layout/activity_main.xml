@@ -40,7 +40,28 @@
         android:progressTint="#9D4EDD"
         android:visibility="gone" />
 
-    <!-- Hidden Left Settings & Source Drawer (Activated on Far Left Cursor) -->
+    <!-- Sleek Floating Menu Tab (Easily opens Sidebar on Phones & Tablets) -->
+    <FrameLayout
+        android:id="@+id/btnSidebarTrigger"
+        android:layout_width="44dp"
+        android:layout_height="48dp"
+        android:layout_gravity="start|center_vertical"
+        android:background="@drawable/bg_sidebar_tab"
+        android:clickable="true"
+        android:focusable="true"
+        android:elevation="25dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="☰"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+    </FrameLayout>
+
+    <!-- Hidden Left Settings & Source Drawer (Activated on Far Left Cursor or Menu Button) -->
     <LinearLayout
         android:id="@+id/sidebarDrawer"
         android:layout_width="310dp"
@@ -49,7 +70,7 @@
         android:background="@drawable/bg_sidebar"
         android:orientation="vertical"
         android:padding="20dp"
-        android:elevation="20dp"
+        android:elevation="35dp"
         android:translationX="-330dp"
         android:visibility="gone"
         android:focusable="true"

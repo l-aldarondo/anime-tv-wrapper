@@ -60,6 +60,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnFullscreen: TextView
 
     // Hidden Sidebar UI elements
+    private lateinit var btnSidebarTrigger: View
     private lateinit var sidebarDrawer: LinearLayout
     private lateinit var btnSidebarFullscreen: TextView
     private lateinit var btnSidebarAdBlock: TextView
@@ -170,6 +171,7 @@ class MainActivity : AppCompatActivity() {
         btnFullscreen = findViewById(R.id.btnFullscreen)
 
         // Sidebar references
+        btnSidebarTrigger = findViewById(R.id.btnSidebarTrigger)
         sidebarDrawer = findViewById(R.id.sidebarDrawer)
         btnSidebarFullscreen = findViewById(R.id.btnSidebarFullscreen)
         btnSidebarAdBlock = findViewById(R.id.btnSidebarAdBlock)
@@ -182,6 +184,13 @@ class MainActivity : AppCompatActivity() {
         btnSidebarHome = findViewById(R.id.btnSidebarHome)
         btnSidebarReload = findViewById(R.id.btnSidebarReload)
         btnSidebarClose = findViewById(R.id.btnSidebarClose)
+
+        btnSidebarTrigger.setOnClickListener {
+            openSidebar()
+        }
+        if (isTv) {
+            btnSidebarTrigger.visibility = View.GONE
+        }
 
         btnFullscreen.setOnClickListener {
             togglePlayerFullscreen()
@@ -340,6 +349,7 @@ class MainActivity : AppCompatActivity() {
     private fun openSidebar() {
         if (isSidebarOpen || isPlayerFullscreen || webChromeClient.isFullscreen) return
         isSidebarOpen = true
+        btnSidebarTrigger.visibility = View.GONE
         val density = resources.displayMetrics.density
         val startX = -sidebarDrawer.width.toFloat().let { if (it <= 0f) -330f * density else -it }
         sidebarDrawer.translationX = startX
@@ -368,7 +378,12 @@ class MainActivity : AppCompatActivity() {
             .setDuration(200)
             .setInterpolator(android.view.animation.AccelerateInterpolator())
             .withEndAction {
-                if (!isSidebarOpen) sidebarDrawer.visibility = View.GONE
+                if (!isSidebarOpen) {
+                    sidebarDrawer.visibility = View.GONE
+                    if (!isTv && !isPlayerFullscreen && !webChromeClient.isFullscreen) {
+                        btnSidebarTrigger.visibility = View.VISIBLE
+                    }
+                }
             }
             .start()
     }
@@ -482,12 +497,14 @@ class MainActivity : AppCompatActivity() {
         }
         if (isFullscreen) {
             closeSidebar()
+            btnSidebarTrigger.visibility = View.GONE
             virtualCursorView.visibility = View.GONE
             osdTopBar.visibility = View.GONE
             osdControlsGuide.visibility = View.GONE
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             enableImmersiveMode()
         } else {
+            if (!isTv) btnSidebarTrigger.visibility = View.VISIBLE
             virtualCursorView.visibility = if (currentNavMode == MODE_POINTER && isTv) View.VISIBLE else View.GONE
             osdTopBar.visibility = View.GONE
             btnFullscreen.text = "⛶ Fullscreen"
@@ -508,6 +525,7 @@ class MainActivity : AppCompatActivity() {
         runOnUiThread {
             if (enabled) {
                 closeSidebar()
+                btnSidebarTrigger.visibility = View.GONE
             }
             webView.evaluateJavascript("if (window.expandPlayerFullscreen) window.expandPlayerFullscreen($enabled);", null)
             if (enabled) {
@@ -521,6 +539,9 @@ class MainActivity : AppCompatActivity() {
                     playVideo()
                 }, 300L)
             } else {
+                if (!isTv && !webChromeClient.isFullscreen) {
+                    btnSidebarTrigger.visibility = View.VISIBLE
+                }
                 btnFullscreen.text = "⛶ Fullscreen"
                 btnFullscreen.setTextColor(android.graphics.Color.parseColor("#FFD600"))
                 enableImmersiveMode()
@@ -807,28 +828,37 @@ class MainActivity : AppCompatActivity() {
 
     private var touchStartX = 0f
     private var touchStartY = 0f
+    private var isSwipeConsumed = false
 
     override fun dispatchTouchEvent(ev: MotionEvent?): Boolean {
         if (ev != null) {
             val density = resources.displayMetrics.density
-            when (ev.action) {
+            when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     touchStartX = ev.rawX
                     touchStartY = ev.rawY
-                }
-                MotionEvent.ACTION_UP -> {
-                    val deltaX = ev.rawX - touchStartX
-                    val deltaY = Math.abs(ev.rawY - touchStartY)
-                    // Edge swipe from left (starts at x < 45dp, moves right > 50dp with low Y drift)
-                    if (!isSidebarOpen && touchStartX < 45f * density && deltaX > 50f * density && deltaY < 120f * density) {
-                        openSidebar()
-                        return true
-                    }
-                    // Tap outside open sidebar to close
-                    if (isSidebarOpen && touchStartX > 320f * density && ev.rawX > 320f * density) {
+                    isSwipeConsumed = false
+
+                    // If sidebar is open and user taps outside the drawer (x > 310dp), close drawer immediately
+                    if (isSidebarOpen && ev.rawX > 310f * density) {
                         closeSidebar()
                         return true
                     }
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    // Trigger sidebar open on quick rightward swipe starting near the left edge or trigger tab
+                    if (!isSwipeConsumed && !isSidebarOpen && !isPlayerFullscreen && !webChromeClient.isFullscreen) {
+                        val deltaX = ev.rawX - touchStartX
+                        val deltaY = Math.abs(ev.rawY - touchStartY)
+                        if (touchStartX < 90f * density && deltaX > 35f * density && deltaY < 80f * density) {
+                            isSwipeConsumed = true
+                            openSidebar()
+                            return true
+                        }
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    isSwipeConsumed = false
                 }
             }
         }
