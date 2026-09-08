@@ -36,7 +36,7 @@ class AnimeWebViewClient : WebViewClient() {
         }
 
         // Sanitize player iframe embeds to purge in-frame ad scripts and inject remote playback controls
-        val isPlayerUrl = url.contains("/play/") || url.contains("/embed") || url.contains("/e-") || url.contains("/v/") || url.contains("stream")
+        val isPlayerUrl = url.contains("/play/") || url.contains("/embed") || url.contains("/e-") || url.contains("/v/") || url.contains("stream") || url.contains("player") || url.contains("megaplay")
         val isPlayerHost = AdBlocker.ALLOWED_VIDEO_HOSTS.any { host.contains(it) }
         val isMediaFile = url.contains(".m3u8") || url.contains(".mp4") || url.contains(".ts") || url.contains(".m4s") || url.contains(".js") || url.contains(".css")
         if (isPlayerUrl && isPlayerHost && !isMediaFile) {
@@ -59,7 +59,7 @@ class AnimeWebViewClient : WebViewClient() {
                     ?: "Mozilla/5.0 (Linux; Android 17; Pixel 10 Pro XL) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
             )
             val referer = request?.requestHeaders?.get("Referer")
-                ?: if (url.contains("gogoanime")) "https://gogoanime.by/" else "https://9anime.or.at/"
+                ?: if (url.contains("gogoanime") || url.contains("megaplay")) "https://gogoanime.by/" else "https://9anime.or.at/"
             connection.setRequestProperty("Referer", referer)
 
             val responseCode = connection.responseCode
@@ -72,7 +72,7 @@ class AnimeWebViewClient : WebViewClient() {
             // Strip ad networks (furudloof, belchlipin, monetize, adsterra, etc.)
             html = html.replace(
                 Regex(
-                    "<script[^>]+src=[\"'][^\"']*(?:furudloof|belchlipin|adsterra|monetag|subduepaler|clickadu|popads|propeller)[^\"']*[\"'][^>]*>\\s*</script>",
+                    "<script[^>]+src=[\"'][^\"']*(?:furudloof|belchlipin|adsterra|monetag|subduepaler|clickadu|popads|propeller|buildsstate)[^\"']*[\"'][^>]*>\\s*</script>",
                     RegexOption.IGNORE_CASE
                 ),
                 ""
@@ -84,6 +84,9 @@ class AnimeWebViewClient : WebViewClient() {
                 ),
                 ""
             )
+
+            // Auto-start videos on JWPlayer / Megaplay embeds
+            html = html.replace("autostart: false", "autostart: true")
 
             // Inject anti-overlay style and bidirectional TV remote control bridge
             val injection = """
@@ -102,10 +105,24 @@ class AnimeWebViewClient : WebViewClient() {
                             return document.querySelector('.plyr__control--overlaid') ||
                                    document.querySelector('button[data-plyr="play"]') ||
                                    document.querySelector('.play-btn') ||
-                                   document.querySelector('.play-button');
+                                   document.querySelector('.play-button') ||
+                                   document.querySelector('.jw-display-icon-display') ||
+                                   document.querySelector('.jw-icon-playback');
+                        }
+                        function getJw() {
+                            try {
+                                if (window.jwplayer && typeof window.jwplayer === 'function') {
+                                    return window.jwplayer();
+                                }
+                            } catch(e) {}
+                            return null;
                         }
 
                         function doPlay() {
+                            var jw = getJw();
+                            if (jw && typeof jw.play === 'function') {
+                                try { jw.play(); } catch(e) {}
+                            }
                             var v = getMedia();
                             var btn = getPlayBtn();
                             if (v) {
@@ -122,6 +139,10 @@ class AnimeWebViewClient : WebViewClient() {
                         }
 
                         function doPause() {
+                            var jw = getJw();
+                            if (jw && typeof jw.pause === 'function') {
+                                try { jw.pause(); } catch(e) {}
+                            }
                             var v = getMedia();
                             if (v) {
                                 try {
@@ -142,6 +163,19 @@ class AnimeWebViewClient : WebViewClient() {
                             if (now - lastToggleTime < 300) return;
                             lastToggleTime = now;
 
+                            var jw = getJw();
+                            if (jw && typeof jw.getState === 'function') {
+                                try {
+                                    var state = jw.getState();
+                                    if (state === 'playing') {
+                                        doPause();
+                                    } else {
+                                        doPlay();
+                                    }
+                                    return;
+                                } catch(e) {}
+                            }
+
                             var v = getMedia();
                             if (v) {
                                 if (v.paused) {
@@ -156,6 +190,15 @@ class AnimeWebViewClient : WebViewClient() {
                         }
 
                         function doSeek(seconds) {
+                            var jw = getJw();
+                            if (jw && typeof jw.getPosition === 'function' && typeof jw.seek === 'function') {
+                                try {
+                                    var pos = jw.getPosition();
+                                    var dur = typeof jw.getDuration === 'function' ? jw.getDuration() : 999999;
+                                    jw.seek(Math.max(0, Math.min(dur, pos + seconds)));
+                                    return;
+                                } catch(e) {}
+                            }
                             var v = getMedia();
                             if (!v) return;
                             try {
@@ -169,9 +212,14 @@ class AnimeWebViewClient : WebViewClient() {
                             }
                         }
 
-                        // Listen for remote control commands from MainActivity
+                        // Listen for remote control commands from MainActivity and forward to subframes
                         window.addEventListener('message', function(e) {
                             try {
+                                var subframes = document.querySelectorAll('iframe');
+                                for (var k = 0; k < subframes.length; k++) {
+                                    try { subframes[k].contentWindow.postMessage(e.data, '*'); } catch(err) {}
+                                }
+
                                 var data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
                                 if (!data) return;
                                 var action = data.action || data.type || data.command;
@@ -195,13 +243,40 @@ class AnimeWebViewClient : WebViewClient() {
                         }
                         document.addEventListener('click', notifyPlay, true);
                         document.addEventListener('touchstart', notifyPlay, true);
+
+                        function attemptAutoStart() {
+                            var jw = getJw();
+                            if (jw) {
+                                try {
+                                    if (typeof jw.on === 'function') {
+                                        jw.on('ready', function() {
+                                            try { jw.play(); } catch(e) {}
+                                        });
+                                        jw.on('play', notifyPlay);
+                                    }
+                                    if (typeof jw.play === 'function') {
+                                        jw.play();
+                                    }
+                                } catch(e) {}
+                            }
+                            var v = getMedia();
+                            if (v) {
+                                try { v.play().catch(function(){}); } catch(e) {}
+                            }
+                        }
+
                         window.addEventListener('load', function() {
                             var v = getMedia();
                             if (v) {
                                 v.addEventListener('play', notifyPlay);
                                 v.addEventListener('playing', notifyPlay);
                             }
+                            attemptAutoStart();
                         });
+
+                        setTimeout(attemptAutoStart, 600);
+                        setTimeout(attemptAutoStart, 1500);
+                        setTimeout(attemptAutoStart, 3000);
                     })();
                 </script>
             """.trimIndent()

@@ -23,6 +23,16 @@ object AdBlocker {
         "gogoanime3.co",
         "anihdplay.com",
         "embtaku.pro",
+        "megaplay.su",
+        "jwplayer.com",
+        "cdn.jwplayer.com",
+        "jwpcdn.com",
+        "ssl.p.jwpcdn.com",
+        "googlevideo.com",
+        "wp.com",
+        "i0.wp.com",
+        "i1.wp.com",
+        "i2.wp.com",
         "cdnjs.cloudflare.com",
         "fonts.googleapis.com",
         "fonts.gstatic.com",
@@ -64,7 +74,13 @@ object AdBlocker {
         "vizcloud.online",
         "vizcloud.co",
         "vidsrc.me",
-        "vidsrc.to"
+        "vidsrc.to",
+        "megaplay.su",
+        "megaplay",
+        "googlevideo.com",
+        "gogoanime.by",
+        "jwplayer.com",
+        "jwpcdn.com"
     )
 
     // Known ad networks, pop-up/pop-under services, and tracking domains
@@ -266,8 +282,8 @@ object AdBlocker {
             /* Hide fake ad overlays, fake player banners, and anti-adblock modals */
             iframe[src*="/ads/"], iframe[src*="doubleclick"], iframe[src*="googlesyndication"],
             iframe[src*="popads"], iframe[src*="adsterra"], iframe[src*="propeller"],
-            iframe[src*="furudloof"], iframe[src*="belchlipin"],
-            iframe:not(#iframe-embed):not([src*="1anime"]):not([src*="megacloud"]):not([src*="rapid"]):not([src*="streamtape"]):not([src*="disqus"]):not([id^="dsq"]),
+            iframe[src*="furudloof"], iframe[src*="belchlipin"], iframe[src*="buildsstate"],
+            iframe[src*="monetag"],
             div[class*="ad-"], div[class*="banner"], div[id*="ad-"], div[id*="banner"],
             div[class*="popup"], div[class*="popunder"],
             div[data-area], .wrapper[data-area],
@@ -285,9 +301,9 @@ object AdBlocker {
                 opacity: 0 !important;
             }
 
-            /* Hide 'Watch Now' featured carousel / slider on main page */
+            /* Hide 'Watch Now' featured carousel / slider on main page (both 9anime and gogoanime) */
             .deslide-wrap, #slider, .swiper-container#slider, .deslide-item, .top-slider,
-            div[class*="deslide"] {
+            div[class*="deslide"], .slidtop, .slidtop * {
                 display: none !important;
                 visibility: hidden !important;
                 height: 0 !important;
@@ -309,30 +325,34 @@ object AdBlocker {
                 overflow: hidden !important;
             }
 
-            /* Ensure 9anime player container and embed iframe are ALWAYS visible, sized, and interactive */
-            .wb_-playerarea {
+            /* Ensure player containers and embed iframes are ALWAYS visible, sized, and interactive */
+            .wb_-playerarea, .player-embed, #player, #player-container, .player-wrap, .video-content {
                 position: relative !important;
                 width: 100% !important;
                 aspect-ratio: 16 / 9 !important;
-                min-height: 220px !important;
+                min-height: 240px !important;
                 background: #000000 !important;
+                display: block !important;
+                visibility: visible !important;
+                opacity: 1 !important;
             }
 
-            #player-embed {
+            #player-embed, .player-embed, .player-wrap, #player-container {
                 display: block !important;
                 visibility: visible !important;
                 position: relative !important;
                 width: 100% !important;
                 height: 100% !important;
-                min-height: 220px !important;
+                min-height: 240px !important;
+                opacity: 1 !important;
             }
 
-            iframe#iframe-embed {
+            iframe#iframe-embed, iframe.player-iframe, .player-embed iframe, iframe[src*="player"], iframe[src*="embed"], iframe[src*="megaplay"] {
                 display: block !important;
                 visibility: visible !important;
                 width: 100% !important;
                 height: 100% !important;
-                min-height: 220px !important;
+                min-height: 240px !important;
                 border: 0 !important;
                 opacity: 1 !important;
                 pointer-events: auto !important;
@@ -351,8 +371,12 @@ object AdBlocker {
                 padding: 0 !important;
             }
             .animetv-fullscreen-wrap .wb_-playerarea,
+            .animetv-fullscreen-wrap .player-embed,
             .animetv-fullscreen-wrap #player-embed,
-            .animetv-fullscreen-wrap iframe#iframe-embed {
+            .animetv-fullscreen-wrap #player,
+            .animetv-fullscreen-wrap #player-container,
+            .animetv-fullscreen-wrap .player-wrap,
+            .animetv-fullscreen-wrap iframe {
                 width: 100vw !important;
                 height: 100vh !important;
                 max-width: 100vw !important;
@@ -446,14 +470,14 @@ object AdBlocker {
 
                     // 4. Purge overlay divs and fake player overlays
                     function purgeOverlays() {
-                        // Remove fake overlay divs & popups
-                        var badElements = document.querySelectorAll('iframe:not(#iframe-embed):not([src*="player"]):not([id^="dsq"]), div[data-area], .wrapper[data-area], div[class*="popup"], div[class*="popunder"]');
+                        // Remove fake overlay divs & popups (NEVER touch player, embed, or video iframes)
+                        var badElements = document.querySelectorAll('iframe[src*="furudloof"], iframe[src*="belchlipin"], iframe[src*="adsterra"], iframe[src*="monetag"], iframe[src*="popads"], iframe[src*="propeller"], iframe[src*="buildsstate"], div[data-area], .wrapper[data-area], div[class*="popup"], div[class*="popunder"]');
                         for (var i = 0; i < badElements.length; i++) {
                             try { badElements[i].remove(); } catch(e) {}
                         }
 
-                        // Hide main page Watch Now carousel
-                        var carousels = document.querySelectorAll('.owl-carousel, .carousel-wrap, #carousel, .slider-movies, .top-slider');
+                        // Hide main page Watch Now carousel / slider (both 9anime and gogoanime)
+                        var carousels = document.querySelectorAll('.owl-carousel, .carousel-wrap, #carousel, .slider-movies, .top-slider, .slidtop');
                         for (var c = 0; c < carousels.length; c++) {
                             carousels[c].style.setProperty('display', 'none', 'important');
                             carousels[c].style.setProperty('height', '0px', 'important');
@@ -466,7 +490,7 @@ object AdBlocker {
                         }
 
                         // Ensure iframe player has allowfullscreen
-                        var ifr = document.getElementById('iframe-embed') || document.querySelector('.player-embed iframe') || document.querySelector('iframe[src*="player"]');
+                        var ifr = document.getElementById('iframe-embed') || document.querySelector('.player-embed iframe') || document.querySelector('iframe.player-iframe') || document.querySelector('iframe[src*="player"]') || document.querySelector('iframe[src*="embed"]') || document.querySelector('iframe[src*="megaplay"]');
                         if (ifr) {
                             if (!ifr.hasAttribute('allowfullscreen')) {
                                 ifr.setAttribute('allowfullscreen', 'true');
@@ -494,8 +518,8 @@ object AdBlocker {
 
                     // 5. Expose Fullscreen Player Expand/Collapse to Android and Web
                     window.expandPlayerFullscreen = function(enable) {
-                        var wrap = document.querySelector('.player-wrap') || document.querySelector('.wb_-playerarea') || document.getElementById('player-embed') || document.querySelector('.player-embed') || document.querySelector('.video-content');
-                        var ifr = document.getElementById('iframe-embed') || document.querySelector('.player-embed iframe') || document.querySelector('iframe[src*="player"]');
+                        var wrap = document.querySelector('.player-wrap') || document.querySelector('.wb_-playerarea') || document.getElementById('player-embed') || document.querySelector('.player-embed') || document.querySelector('#player') || document.querySelector('#player-container') || document.querySelector('.video-content');
+                        var ifr = document.getElementById('iframe-embed') || document.querySelector('.player-embed iframe') || document.querySelector('iframe.player-iframe') || document.querySelector('iframe[src*="player"]') || document.querySelector('iframe[src*="embed"]') || document.querySelector('iframe[src*="megaplay"]');
                         
                         if (enable) {
                             if (wrap) {
