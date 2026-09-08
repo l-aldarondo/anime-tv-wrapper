@@ -35,14 +35,11 @@ class AnimeWebViewClient : WebViewClient() {
             )
         }
 
-        // Sanitize player iframe embeds to purge in-frame ad scripts and inject remote playback controls
-        val isPlayerUrl = url.contains("/play/") || url.contains("/embed") || url.contains("/e-") || 
-                          url.contains("/v/") || url.contains("stream") || url.contains("player") || 
-                          url.contains("megaplay") || url.contains("mytsumi") || url.contains("options.php") || 
-                          url.contains("contenedor.php") || url.contains("embed69") || url.contains("xupalace")
-        val isPlayerHost = AdBlocker.ALLOWED_VIDEO_HOSTS.any { host.contains(it) }
+        // Only sanitize 1anime/rapid-cloud embeds where in-frame popunders need stripping
+        val isRapidCloudEmbed = (host.contains("1anime.site") || host.contains("rapid-cloud")) &&
+                (url.contains("/play/") || url.contains("/embed") || url.contains("/e-"))
         val isMediaFile = url.contains(".m3u8") || url.contains(".mp4") || url.contains(".ts") || url.contains(".m4s") || url.contains(".js") || url.contains(".css")
-        if (isPlayerUrl && isPlayerHost && !isMediaFile) {
+        if (isRapidCloudEmbed && !isMediaFile) {
             val sanitized = sanitizePlayerResponse(url, request)
             if (sanitized != null) return sanitized
         }
@@ -422,7 +419,8 @@ class AnimeWebViewClient : WebViewClient() {
             "sololatino.net",
             "animeflix.team",
             "9animes.me.uk",
-            "animeyt.cc"
+            "animeyt.cc",
+            "jkanime.net"
         )
         val isAllowedMain = allowedMainHosts.any { host == it || host.endsWith(".$it") }
 
@@ -461,7 +459,8 @@ class AnimeWebViewClient : WebViewClient() {
             "sololatino.net",
             "animeflix.team",
             "9animes.me.uk",
-            "animeyt.cc"
+            "animeyt.cc",
+            "jkanime.net"
         )
         if (allowedMainHosts.any { host == it || host.endsWith(".$it") }) {
             return false

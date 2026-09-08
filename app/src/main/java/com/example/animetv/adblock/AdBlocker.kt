@@ -13,7 +13,7 @@ object AdBlocker {
     // Listener for UI updates
     var onBlockListener: ((Int) -> Unit)? = null
 
-    // Recognized base domains for 9anime, GogoAnime, SoloLatino, AnimeFlix, AnimeYT, and trusted streaming / resource CDNs
+    // Recognized base domains for 9anime, GogoAnime, SoloLatino, AnimeFlix, AnimeYT, JKAnime, and trusted streaming / resource CDNs
     val TRUSTED_DOMAINS = setOf(
         "9anime.or.at",
         "1anime.site",
@@ -41,8 +41,25 @@ object AdBlocker {
         "animeflix.team",
         "9animes.me.uk",
         "megaplay.buzz",
+        "megaplay-1.buzz",
         "animeyt.cc",
         "mytsumi.com",
+        "jkanime.net",
+        "jkdesa.com",
+        "cdn.jkdesa.com",
+        "jkplayers.com",
+        "challenges.cloudflare.com",
+        "turnstile.cloudflare.com",
+        "statlytic.net",
+        "streamwish.to",
+        "streamwish.com",
+        "filemoon.sx",
+        "filemoon.to",
+        "voe.sx",
+        "uqload.io",
+        "uqload.com",
+        "vidmoly.me",
+        "vidmoly.to",
         "cdnjs.cloudflare.com",
         "fonts.googleapis.com",
         "fonts.gstatic.com",
@@ -88,6 +105,7 @@ object AdBlocker {
         "vidsrc.to",
         "megaplay.su",
         "megaplay.buzz",
+        "megaplay-1.buzz",
         "megaplay",
         "googlevideo.com",
         "gogoanime.by",
@@ -100,20 +118,49 @@ object AdBlocker {
         "9animes.me.uk",
         "animeyt.cc",
         "mytsumi.com",
+        "jkanime.net",
+        "jkdesa.com",
+        "jkplayer",
+        "jkplayers",
+        "statlytic",
         "streamwish",
         "wishembed",
         "luluvdo",
         "ok.ru",
+        "cdn-vk.ru",
+        "vk.com",
+        "vk.me",
         "mega.nz",
+        "mega.co.nz",
+        "mega.io",
+        "mega",
         "uqload",
         "vidmoly",
         "voe.sx",
+        "snapcdn.top",
+        "snapcdn",
         "mixdrop",
-        "yourupload"
+        "yourupload",
+        "bysesukior.com",
+        "sesukior",
+        "byse",
+        "pelisserieshoy.com",
+        "pelisserieshoy",
+        "vidhide",
+        "vidhidepre",
+        "vidhidevip",
+        "filelions",
+        "streamvid",
+        "desu.sh",
+        "desu",
+        "dplayer",
+        "f7hyg4q.org",
+        "f7hyg4q"
     )
 
     // Known ad networks, pop-up/pop-under services, and tracking domains
     private val BLOCKED_DOMAINS = setOf(
+        "excavatenearbywand.com",
         "belchlipin.com",
         "furudloof.com",
         "subduepaler.cyou",
@@ -240,38 +287,47 @@ object AdBlocker {
         }
 
         val isTrusted = TRUSTED_DOMAINS.any { host == it || host.endsWith(".$it") }
-        val isVideoHost = ALLOWED_VIDEO_HOSTS.any { host == it || host.endsWith(".$it") }
+        val isVideoHost = ALLOWED_VIDEO_HOSTS.any { host == it || host.endsWith(".$it") || host.contains(it) }
 
-        if (!isTrusted && !isVideoHost) {
-            // Check ad regex patterns
-            for (pattern in AD_URL_PATTERNS) {
-                if (pattern.matches(lowerUrl)) {
-                    recordBlock(url, "Matched ad regex pattern")
-                    return true
-                }
-            }
+        // CRITICAL: Never block trusted domains or recognized video streaming hosts
+        if (isTrusted || isVideoHost) {
+            return false
+        }
 
-            // Third-party domains containing explicit ad markers
-            if (host.contains("adserver") || host.contains("popads") || host.contains("syndication") || host.contains("adsterra")) {
-                recordBlock(url, "Host keyword match: $host")
+        // Check ad regex patterns
+        for (pattern in AD_URL_PATTERNS) {
+            if (pattern.matches(lowerUrl)) {
+                recordBlock(url, "Matched ad regex pattern")
                 return true
             }
+        }
 
-            // Allow video streaming media segments and files (HLS m3u8, ts chunks, mp4, etc.)
-            val isMedia = lowerUrl.contains(".m3u8") ||
-                    lowerUrl.contains(".ts") ||
-                    lowerUrl.contains(".mp4") ||
-                    lowerUrl.contains(".m4s") ||
-                    lowerUrl.contains("/stream/") ||
-                    lowerUrl.contains("/play/")
+        // Third-party domains containing explicit ad markers
+        if (host.contains("adserver") || host.contains("popads") || host.contains("syndication") || host.contains("adsterra")) {
+            recordBlock(url, "Host keyword match: $host")
+            return true
+        }
 
-            if (!isMedia) {
-                // If it's a JavaScript script or iframe from an unknown third party domain,
-                // it is an ad network script (e.g. Monetag, Adsterra rotator). Block it!
-                if (lowerUrl.contains(".js") || lowerUrl.contains("/script") || lowerUrl.contains("/tag") || lowerUrl.endsWith("/")) {
-                    recordBlock(url, "Blocked unknown third-party script/domain: $host")
-                    return true
-                }
+        // Allow video streaming media segments and files (HLS m3u8, ts chunks, mp4, disguised seg-.js, video player bundles, etc.)
+        val isMedia = lowerUrl.contains(".m3u8") ||
+                lowerUrl.contains(".ts") ||
+                lowerUrl.contains(".mp4") ||
+                lowerUrl.contains(".m4s") ||
+                lowerUrl.contains("/stream/") ||
+                lowerUrl.contains("/play/") ||
+                lowerUrl.contains("seg-") ||
+                lowerUrl.contains("snapcdn") ||
+                lowerUrl.contains("/assets/") ||
+                lowerUrl.contains("/player/") ||
+                lowerUrl.contains("/embed/") ||
+                lowerUrl.contains("/video/")
+
+        if (!isMedia) {
+            // If it's a JavaScript script or iframe from an unknown third party domain,
+            // it is an ad network script (e.g. Monetag, Adsterra rotator). Block it!
+            if (lowerUrl.contains(".js") || lowerUrl.contains("/script") || lowerUrl.contains("/tag") || lowerUrl.endsWith("/")) {
+                recordBlock(url, "Blocked unknown third-party script/domain: $host")
+                return true
             }
         }
 
@@ -311,19 +367,20 @@ object AdBlocker {
             }
 
             /* Hide fake ad overlays, fake player banners, and anti-adblock modals */
+            html > iframe, html > div, .D1BnW, [class*="D1BnW"], div:has(> .notranslate), .notranslate,
+            div[style*="z-index: 214748364"], div[style*="z-index: 999999"],
             iframe[src*="/ads/"], iframe[src*="doubleclick"], iframe[src*="googlesyndication"],
             iframe[src*="popads"], iframe[src*="adsterra"], iframe[src*="propeller"],
             iframe[src*="furudloof"], iframe[src*="belchlipin"], iframe[src*="buildsstate"],
-            iframe[src*="monetag"],
+            iframe[src*="monetag"], iframe[src*="excavatenearbywand"],
             div[class*="ad-"], div[class*="banner"], div[id*="ad-"], div[id*="banner"],
             div[class*="popup"], div[class*="popunder"],
             div[data-area], .wrapper[data-area],
             .ad-container, .adsbygoogle, .a-box, .notice-ad,
             #overlay, .modal-backdrop, .sweet-alert,
-            div[style*="z-index: 2147483647"], div[style*="z-index: 999999"],
             a[href*="bet"], a[href*="affiliate"], a[href*="gamble"],
             .ts-ad-banner, .widget_banner, [data-ad-slot],
-            .wb__-cover {
+            .wb__-cover, .tutorial-overlay, div[class*="tutorial"] {
                 display: none !important;
                 visibility: hidden !important;
                 width: 0 !important;
@@ -381,7 +438,8 @@ object AdBlocker {
                 opacity: 1 !important;
             }
 
-            #modal.modal-vast, .modal-vast, .download-panel, .tutorial-overlay, #decryptionLoader, .server-toast {
+            #modal.modal-vast, .modal-vast, .download-panel, .tutorial-overlay, #decryptionLoader, .server-toast,
+            #auth-modal, .auth-modal, .modal-auth, .auth-modal__backdrop {
                 display: none !important;
                 visibility: hidden !important;
                 height: 0 !important;
@@ -390,7 +448,8 @@ object AdBlocker {
 
             iframe#iframe-embed, iframe.player-iframe, .player-embed iframe, iframe[src*="player"],
             iframe[src*="embed"], iframe[src*="megaplay"], iframe[src*="mytsumi"], iframe[src*="xupalace"],
-            iframe[src*="options.php"], iframe[src*="contenedor.php"], iframe#iframePlayer {
+            iframe[src*="options.php"], iframe[src*="contenedor.php"], iframe#iframePlayer,
+            iframe.player_conte, iframe[src*="jkplayer"] {
                 display: block !important;
                 visibility: visible !important;
                 width: 100% !important;
@@ -424,6 +483,7 @@ object AdBlocker {
             .animetv-fullscreen-wrap #megaplay-player,
             .animetv-fullscreen-wrap .mg3-player,
             .animetv-fullscreen-wrap .azaku-player-container,
+            .animetv-fullscreen-wrap .player_conte,
             .animetv-fullscreen-wrap iframe,
             .animetv-fullscreen-wrap video {
                 width: 100vw !important;
@@ -475,7 +535,11 @@ object AdBlocker {
                                u.indexOf('animeflix.team') !== -1 ||
                                u.indexOf('9animes.me.uk') !== -1 ||
                                u.indexOf('animeyt.cc') !== -1 ||
-                               u.indexOf('mytsumi.com') !== -1;
+                               u.indexOf('jkanime.net') !== -1 ||
+                               u.indexOf('mytsumi.com') !== -1 ||
+                               u.indexOf('bysesukior.com') !== -1 ||
+                               u.indexOf('embed69.org') !== -1 ||
+                               u.indexOf('pelisserieshoy.com') !== -1;
                     }
 
                     // 2. Neutralize anchor programmatic click-jacking
@@ -492,21 +556,9 @@ object AdBlocker {
                         };
                     } catch(e) {}
 
-                    // 3. Capture-phase click interceptor
+                    // 3. Capture-phase click interceptor (blocks external popup tabs & redirects)
                     document.addEventListener('click', function(e) {
                         var el = e.target;
-                        
-                        // Check if user clicked the player area -> trigger auto-fullscreen
-                        var playerArea = el.closest ? el.closest('.player-wrap, .wb_-playerarea, #player-embed, .player-embed, .video-content, #main-player-wrap, #player-section, .mg-3mb3d, .mg3-player, .azaku-player-container, #player-frame') : null;
-                        if (playerArea) {
-                            console.log('Player area clicked -> triggering fullscreen expansion');
-                            if (window.expandPlayerFullscreen) {
-                                window.expandPlayerFullscreen(true);
-                            }
-                            if (window.AndroidBridge && window.AndroidBridge.onVideoPlayDetected) {
-                                window.AndroidBridge.onVideoPlayDetected();
-                            }
-                        }
 
                         // Check if click was on an external popup or target="_blank" link
                         while (el && el !== document.body) {
@@ -526,10 +578,25 @@ object AdBlocker {
 
                     // 4. Purge overlay divs and fake player overlays
                     function purgeOverlays() {
+                        // Remove rogue elements attached directly to <html> (fake robot modals, skip ad overlays, push prompts)
+                        var directBad = document.querySelectorAll('html > iframe, html > div, .D1BnW, [class*="D1BnW"]');
+                        for (var db = 0; db < directBad.length; db++) {
+                            try { directBad[db].remove(); } catch(e) {}
+                        }
+
                         // Remove fake overlay divs & popups (NEVER touch player, embed, or video iframes)
-                        var badElements = document.querySelectorAll('iframe[src*="furudloof"], iframe[src*="belchlipin"], iframe[src*="adsterra"], iframe[src*="monetag"], iframe[src*="popads"], iframe[src*="propeller"], iframe[src*="buildsstate"], iframe[src*="oxserver"], div[data-area], .wrapper[data-area], div[class*="popup"], div[class*="popunder"], #modal.modal-vast, .modal-vast, .tutorial-overlay');
+                        var badElements = document.querySelectorAll('iframe[src*="furudloof"], iframe[src*="belchlipin"], iframe[src*="adsterra"], iframe[src*="monetag"], iframe[src*="popads"], iframe[src*="propeller"], iframe[src*="buildsstate"], iframe[src*="oxserver"], iframe[src*="excavatenearbywand"], div[data-area], .wrapper[data-area], div[class*="popup"], div[class*="popunder"], #modal.modal-vast, .modal-vast, .tutorial-overlay, div[class*="tutorial"]');
                         for (var i = 0; i < badElements.length; i++) {
                             try { badElements[i].remove(); } catch(e) {}
+                        }
+
+                        // Auto-dismiss tutorial steps (e.g. embed69 "Cambiar Idioma")
+                        var skipBtns = document.querySelectorAll('button, a, div');
+                        for (var sk = 0; sk < skipBtns.length; sk++) {
+                            var otxt = (skipBtns[sk].innerText || '').trim().toLowerCase();
+                            if (otxt === 'omitir') {
+                                try { skipBtns[sk].click(); } catch(e) {}
+                            }
                         }
 
                         // Auto-dismiss AnimeYT notices, dialogs, and cookies
@@ -541,6 +608,24 @@ object AdBlocker {
                         for (var b = 0; b < allBtns.length; b++) {
                             if (allBtns[b].innerText && allBtns[b].innerText.trim().toLowerCase() === 'entendido') {
                                 try { allBtns[b].click(); } catch(e) {}
+                            }
+                        }
+
+                        // SoloLatino: Auto-select free server (Servidor 1) and dismiss auth modal
+                        if (window.location.hostname.indexOf('sololatino.net') !== -1) {
+                            var authM = document.getElementById('auth-modal') || document.querySelector('.auth-modal');
+                            if (authM) { try { authM.remove(); } catch(e) {} }
+
+                            var sBtns = document.querySelectorAll('button[data-server-btn], .server-btn');
+                            for (var s = 0; s < sBtns.length; s++) {
+                                var bTxt = (sBtns[s].innerText || '').toLowerCase();
+                                if (bTxt.indexOf('servidor 1') !== -1 || bTxt.indexOf('server 1') !== -1) {
+                                    var hasPlayerIfr = document.querySelector('iframe#iframePlayer, iframe[src*="embed69"], iframe[src*="xupalace"]');
+                                    if (!hasPlayerIfr && !sBtns[s].classList.contains('active')) {
+                                        try { sBtns[s].click(); } catch(e) {}
+                                    }
+                                    break;
+                                }
                             }
                         }
 
@@ -569,11 +654,14 @@ object AdBlocker {
                                   document.querySelector('iframe.player-iframe') || 
                                   document.querySelector('iframe[src*="player"]') || 
                                   document.querySelector('iframe[src*="embed"]') || 
-                                  document.querySelector('iframe[src*="megaplay"]') ||
-                                  document.getElementById('player-frame') ||
-                                  document.querySelector('iframe[src*="mytsumi"]') ||
-                                  document.querySelector('iframe[src*="embed69"]') ||
-                                  document.querySelector('iframe[src*="xupalace"]');
+                                  document.querySelector('iframe[src*="megaplay"]') || 
+                                  document.getElementById('player-frame') || 
+                                  document.querySelector('iframe[src*="mytsumi"]') || 
+                                  document.querySelector('iframe[src*="embed69"]') || 
+                                  document.querySelector('iframe[src*="xupalace"]') ||
+                                  document.querySelector('iframe#iframePlayer') ||
+                                  document.querySelector('iframe.player_conte') ||
+                                  document.querySelector('iframe[src*="jkplayer"]');
                         if (ifr) {
                             if (!ifr.hasAttribute('allowfullscreen')) {
                                 ifr.setAttribute('allowfullscreen', 'true');
@@ -607,22 +695,26 @@ object AdBlocker {
                                    document.querySelector('.player-embed') || 
                                    document.querySelector('#player') || 
                                    document.querySelector('#player-container') || 
-                                   document.querySelector('.video-content') ||
-                                   document.querySelector('#main-player-wrap') ||
-                                   document.querySelector('#player-section') ||
-                                   document.querySelector('.mg-3mb3d') ||
-                                   document.querySelector('.mg3-player') ||
-                                   document.querySelector('.azaku-player-container');
+                                   document.querySelector('.video-content') || 
+                                   document.querySelector('#main-player-wrap') || 
+                                   document.querySelector('#player-section') || 
+                                   document.querySelector('.mg-3mb3d') || 
+                                   document.querySelector('.mg3-player') || 
+                                   document.querySelector('.azaku-player-container') ||
+                                   document.querySelector('.player_conte');
                         var ifr = document.getElementById('iframe-embed') || 
                                   document.querySelector('.player-embed iframe') || 
                                   document.querySelector('iframe.player-iframe') || 
                                   document.querySelector('iframe[src*="player"]') || 
                                   document.querySelector('iframe[src*="embed"]') || 
-                                  document.querySelector('iframe[src*="megaplay"]') ||
-                                  document.getElementById('player-frame') ||
-                                  document.querySelector('iframe[src*="mytsumi"]') ||
-                                  document.querySelector('iframe[src*="embed69"]') ||
-                                  document.querySelector('iframe[src*="xupalace"]');
+                                  document.querySelector('iframe[src*="megaplay"]') || 
+                                  document.getElementById('player-frame') || 
+                                  document.querySelector('iframe[src*="mytsumi"]') || 
+                                  document.querySelector('iframe[src*="embed69"]') || 
+                                  document.querySelector('iframe[src*="xupalace"]') ||
+                                  document.querySelector('iframe#iframePlayer') ||
+                                  document.querySelector('iframe.player_conte') ||
+                                  document.querySelector('iframe[src*="jkplayer"]');
                         
                         if (enable) {
                             if (wrap) {
@@ -647,8 +739,8 @@ object AdBlocker {
                         }
                     };
 
-                    // Global play event listener
-                    document.addEventListener('play', function(e) {
+                    // Global play / playing event listeners
+                    function handlePlayDetected() {
                         console.log('Video play detected -> expanding player to fullscreen');
                         if (window.expandPlayerFullscreen) {
                             window.expandPlayerFullscreen(true);
@@ -656,7 +748,9 @@ object AdBlocker {
                         if (window.AndroidBridge && window.AndroidBridge.onVideoPlayDetected) {
                             window.AndroidBridge.onVideoPlayDetected();
                         }
-                    }, true);
+                    }
+                    document.addEventListener('play', handlePlayDetected, true);
+                    document.addEventListener('playing', handlePlayDetected, true);
 
                     // Listen for player postMessages (e.g. plyr, megacloud)
                     window.addEventListener('message', function(event) {

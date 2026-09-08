@@ -267,6 +267,22 @@
                     android:textSize="14sp"
                     android:textStyle="bold" />
 
+                <!-- Source 6: JKAnime -->
+                <TextView
+                    android:id="@+id/btnSourceJKAnime"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_sidebar_item"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="12dp"
+                    android:text="○  JKAnime (Español)"
+                    android:textColor="#F0F0FF"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
                 <!-- Divider -->
                 <View
                     android:layout_width="match_parent"

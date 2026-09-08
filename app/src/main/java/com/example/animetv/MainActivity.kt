@@ -34,12 +34,14 @@ class MainActivity : AppCompatActivity() {
         const val SOURCE_SOLOLATINO = "sololatino"
         const val SOURCE_ANIMEFLIX = "animeflix"
         const val SOURCE_ANIMEYT = "animeyt"
+        const val SOURCE_JKANIME = "jkanime"
 
         const val URL_9ANIME = "https://9anime.or.at/"
         const val URL_GOGOANIME = "https://gogoanime.by/"
         const val URL_SOLOLATINO = "https://sololatino.net/animes"
         const val URL_ANIMEFLIX = "https://animeflix.team/"
         const val URL_ANIMEYT = "https://animeyt.cc/"
+        const val URL_JKANIME = "https://jkanime.net/"
 
         const val MODE_POINTER = 0
         const val MODE_SCROLL = 1
@@ -70,6 +72,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnSourceSoloLatino: TextView
     private lateinit var btnSourceAnimeFlix: TextView
     private lateinit var btnSourceAnimeYT: TextView
+    private lateinit var btnSourceJKAnime: TextView
     private lateinit var btnSidebarHome: TextView
     private lateinit var btnSidebarReload: TextView
     private lateinit var btnSidebarClose: TextView
@@ -140,6 +143,7 @@ class MainActivity : AppCompatActivity() {
             SOURCE_SOLOLATINO -> URL_SOLOLATINO
             SOURCE_ANIMEFLIX -> URL_ANIMEFLIX
             SOURCE_ANIMEYT -> URL_ANIMEYT
+            SOURCE_JKANIME -> URL_JKANIME
             else -> URL_9ANIME
         }
         val startUrl = intent?.dataString ?: defaultUrl
@@ -181,6 +185,7 @@ class MainActivity : AppCompatActivity() {
         btnSourceSoloLatino = findViewById(R.id.btnSourceSoloLatino)
         btnSourceAnimeFlix = findViewById(R.id.btnSourceAnimeFlix)
         btnSourceAnimeYT = findViewById(R.id.btnSourceAnimeYT)
+        btnSourceJKAnime = findViewById(R.id.btnSourceJKAnime)
         btnSidebarHome = findViewById(R.id.btnSidebarHome)
         btnSidebarReload = findViewById(R.id.btnSidebarReload)
         btnSidebarClose = findViewById(R.id.btnSidebarClose)
@@ -302,6 +307,11 @@ class MainActivity : AppCompatActivity() {
             switchSource(SOURCE_ANIMEYT)
         }
 
+        // Source 6: JKAnime
+        btnSourceJKAnime.setOnClickListener {
+            switchSource(SOURCE_JKANIME)
+        }
+
         // Home
         btnSidebarHome.setOnClickListener {
             val url = when (currentSource) {
@@ -309,6 +319,7 @@ class MainActivity : AppCompatActivity() {
                 SOURCE_SOLOLATINO -> URL_SOLOLATINO
                 SOURCE_ANIMEFLIX -> URL_ANIMEFLIX
                 SOURCE_ANIMEYT -> URL_ANIMEYT
+                SOURCE_JKANIME -> URL_JKANIME
                 else -> URL_9ANIME
             }
             webView.loadUrl(url)
@@ -420,7 +431,8 @@ class MainActivity : AppCompatActivity() {
             Triple(btnSourceGogoAnime, SOURCE_GOGOANIME, "GogoAnime"),
             Triple(btnSourceSoloLatino, SOURCE_SOLOLATINO, "SoloLatino (Español)"),
             Triple(btnSourceAnimeFlix, SOURCE_ANIMEFLIX, "AnimeFlix"),
-            Triple(btnSourceAnimeYT, SOURCE_ANIMEYT, "AnimeYT (Español)")
+            Triple(btnSourceAnimeYT, SOURCE_ANIMEYT, "AnimeYT (Español)"),
+            Triple(btnSourceJKAnime, SOURCE_JKANIME, "JKAnime (Español)")
         )
 
         for ((btn, src, name) in sources) {
@@ -447,6 +459,7 @@ class MainActivity : AppCompatActivity() {
             SOURCE_SOLOLATINO -> Pair(URL_SOLOLATINO, "SoloLatino")
             SOURCE_ANIMEFLIX -> Pair(URL_ANIMEFLIX, "AnimeFlix")
             SOURCE_ANIMEYT -> Pair(URL_ANIMEYT, "AnimeYT")
+            SOURCE_JKANIME -> Pair(URL_JKANIME, "JKAnime")
             else -> Pair(URL_9ANIME, "9Anime")
         }
         Toast.makeText(this, "🎌 Loading $label...", Toast.LENGTH_SHORT).show()
