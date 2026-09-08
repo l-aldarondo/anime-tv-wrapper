@@ -13,6 +13,7 @@ import android.webkit.CookieManager
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -26,7 +27,13 @@ import com.example.animetv.webview.AnimeWebViewClient
 class MainActivity : AppCompatActivity() {
 
     companion object {
-        const val TARGET_URL = "https://9anime.or.at/"
+        const val PREFS_NAME = "anime_tv_prefs"
+        const val KEY_ACTIVE_SOURCE = "active_source"
+        const val SOURCE_9ANIME = "9anime"
+        const val SOURCE_GOGOANIME = "gogoanime"
+        const val URL_9ANIME = "https://9anime.or.at/"
+        const val URL_GOGOANIME = "https://gogoanime.by/"
+
         const val MODE_POINTER = 0
         const val MODE_SCROLL = 1
         private const val BACK_PRESS_INTERVAL = 2000L
@@ -34,6 +41,7 @@ class MainActivity : AppCompatActivity() {
 
     private var isTv = false
 
+    private lateinit var rootContainer: FrameLayout
     private lateinit var webView: WebView
     private lateinit var videoContainer: FrameLayout
     private lateinit var pageLoadingBar: ProgressBar
@@ -44,9 +52,23 @@ class MainActivity : AppCompatActivity() {
     private lateinit var txtNavModeBadge: TextView
     private lateinit var btnFullscreen: TextView
 
+    // Hidden Sidebar UI elements
+    private lateinit var sidebarDrawer: LinearLayout
+    private lateinit var btnSidebarFullscreen: TextView
+    private lateinit var btnSidebarAdBlock: TextView
+    private lateinit var btnSidebarMode: TextView
+    private lateinit var btnSource9Anime: TextView
+    private lateinit var btnSourceGogoAnime: TextView
+    private lateinit var btnSidebarHome: TextView
+    private lateinit var btnSidebarReload: TextView
+    private lateinit var btnSidebarClose: TextView
+
     private lateinit var webChromeClient: AnimeWebChromeClient
     private lateinit var webViewClient: AnimeWebViewClient
 
+    private var isSidebarOpen = false
+    private var isAdBlockEnabled = true
+    private var currentSource = SOURCE_9ANIME
     private var currentNavMode = MODE_POINTER
     private var isPlayerFullscreen = false
     private var lastBackPressTime = 0L
@@ -62,6 +84,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Load saved anime source preference
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        currentSource = prefs.getString(KEY_ACTIVE_SOURCE, SOURCE_9ANIME) ?: SOURCE_9ANIME
 
         // Detect if device is an Android TV / Google TV or a Phone / Tablet
         val uiModeManager = getSystemService(android.content.Context.UI_MODE_SERVICE) as? android.app.UiModeManager
@@ -97,8 +123,9 @@ class MainActivity : AppCompatActivity() {
             txtNavModeBadge.visibility = View.GONE
         }
 
-        // Load starting URL
-        val startUrl = intent?.dataString ?: TARGET_URL
+        // Load starting URL based on selected source
+        val defaultUrl = if (currentSource == SOURCE_GOGOANIME) URL_GOGOANIME else URL_9ANIME
+        val startUrl = intent?.dataString ?: defaultUrl
         if (savedInstanceState == null) {
             webView.loadUrl(startUrl)
         } else {
@@ -114,6 +141,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun initViews() {
+        rootContainer = findViewById(R.id.rootContainer)
         webView = findViewById(R.id.webView)
         videoContainer = findViewById(R.id.videoContainer)
         pageLoadingBar = findViewById(R.id.pageLoadingBar)
@@ -125,9 +153,22 @@ class MainActivity : AppCompatActivity() {
         txtNavModeBadge = findViewById(R.id.txtNavModeBadge)
         btnFullscreen = findViewById(R.id.btnFullscreen)
 
+        // Sidebar references
+        sidebarDrawer = findViewById(R.id.sidebarDrawer)
+        btnSidebarFullscreen = findViewById(R.id.btnSidebarFullscreen)
+        btnSidebarAdBlock = findViewById(R.id.btnSidebarAdBlock)
+        btnSidebarMode = findViewById(R.id.btnSidebarMode)
+        btnSource9Anime = findViewById(R.id.btnSource9Anime)
+        btnSourceGogoAnime = findViewById(R.id.btnSourceGogoAnime)
+        btnSidebarHome = findViewById(R.id.btnSidebarHome)
+        btnSidebarReload = findViewById(R.id.btnSidebarReload)
+        btnSidebarClose = findViewById(R.id.btnSidebarClose)
+
         btnFullscreen.setOnClickListener {
             togglePlayerFullscreen()
         }
+
+        setupSidebar()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -187,6 +228,170 @@ class MainActivity : AppCompatActivity() {
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
     }
 
+    private fun setupSidebar() {
+        // Toggle Fullscreen
+        btnSidebarFullscreen.setOnClickListener {
+            togglePlayerFullscreen()
+            closeSidebar()
+        }
+
+        // Toggle AdBlocker
+        btnSidebarAdBlock.setOnClickListener {
+            isAdBlockEnabled = !isAdBlockEnabled
+            AdBlocker.isEnabled = isAdBlockEnabled
+            updateSidebarUi()
+            Toast.makeText(this, if (isAdBlockEnabled) "🛡️ AdBlocker Enabled" else "⚠️ AdBlocker Disabled", Toast.LENGTH_SHORT).show()
+        }
+
+        // Toggle Navigation Mode
+        btnSidebarMode.setOnClickListener {
+            toggleNavigationMode()
+            updateSidebarUi()
+        }
+
+        // Source 1: 9Anime
+        btnSource9Anime.setOnClickListener {
+            switchSource(SOURCE_9ANIME)
+        }
+
+        // Source 2: GogoAnime
+        btnSourceGogoAnime.setOnClickListener {
+            switchSource(SOURCE_GOGOANIME)
+        }
+
+        // Home
+        btnSidebarHome.setOnClickListener {
+            val url = if (currentSource == SOURCE_GOGOANIME) URL_GOGOANIME else URL_9ANIME
+            webView.loadUrl(url)
+            closeSidebar()
+        }
+
+        // Reload
+        btnSidebarReload.setOnClickListener {
+            webView.reload()
+            closeSidebar()
+        }
+
+        // Close
+        btnSidebarClose.setOnClickListener {
+            closeSidebar()
+        }
+
+        // Virtual Cursor edge triggers
+        virtualCursorView.onLeftEdgeTrigger = {
+            runOnUiThread {
+                if (!isSidebarOpen && !isPlayerFullscreen && !webChromeClient.isFullscreen) {
+                    openSidebar()
+                }
+            }
+        }
+
+        virtualCursorView.onCursorMoved = { x, _ ->
+            if (isSidebarOpen && x > 330f * resources.displayMetrics.density) {
+                runOnUiThread {
+                    closeSidebar()
+                }
+            }
+        }
+
+        updateSidebarUi()
+    }
+
+    private fun openSidebar() {
+        if (isSidebarOpen || isPlayerFullscreen || webChromeClient.isFullscreen) return
+        isSidebarOpen = true
+        val density = resources.displayMetrics.density
+        val startX = -sidebarDrawer.width.toFloat().let { if (it <= 0f) -330f * density else -it }
+        sidebarDrawer.translationX = startX
+        sidebarDrawer.visibility = View.VISIBLE
+        sidebarDrawer.animate()
+            .translationX(0f)
+            .setDuration(220)
+            .setInterpolator(android.view.animation.DecelerateInterpolator())
+            .start()
+
+        updateSidebarUi()
+
+        // Gently steer virtual cursor slightly onto the sidebar if it was pinned against the screen edge
+        if (virtualCursorView.cursorX < 30f * density) {
+            virtualCursorView.setCursorPosition(150f * density, virtualCursorView.cursorY)
+        }
+    }
+
+    private fun closeSidebar() {
+        if (!isSidebarOpen) return
+        isSidebarOpen = false
+        val density = resources.displayMetrics.density
+        val targetX = -sidebarDrawer.width.toFloat().let { if (it <= 0f) -330f * density else -it }
+        sidebarDrawer.animate()
+            .translationX(targetX)
+            .setDuration(200)
+            .setInterpolator(android.view.animation.AccelerateInterpolator())
+            .withEndAction {
+                if (!isSidebarOpen) sidebarDrawer.visibility = View.GONE
+            }
+            .start()
+    }
+
+    private fun toggleSidebar() {
+        if (isSidebarOpen) closeSidebar() else openSidebar()
+    }
+
+    private fun updateSidebarUi() {
+        // Fullscreen
+        btnSidebarFullscreen.text = if (isPlayerFullscreen) "⛶  Exit Fullscreen" else "⛶  Enter Fullscreen"
+        btnSidebarFullscreen.setTextColor(
+            if (isPlayerFullscreen) android.graphics.Color.parseColor("#FF5252")
+            else android.graphics.Color.parseColor("#FFD600")
+        )
+
+        // AdBlocker
+        btnSidebarAdBlock.text = if (isAdBlockEnabled) "🛡️  AdBlocker: ON" else "🛡️  AdBlocker: OFF"
+        btnSidebarAdBlock.setTextColor(
+            if (isAdBlockEnabled) android.graphics.Color.parseColor("#00E676")
+            else android.graphics.Color.parseColor("#FF5252")
+        )
+
+        // Mode
+        btnSidebarMode.text = if (currentNavMode == MODE_POINTER) "🖱️  Mode: Pointer" else "📜  Mode: Scroll"
+        btnSidebarMode.setTextColor(
+            if (currentNavMode == MODE_POINTER) android.graphics.Color.parseColor("#E0AAFF")
+            else android.graphics.Color.parseColor("#00E676")
+        )
+
+        // Sources active styling
+        if (currentSource == SOURCE_GOGOANIME) {
+            btnSource9Anime.text = "○  9Anime"
+            btnSource9Anime.setBackgroundResource(R.drawable.bg_sidebar_item)
+            btnSource9Anime.setTextColor(android.graphics.Color.parseColor("#F0F0FF"))
+
+            btnSourceGogoAnime.text = "●  GogoAnime (Active)"
+            btnSourceGogoAnime.setBackgroundResource(R.drawable.bg_sidebar_active_source)
+            btnSourceGogoAnime.setTextColor(android.graphics.Color.WHITE)
+        } else {
+            btnSource9Anime.text = "●  9Anime (Active)"
+            btnSource9Anime.setBackgroundResource(R.drawable.bg_sidebar_active_source)
+            btnSource9Anime.setTextColor(android.graphics.Color.WHITE)
+
+            btnSourceGogoAnime.text = "○  GogoAnime"
+            btnSourceGogoAnime.setBackgroundResource(R.drawable.bg_sidebar_item)
+            btnSourceGogoAnime.setTextColor(android.graphics.Color.parseColor("#F0F0FF"))
+        }
+    }
+
+    private fun switchSource(source: String) {
+        currentSource = source
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        prefs.edit().putString(KEY_ACTIVE_SOURCE, source).apply()
+        updateSidebarUi()
+
+        val url = if (source == SOURCE_GOGOANIME) URL_GOGOANIME else URL_9ANIME
+        val label = if (source == SOURCE_GOGOANIME) "GogoAnime" else "9Anime"
+        Toast.makeText(this, "🎌 Loading $label...", Toast.LENGTH_SHORT).show()
+        webView.loadUrl(url)
+        closeSidebar()
+    }
+
     private fun setupAdBlockListener() {
         AdBlocker.onBlockListener = { count ->
             runOnUiThread {
@@ -198,7 +403,9 @@ class MainActivity : AppCompatActivity() {
     private fun setupBackPressedHandler() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (webChromeClient.isFullscreen) {
+                if (isSidebarOpen) {
+                    closeSidebar()
+                } else if (webChromeClient.isFullscreen) {
                     webChromeClient.onHideCustomView()
                 } else if (isPlayerFullscreen) {
                     setPlayerFullscreen(false)
@@ -227,6 +434,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         if (isFullscreen) {
+            closeSidebar()
             virtualCursorView.visibility = View.GONE
             osdTopBar.visibility = View.GONE
             osdControlsGuide.visibility = View.GONE
@@ -251,6 +459,9 @@ class MainActivity : AppCompatActivity() {
             }
         }
         runOnUiThread {
+            if (enabled) {
+                closeSidebar()
+            }
             webView.evaluateJavascript("if (window.expandPlayerFullscreen) window.expandPlayerFullscreen($enabled);", null)
             if (enabled) {
                 btnFullscreen.text = "✖ Exit Fullscreen"
@@ -431,14 +642,14 @@ class MainActivity : AppCompatActivity() {
 
         // ── BROWSING MODE REMOTE CONTROLS ──────────────────────────────────
         when (event.keyCode) {
-            // Mode toggle button (Menu, Info, Guide, Settings, or Gamepad Y)
+            // Mode / Settings sidebar toggle button (Menu, Info, Guide, Settings, or Gamepad Y)
             KeyEvent.KEYCODE_MENU,
             KeyEvent.KEYCODE_INFO,
             KeyEvent.KEYCODE_GUIDE,
             KeyEvent.KEYCODE_SETTINGS,
             KeyEvent.KEYCODE_BUTTON_Y -> {
                 if (isUp) {
-                    toggleNavigationMode()
+                    toggleSidebar()
                 }
                 return true
             }
@@ -470,7 +681,8 @@ class MainActivity : AppCompatActivity() {
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
                 if (isDown) {
                     scheduleGuideDismiss()
-                    if (!virtualCursorView.isCursorVisible && currentNavMode == MODE_POINTER) {
+                    if (currentNavMode == MODE_POINTER) {
+                        virtualCursorView.visibility = View.VISIBLE
                         virtualCursorView.isCursorVisible = true
                     }
                 }
@@ -483,10 +695,16 @@ class MainActivity : AppCompatActivity() {
             KeyEvent.KEYCODE_ENTER,
             KeyEvent.KEYCODE_NUMPAD_ENTER,
             KeyEvent.KEYCODE_BUTTON_A -> {
-                if (currentNavMode == MODE_POINTER && (isTv || virtualCursorView.isCursorVisible)) {
+                if (currentNavMode == MODE_POINTER) {
                     if (isUp) {
                         scheduleGuideDismiss()
-                        virtualCursorView.dispatchClick(webView)
+                        val density = resources.displayMetrics.density
+                        val clickTarget = if (isSidebarOpen && virtualCursorView.cursorX <= 320f * density) {
+                            rootContainer
+                        } else {
+                            webView
+                        }
+                        virtualCursorView.dispatchClick(clickTarget)
                     }
                     return true
                 }
@@ -496,7 +714,10 @@ class MainActivity : AppCompatActivity() {
             // Back button
             KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_BUTTON_B -> {
                 if (isUp) {
-                    if (isPlayerFullscreen) {
+                    if (isSidebarOpen) {
+                        closeSidebar()
+                        return true
+                    } else if (isPlayerFullscreen) {
                         setPlayerFullscreen(false)
                         return true
                     } else if (webView.canGoBack()) {

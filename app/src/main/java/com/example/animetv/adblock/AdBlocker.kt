@@ -13,11 +13,16 @@ object AdBlocker {
     // Listener for UI updates
     var onBlockListener: ((Int) -> Unit)? = null
 
-    // Recognized base domains for 9anime and trusted streaming / resource CDNs
+    // Recognized base domains for 9anime, GogoAnime, and trusted streaming / resource CDNs
     val TRUSTED_DOMAINS = setOf(
         "9anime.or.at",
         "1anime.site",
         "my.1anime.site",
+        "gogoanime.by",
+        "anitaku.to",
+        "gogoanime3.co",
+        "anihdplay.com",
+        "embtaku.pro",
         "cdnjs.cloudflare.com",
         "fonts.googleapis.com",
         "fonts.gstatic.com",
@@ -145,10 +150,14 @@ object AdBlocker {
         Regex(".*[?&](zoneid|bannerid|campaignid|pop_id)=.*", RegexOption.IGNORE_CASE)
     )
 
+    // Global toggle switch
+    var isEnabled: Boolean = true
+
     /**
      * Determine whether the given URL is an advertisement, tracker, or pop-up redirect.
      */
     fun isAd(url: String?): Boolean {
+        if (!isEnabled) return false
         if (url.isNullOrBlank()) return false
 
         val lowerUrl = url.lowercase().trim()
@@ -383,13 +392,19 @@ object AdBlocker {
                         };
                     }
 
+                    function isInternalLink(u) {
+                        if (!u || u === '#' || u.indexOf('/') === 0 || u.indexOf('#') === 0 || u.indexOf('javascript:') === 0) return true;
+                        var curHost = window.location.hostname;
+                        return (curHost && u.indexOf(curHost) !== -1) || u.indexOf('9anime.or.at') !== -1 || u.indexOf('gogoanime.by') !== -1;
+                    }
+
                     // 2. Neutralize anchor programmatic click-jacking
                     try {
                         var origClick = HTMLAnchorElement.prototype.click;
                         HTMLAnchorElement.prototype.click = function() {
                             var href = this.getAttribute('href') || '';
                             var target = this.getAttribute('target') || '';
-                            if (target === '_blank' || (href && href !== '#' && href.indexOf('9anime.or.at') === -1 && href.indexOf('/') !== 0)) {
+                            if (target === '_blank' || !isInternalLink(href)) {
                                 console.log('AdBlocker: Blocked anchor click -> ' + href);
                                 return;
                             }
@@ -402,7 +417,7 @@ object AdBlocker {
                         var el = e.target;
                         
                         // Check if user clicked the player area -> trigger auto-fullscreen
-                        var playerArea = el.closest ? el.closest('.player-wrap, .wb_-playerarea, #player-embed') : null;
+                        var playerArea = el.closest ? el.closest('.player-wrap, .wb_-playerarea, #player-embed, .player-embed, .video-content') : null;
                         if (playerArea) {
                             console.log('Player area clicked -> triggering fullscreen expansion');
                             if (window.expandPlayerFullscreen) {
@@ -418,7 +433,7 @@ object AdBlocker {
                             if (el.tagName === 'A') {
                                 var href = el.getAttribute('href') || '';
                                 var target = el.getAttribute('target') || '';
-                                if (target === '_blank' || (href && href !== '#' && href.indexOf('9anime.or.at') === -1 && href.indexOf('/') !== 0 && href.indexOf('#') !== 0)) {
+                                if (target === '_blank' || !isInternalLink(href)) {
                                     e.preventDefault();
                                     e.stopPropagation();
                                     console.log('AdBlocker: Suppressed external popup link click -> ' + href);
@@ -432,41 +447,26 @@ object AdBlocker {
                     // 4. Purge overlay divs and fake player overlays
                     function purgeOverlays() {
                         // Remove fake overlay divs & popups
-                        var badElements = document.querySelectorAll('iframe:not(#iframe-embed):not([id^="dsq"]), div[data-area], .wrapper[data-area], div[class*="popup"], div[class*="popunder"]');
+                        var badElements = document.querySelectorAll('iframe:not(#iframe-embed):not([src*="player"]):not([id^="dsq"]), div[data-area], .wrapper[data-area], div[class*="popup"], div[class*="popunder"]');
                         for (var i = 0; i < badElements.length; i++) {
                             try { badElements[i].remove(); } catch(e) {}
                         }
 
                         // Hide main page Watch Now carousel
-                        var sliderWrap = document.querySelector('.deslide-wrap') || document.getElementById('slider');
-                        if (sliderWrap && sliderWrap.style.display !== 'none') {
-                            sliderWrap.style.display = 'none';
+                        var carousels = document.querySelectorAll('.owl-carousel, .carousel-wrap, #carousel, .slider-movies, .top-slider');
+                        for (var c = 0; c < carousels.length; c++) {
+                            carousels[c].style.setProperty('display', 'none', 'important');
+                            carousels[c].style.setProperty('height', '0px', 'important');
                         }
 
                         // Remove '9anime is back' announcement banner
-                        var announcements = document.querySelectorAll('.ts-announcement, div[class*="ts-announcement"], div[class*="announcement"]');
-                        for (var i = 0; i < announcements.length; i++) {
-                            try { announcements[i].remove(); } catch(e) {}
+                        var banners = document.querySelectorAll('.ts-announcement, .ts-announcement-general, div[class*="ts-announcement"], div[class*="announcement"], .notice-bar, .domain-alert, #notice');
+                        for (var b = 0; b < banners.length; b++) {
+                            try { banners[b].remove(); } catch(e) {}
                         }
 
-                        // Purge fixed high z-index screen-covering click traps
-                        var allDivs = document.querySelectorAll('div, a');
-                        for (var d = 0; d < allDivs.length; d++) {
-                            var item = allDivs[d];
-                            if (item.classList && item.classList.contains('animetv-fullscreen-wrap')) continue;
-                            var style = window.getComputedStyle(item);
-                            if (style.position === 'fixed') {
-                                var z = parseInt(style.zIndex, 10);
-                                if (z >= 9999 && !item.querySelector('video') && !item.querySelector('iframe')) {
-                                    if (item.offsetWidth >= window.innerWidth * 0.85 && item.offsetHeight >= window.innerHeight * 0.85) {
-                                        try { item.remove(); } catch(e) {}
-                                    }
-                                }
-                            }
-                        }
-
-                        // Ensure player iframe has fullscreen and autoplay enabled
-                        var ifr = document.getElementById('iframe-embed');
+                        // Ensure iframe player has allowfullscreen
+                        var ifr = document.getElementById('iframe-embed') || document.querySelector('.player-embed iframe') || document.querySelector('iframe[src*="player"]');
                         if (ifr) {
                             if (!ifr.hasAttribute('allowfullscreen')) {
                                 ifr.setAttribute('allowfullscreen', 'true');
@@ -482,7 +482,7 @@ object AdBlocker {
                         for (var a = 0; a < blankAnchors.length; a++) {
                             var anc = blankAnchors[a];
                             var h = anc.getAttribute('href') || '';
-                            if (h.indexOf('9anime.or.at') === -1 && h.indexOf('/') !== 0) {
+                            if (!isInternalLink(h)) {
                                 anc.removeAttribute('target');
                                 anc.setAttribute('href', 'javascript:void(0)');
                             }
@@ -494,8 +494,8 @@ object AdBlocker {
 
                     // 5. Expose Fullscreen Player Expand/Collapse to Android and Web
                     window.expandPlayerFullscreen = function(enable) {
-                        var wrap = document.querySelector('.player-wrap') || document.querySelector('.wb_-playerarea') || document.getElementById('player-embed');
-                        var ifr = document.getElementById('iframe-embed');
+                        var wrap = document.querySelector('.player-wrap') || document.querySelector('.wb_-playerarea') || document.getElementById('player-embed') || document.querySelector('.player-embed') || document.querySelector('.video-content');
+                        var ifr = document.getElementById('iframe-embed') || document.querySelector('.player-embed iframe') || document.querySelector('iframe[src*="player"]');
                         
                         if (enable) {
                             if (wrap) {
@@ -516,7 +516,7 @@ object AdBlocker {
                                 if (document.exitFullscreen) document.exitFullscreen().catch(function(){});
                                 else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
                             } catch(e) {}
-                            console.log('Player restored to normal layout');
+                            console.log('Player collapsed from fullscreen');
                         }
                     };
 

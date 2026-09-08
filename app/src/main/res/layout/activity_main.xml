@@ -40,11 +40,237 @@
         android:progressTint="#9D4EDD"
         android:visibility="gone" />
 
-    <!-- Virtual Cursor View for TV Remote Navigation -->
+    <!-- Hidden Left Settings & Source Drawer (Activated on Far Left Cursor) -->
+    <LinearLayout
+        android:id="@+id/sidebarDrawer"
+        android:layout_width="310dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="start"
+        android:background="@drawable/bg_sidebar"
+        android:orientation="vertical"
+        android:padding="20dp"
+        android:elevation="20dp"
+        android:translationX="-330dp"
+        android:visibility="gone"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:clickable="true">
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scrollbars="none"
+            android:overScrollMode="never">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <!-- Header -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🎌 Anime TV"
+                    android:textColor="#E0AAFF"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="Settings &amp; Sources"
+                    android:textColor="#9D4EDD"
+                    android:textSize="12sp" />
+
+                <!-- Divider -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginVertical="14dp"
+                    android:background="#3D2660" />
+
+                <!-- Quick Settings -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="QUICK SETTINGS"
+                    android:textColor="#C77DFF"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.08" />
+
+                <!-- Fullscreen Toggle -->
+                <TextView
+                    android:id="@+id/btnSidebarFullscreen"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_sidebar_item"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="12dp"
+                    android:text="⛶  Toggle Fullscreen"
+                    android:textColor="#FFD600"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <!-- AdBlocker Toggle -->
+                <TextView
+                    android:id="@+id/btnSidebarAdBlock"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_sidebar_item"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="12dp"
+                    android:text="🛡️  AdBlocker: ON"
+                    android:textColor="#00E676"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <!-- Pointer Mode / Scroll Mode Toggle -->
+                <TextView
+                    android:id="@+id/btnSidebarMode"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_sidebar_item"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="12dp"
+                    android:text="🖱️  Mode: Pointer"
+                    android:textColor="#E0AAFF"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <!-- Divider -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginVertical="14dp"
+                    android:background="#3D2660" />
+
+                <!-- Anime Sources -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="ANIME SOURCES"
+                    android:textColor="#C77DFF"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.08" />
+
+                <!-- Source 1: 9Anime -->
+                <TextView
+                    android:id="@+id/btnSource9Anime"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_sidebar_active_source"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="12dp"
+                    android:text="●  9Anime"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <!-- Source 2: GogoAnime -->
+                <TextView
+                    android:id="@+id/btnSourceGogoAnime"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_sidebar_item"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="12dp"
+                    android:text="○  GogoAnime"
+                    android:textColor="#F0F0FF"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <!-- Divider -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginVertical="14dp"
+                    android:background="#3D2660" />
+
+                <!-- Navigation Shortcuts -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="SHORTCUTS"
+                    android:textColor="#C77DFF"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.08" />
+
+                <!-- Home -->
+                <TextView
+                    android:id="@+id/btnSidebarHome"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_sidebar_item"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="10dp"
+                    android:text="⌂  Home"
+                    android:textColor="#F0F0FF"
+                    android:textSize="13sp" />
+
+                <!-- Reload -->
+                <TextView
+                    android:id="@+id/btnSidebarReload"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_sidebar_item"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="10dp"
+                    android:text="↻  Reload Page"
+                    android:textColor="#F0F0FF"
+                    android:textSize="13sp" />
+
+                <!-- Close Sidebar -->
+                <TextView
+                    android:id="@+id/btnSidebarClose"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="16dp"
+                    android:background="@drawable/bg_sidebar_item"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="10dp"
+                    android:text="✕  Close Sidebar"
+                    android:textColor="#FF79C6"
+                    android:textSize="13sp" />
+
+            </LinearLayout>
+        </ScrollView>
+    </LinearLayout>
+
+    <!-- Virtual Cursor View for TV Remote Navigation (renders on top of sidebar) -->
     <com.example.animetv.tv.VirtualCursorView
         android:id="@+id/virtualCursorView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:elevation="35dp"
         android:focusable="false"
         android:clickable="false" />
 
@@ -107,6 +333,7 @@
         android:layout_marginBottom="24dp"
         android:background="@drawable/bg_osd_panel"
         android:orientation="horizontal"
+        android:elevation="40dp"
         android:focusable="false"
         android:clickable="false">
 
@@ -114,7 +341,7 @@
             android:id="@+id/txtGuideText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="🎮 D-Pad: Move Pointer  •  OK: Click  •  [MENU]: Mode Toggle  •  [PLAY]: Play/Pause  •  [BACK]: Back"
+            android:text="🎮 D-Pad: Move Pointer  •  Left Edge / [MENU]: Settings  •  OK: Click  •  [BACK]: Back"
             android:textColor="#F0F0FF"
             android:textSize="12sp" />
     </LinearLayout>

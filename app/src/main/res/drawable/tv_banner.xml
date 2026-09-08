@@ -45,11 +45,7 @@
         android:pathData="M190,48 h8 v2 h-3 v8 h-2 v-8 h-3 z M201,48 l2.5,7 l2.5,-7 h2.5 l-3.5,10 h-2 l-3.5,-10 z"
         android:fillColor="#10002B" />
 
-    <!-- Bottom Text: 9Anime TV -->
-    <!-- Stylized '9' -->
-    <path
-        android:pathData="M100,140 a7,7 0 1 1 0,-14 a7,7 0 0 1 7,7 v7 h-7 z M100,132 a3,3 0 1 0 0,6 a3,3 0 0 0 0,-6 z"
-        android:fillColor="#FFFFFF" />
+    <!-- Bottom Text: Anime TV -->
 
     <!-- Stylized 'A' -->
     <path

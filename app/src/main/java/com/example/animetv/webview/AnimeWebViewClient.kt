@@ -58,7 +58,9 @@ class AnimeWebViewClient : WebViewClient() {
                 request?.requestHeaders?.get("User-Agent")
                     ?: "Mozilla/5.0 (Linux; Android 17; Pixel 10 Pro XL) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
             )
-            connection.setRequestProperty("Referer", "https://9anime.or.at/")
+            val referer = request?.requestHeaders?.get("Referer")
+                ?: if (url.contains("gogoanime")) "https://gogoanime.by/" else "https://9anime.or.at/"
+            connection.setRequestProperty("Referer", referer)
 
             val responseCode = connection.responseCode
             if (responseCode != HttpURLConnection.HTTP_OK) {
@@ -244,11 +246,19 @@ class AnimeWebViewClient : WebViewClient() {
         }
 
         // STRICT MAIN-FRAME LOCK:
-        // The main viewport MUST remain on 9anime.or.at.
-        // Any main-frame navigation to any external domain is an ad redirect or popup and is blocked.
+        // The main viewport MUST remain on recognized anime providers (9anime, gogoanime, etc.).
+        // Any main-frame navigation to unknown external domains is an ad redirect or popup and is blocked.
+        val allowedMainHosts = setOf(
+            "9anime.or.at",
+            "gogoanime.by",
+            "anitaku.to",
+            "gogoanime3.co"
+        )
+        val isAllowedMain = allowedMainHosts.any { host == it || host.endsWith(".$it") }
+
         if (request.isForMainFrame) {
-            if (host == "9anime.or.at" || host.endsWith(".9anime.or.at")) {
-                return false // Allow internal navigation on 9anime
+            if (isAllowedMain) {
+                return false // Allow internal navigation on valid sources
             }
             Log.w(TAG, "BLOCKED external redirect/popup in main frame: $url")
             return true // Drop and block the popup redirect
@@ -257,7 +267,7 @@ class AnimeWebViewClient : WebViewClient() {
         // For subframes/iframes: allow recognized anime video servers & trusted domains
         val isAllowedVideoHost = AdBlocker.ALLOWED_VIDEO_HOSTS.any { host.contains(it) }
         val isTrustedDomain = AdBlocker.TRUSTED_DOMAINS.any { host == it || host.endsWith(".$it") }
-        if (isAllowedVideoHost || isTrustedDomain) {
+        if (isAllowedVideoHost || isTrustedDomain || isAllowedMain) {
             return false
         }
 
@@ -273,7 +283,13 @@ class AnimeWebViewClient : WebViewClient() {
         val host = uri.host?.lowercase() ?: ""
 
         if (AdBlocker.isAd(url)) return true
-        if (host == "9anime.or.at" || host.endsWith(".9anime.or.at")) {
+        val allowedMainHosts = setOf(
+            "9anime.or.at",
+            "gogoanime.by",
+            "anitaku.to",
+            "gogoanime3.co"
+        )
+        if (allowedMainHosts.any { host == it || host.endsWith(".$it") }) {
             return false
         }
 

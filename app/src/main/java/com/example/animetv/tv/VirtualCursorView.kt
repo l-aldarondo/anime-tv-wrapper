@@ -58,6 +58,10 @@ class VirtualCursorView @JvmOverloads constructor(
     // Edge scroll accumulator
     private var scrollAccumulatorY = 0f
 
+    // Edge callbacks
+    var onLeftEdgeTrigger: (() -> Unit)? = null
+    var onCursorMoved: ((x: Float, y: Float) -> Unit)? = null
+
     // Direct scroll mode velocities
     var isDirectScrollMode = false
     private var directScrollVy = 0f
@@ -213,6 +217,13 @@ class VirtualCursorView @JvmOverloads constructor(
                     cursorX = (cursorX + (vx * dt)).coerceIn(pad, (width - pad).coerceAtLeast(pad))
                     cursorY = (cursorY + (vy * dt)).coerceIn(pad, (height - pad).coerceAtLeast(pad))
                     invalidate()
+
+                    onCursorMoved?.invoke(cursorX, cursorY)
+
+                    // Check if cursor collided with the far left edge
+                    if (cursorX <= pad + (4f * density) && (vx < 0f || leftHeld)) {
+                        onLeftEdgeTrigger?.invoke()
+                    }
                 }
 
                 // Ultra-smooth controllable edge scrolling while pointer is near borders
@@ -279,6 +290,12 @@ class VirtualCursorView @JvmOverloads constructor(
             }
         }
         animator.start()
+    }
+
+    fun setCursorPosition(x: Float, y: Float) {
+        cursorX = x.coerceIn(0f, width.toFloat())
+        cursorY = y.coerceIn(0f, height.toFloat())
+        invalidate()
     }
 
     override fun onDraw(canvas: Canvas) {
