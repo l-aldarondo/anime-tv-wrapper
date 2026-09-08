@@ -160,6 +160,12 @@ object AdBlocker {
 
     // Known ad networks, pop-up/pop-under services, and tracking domains
     private val BLOCKED_DOMAINS = setOf(
+        "ideecoral.com",
+        "relateova.com",
+        "ocmufsnhvypis.com",
+        "visariomedia.com",
+        "adsco.re",
+        "llvpn.com",
         "excavatenearbywand.com",
         "belchlipin.com",
         "furudloof.com",
@@ -508,6 +514,15 @@ object AdBlocker {
         return """
             (function() {
                 try {
+                    // Neutralize SoloLatino ad payload
+                    try {
+                        window.__sl_ads = { h: "" };
+                        Object.defineProperty(window, '__sl_ads', {
+                            get: function() { return { h: "" }; },
+                            set: function() {}
+                        });
+                    } catch(e) {}
+
                     // 1. Completely neutralize window.open
                     try {
                         Object.defineProperty(window, 'open', {

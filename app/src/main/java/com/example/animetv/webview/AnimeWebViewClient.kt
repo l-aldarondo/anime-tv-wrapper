@@ -35,11 +35,11 @@ class AnimeWebViewClient : WebViewClient() {
             )
         }
 
-        // Only sanitize 1anime/rapid-cloud embeds where in-frame popunders need stripping
-        val isRapidCloudEmbed = (host.contains("1anime.site") || host.contains("rapid-cloud")) &&
-                (url.contains("/play/") || url.contains("/embed") || url.contains("/e-"))
+        // Sanitize video embeds (1anime, rapid-cloud, embed69, xupalace, vidhide, streamwish) to strip in-frame popunders
+        val isEmbedPlayer = (host.contains("1anime.site") || host.contains("rapid-cloud") || host.contains("embed69") || host.contains("xupalace") || host.contains("vidhide") || host.contains("streamwish")) &&
+                (url.contains("/play/") || url.contains("/embed") || url.contains("/e-") || url.contains("/e/") || url.contains("/v/"))
         val isMediaFile = url.contains(".m3u8") || url.contains(".mp4") || url.contains(".ts") || url.contains(".m4s") || url.contains(".js") || url.contains(".css")
-        if (isRapidCloudEmbed && !isMediaFile) {
+        if (isEmbedPlayer && !isMediaFile) {
             val sanitized = sanitizePlayerResponse(url, request)
             if (sanitized != null) return sanitized
         }
