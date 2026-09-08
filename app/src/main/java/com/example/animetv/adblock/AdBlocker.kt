@@ -238,6 +238,22 @@ object AdBlocker {
      */
     fun getAntiAdCss(): String {
         return """
+            /* Hide all scrollbars and scroll indicators */
+            ::-webkit-scrollbar {
+                display: none !important;
+                width: 0 !important;
+                height: 0 !important;
+                background: transparent !important;
+            }
+            * {
+                scrollbar-width: none !important;
+                -ms-overflow-style: none !important;
+            }
+            html, body {
+                scrollbar-width: none !important;
+                -ms-overflow-style: none !important;
+            }
+
             /* Hide fake ad overlays, fake player banners, and anti-adblock modals */
             iframe[src*="/ads/"], iframe[src*="doubleclick"], iframe[src*="googlesyndication"],
             iframe[src*="popads"], iframe[src*="adsterra"], iframe[src*="propeller"],

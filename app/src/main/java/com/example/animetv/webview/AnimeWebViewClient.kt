@@ -91,6 +91,8 @@ class AnimeWebViewClient : WebViewClient() {
                 </style>
                 <script>
                     (function() {
+                        var lastToggleTime = 0;
+
                         function getMedia() {
                             return document.querySelector('video') || document.querySelector('audio');
                         }
@@ -104,45 +106,50 @@ class AnimeWebViewClient : WebViewClient() {
                         function doPlay() {
                             var v = getMedia();
                             var btn = getPlayBtn();
-                            if (v && v.plyr && typeof v.plyr.play === 'function') {
-                                v.plyr.play();
-                            } else if (v && v.paused) {
-                                if (btn && btn.offsetParent !== null) {
-                                    btn.click();
-                                } else {
-                                    v.play().catch(function(){});
+                            if (v) {
+                                try {
+                                    if (v.plyr && typeof v.plyr.play === 'function') v.plyr.play();
+                                    else v.play().catch(function(){});
+                                } catch(e) {
+                                    try { v.play(); } catch(e2) {}
                                 }
-                            } else if (btn) {
-                                btn.click();
+                            }
+                            if (btn && (!v || v.paused)) {
+                                try { btn.click(); } catch(e) {}
                             }
                         }
 
                         function doPause() {
                             var v = getMedia();
-                            if (v && v.plyr && typeof v.plyr.pause === 'function') {
-                                v.plyr.pause();
-                            } else if (v && !v.paused) {
-                                v.pause();
+                            if (v) {
+                                try {
+                                    if (v.plyr && typeof v.plyr.pause === 'function') v.plyr.pause();
+                                } catch(e) {}
+                                try {
+                                    v.pause();
+                                } catch(e) {}
+                                if (!v.paused) {
+                                    var btn = document.querySelector('button[data-plyr="play"]');
+                                    if (btn) try { btn.click(); } catch(e) {}
+                                }
                             }
                         }
 
                         function doToggle() {
+                            var now = Date.now();
+                            if (now - lastToggleTime < 300) return;
+                            lastToggleTime = now;
+
                             var v = getMedia();
-                            var btn = getPlayBtn();
-                            if (v && v.plyr && typeof v.plyr.togglePlay === 'function') {
-                                v.plyr.togglePlay();
-                            } else if (v) {
+                            if (v) {
                                 if (v.paused) {
-                                    if (btn && btn.offsetParent !== null) {
-                                        btn.click();
-                                    } else {
-                                        v.play().catch(function(){});
-                                    }
+                                    doPlay();
                                 } else {
-                                    v.pause();
+                                    doPause();
                                 }
-                            } else if (btn) {
-                                btn.click();
+                            } else {
+                                var btn = getPlayBtn();
+                                if (btn) btn.click();
                             }
                         }
 

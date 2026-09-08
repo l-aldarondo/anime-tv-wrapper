@@ -150,8 +150,8 @@ class VirtualCursorView @JvmOverloads constructor(
         }
 
         if (isDirectScrollMode) {
-            // Direct scroll velocity: smoothly glides page at 950dp/s to 2000dp/s
-            val scrollSpeed = (950f + (holdDurationMs * 0.9f).coerceAtMost(1050f)) * density
+            // Direct scroll velocity: smoothly glides page at 260dp/s to 600dp/s
+            val scrollSpeed = (260f + (holdDurationMs * 0.25f).coerceAtMost(340f)) * density
             var sDirY = 0f
             if (upHeld) sDirY -= 1f
             if (downHeld) sDirY += 1f
@@ -159,8 +159,8 @@ class VirtualCursorView @JvmOverloads constructor(
             return
         }
 
-        // Pointer mode speed: begins at a responsive 800dp/s, smoothly accelerating up to 1700dp/s
-        val currentSpeed = (800f + (holdDurationMs * 0.8f).coerceAtMost(900f)) * density
+        // Pointer mode speed: begins at a controllable 480dp/s, smoothly accelerating up to 1000dp/s
+        val currentSpeed = (480f + (holdDurationMs * 0.45f).coerceAtMost(520f)) * density
 
         var dirX = 0f
         var dirY = 0f
@@ -215,18 +215,18 @@ class VirtualCursorView @JvmOverloads constructor(
                     invalidate()
                 }
 
-                // Ultra-smooth edge scrolling while pointer is near borders
+                // Ultra-smooth controllable edge scrolling while pointer is near borders
                 val target = targetView
                 if (target != null && height > 0 && width > 0 && isCursorVisible) {
-                    val edgeZone = 110f * density
+                    val edgeZone = 90f * density
                     var scrollRate = 0f
 
                     if (cursorY < edgeZone) {
                         val penetration = ((edgeZone - cursorY) / edgeZone).coerceIn(0f, 1f)
-                        scrollRate = -((450f + (penetration * 1250f)) * density)
+                        scrollRate = -((150f + (penetration * 320f)) * density)
                     } else if (cursorY > height - edgeZone) {
                         val penetration = ((cursorY - (height - edgeZone)) / edgeZone).coerceIn(0f, 1f)
-                        scrollRate = ((450f + (penetration * 1250f)) * density)
+                        scrollRate = ((150f + (penetration * 320f)) * density)
                     }
 
                     if (scrollRate != 0f) {

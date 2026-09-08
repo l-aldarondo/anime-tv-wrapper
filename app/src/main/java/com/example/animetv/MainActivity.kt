@@ -149,6 +149,9 @@ class MainActivity : AppCompatActivity() {
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
         webView.isFocusable = true
         webView.isFocusableInTouchMode = true
+        webView.isVerticalScrollBarEnabled = false
+        webView.isHorizontalScrollBarEnabled = false
+        webView.overScrollMode = View.OVER_SCROLL_NEVER
 
         val settings = webView.settings
         settings.javaScriptEnabled = true
@@ -231,7 +234,7 @@ class MainActivity : AppCompatActivity() {
             enableImmersiveMode()
         } else {
             virtualCursorView.visibility = if (currentNavMode == MODE_POINTER && isTv) View.VISIBLE else View.GONE
-            osdTopBar.visibility = View.VISIBLE
+            osdTopBar.visibility = View.GONE
             btnFullscreen.text = "⛶ Fullscreen"
             btnFullscreen.setTextColor(android.graphics.Color.parseColor("#FFD600"))
             enableImmersiveMode()
@@ -337,14 +340,28 @@ class MainActivity : AppCompatActivity() {
                     return true
                 }
 
+                // Explicit Pause
+                KeyEvent.KEYCODE_MEDIA_PAUSE -> {
+                    if (isUp) {
+                        pauseVideo()
+                    }
+                    return true
+                }
+
+                // Explicit Play
+                KeyEvent.KEYCODE_MEDIA_PLAY -> {
+                    if (isUp) {
+                        playVideo()
+                    }
+                    return true
+                }
+
                 // Play / Pause toggle
                 KeyEvent.KEYCODE_DPAD_CENTER,
                 KeyEvent.KEYCODE_ENTER,
                 KeyEvent.KEYCODE_NUMPAD_ENTER,
                 KeyEvent.KEYCODE_BUTTON_A,
-                KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
-                KeyEvent.KEYCODE_MEDIA_PLAY,
-                KeyEvent.KEYCODE_MEDIA_PAUSE -> {
+                KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
                     if (isUp) {
                         toggleVideoPlayback()
                     }
@@ -426,12 +443,22 @@ class MainActivity : AppCompatActivity() {
                 return true
             }
 
-            // Quick Play/Pause key when browsing
-            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
-            KeyEvent.KEYCODE_MEDIA_PLAY,
-            KeyEvent.KEYCODE_MEDIA_PAUSE -> {
+            // Quick Play/Pause keys when browsing
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
                 if (isUp) {
                     toggleVideoPlayback()
+                }
+                return true
+            }
+            KeyEvent.KEYCODE_MEDIA_PLAY -> {
+                if (isUp) {
+                    playVideo()
+                }
+                return true
+            }
+            KeyEvent.KEYCODE_MEDIA_PAUSE -> {
+                if (isUp) {
+                    pauseVideo()
                 }
                 return true
             }
@@ -514,18 +541,24 @@ class MainActivity : AppCompatActivity() {
         val js = """
             (function() {
                 var payload = { action: '$action', seconds: $seconds };
-                var strPayload = JSON.stringify(payload);
                 
-                // 1. Broadcast to all iframes in the document (cross-origin embed players)
-                var iframes = document.querySelectorAll('iframe');
-                for (var i = 0; i < iframes.length; i++) {
+                // 1. Send directly to primary player iframe
+                var ifr = document.getElementById('iframe-embed');
+                if (ifr && ifr.contentWindow) {
                     try {
-                        iframes[i].contentWindow.postMessage(payload, '*');
-                        iframes[i].contentWindow.postMessage(strPayload, '*');
+                        ifr.contentWindow.postMessage(payload, '*');
                     } catch(e) {}
                 }
                 
-                // 2. Control top-level video elements if any
+                // 2. Broadcast to any other player iframes
+                var iframes = document.querySelectorAll('iframe:not(#iframe-embed)');
+                for (var i = 0; i < iframes.length; i++) {
+                    try {
+                        iframes[i].contentWindow.postMessage(payload, '*');
+                    } catch(e) {}
+                }
+                
+                // 3. Control top-level video elements if any
                 var videos = document.querySelectorAll('video');
                 for (var j = 0; j < videos.length; j++) {
                     var v = videos[j];
@@ -556,6 +589,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun pauseVideo() {
         sendPlayerCommand("pause")
+        Toast.makeText(this, "⏸️ Paused", Toast.LENGTH_SHORT).show()
     }
 
     private fun seekVideo(seconds: Int) {

@@ -77,12 +77,8 @@ class AnimeWebChromeClient(
     override fun onProgressChanged(view: WebView?, newProgress: Int) {
         super.onProgressChanged(view, newProgress)
 
-        if (newProgress < 100) {
-            progressBar.visibility = View.VISIBLE
-            progressBar.progress = newProgress
-        } else {
-            progressBar.visibility = View.GONE
-        }
+        // Keep progress bar hidden per user request
+        progressBar.visibility = View.GONE
 
         // Early script injection during DOM building
         if (newProgress in 40..60) {
