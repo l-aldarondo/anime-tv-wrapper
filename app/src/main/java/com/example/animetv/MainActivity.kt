@@ -31,8 +31,15 @@ class MainActivity : AppCompatActivity() {
         const val KEY_ACTIVE_SOURCE = "active_source"
         const val SOURCE_9ANIME = "9anime"
         const val SOURCE_GOGOANIME = "gogoanime"
+        const val SOURCE_SOLOLATINO = "sololatino"
+        const val SOURCE_ANIMEFLIX = "animeflix"
+        const val SOURCE_ANIMEYT = "animeyt"
+
         const val URL_9ANIME = "https://9anime.or.at/"
         const val URL_GOGOANIME = "https://gogoanime.by/"
+        const val URL_SOLOLATINO = "https://sololatino.net/animes"
+        const val URL_ANIMEFLIX = "https://animeflix.team/"
+        const val URL_ANIMEYT = "https://animeyt.cc/"
 
         const val MODE_POINTER = 0
         const val MODE_SCROLL = 1
@@ -59,6 +66,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnSidebarMode: TextView
     private lateinit var btnSource9Anime: TextView
     private lateinit var btnSourceGogoAnime: TextView
+    private lateinit var btnSourceSoloLatino: TextView
+    private lateinit var btnSourceAnimeFlix: TextView
+    private lateinit var btnSourceAnimeYT: TextView
     private lateinit var btnSidebarHome: TextView
     private lateinit var btnSidebarReload: TextView
     private lateinit var btnSidebarClose: TextView
@@ -124,7 +134,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Load starting URL based on selected source
-        val defaultUrl = if (currentSource == SOURCE_GOGOANIME) URL_GOGOANIME else URL_9ANIME
+        val defaultUrl = when (currentSource) {
+            SOURCE_GOGOANIME -> URL_GOGOANIME
+            SOURCE_SOLOLATINO -> URL_SOLOLATINO
+            SOURCE_ANIMEFLIX -> URL_ANIMEFLIX
+            SOURCE_ANIMEYT -> URL_ANIMEYT
+            else -> URL_9ANIME
+        }
         val startUrl = intent?.dataString ?: defaultUrl
         if (savedInstanceState == null) {
             webView.loadUrl(startUrl)
@@ -160,6 +176,9 @@ class MainActivity : AppCompatActivity() {
         btnSidebarMode = findViewById(R.id.btnSidebarMode)
         btnSource9Anime = findViewById(R.id.btnSource9Anime)
         btnSourceGogoAnime = findViewById(R.id.btnSourceGogoAnime)
+        btnSourceSoloLatino = findViewById(R.id.btnSourceSoloLatino)
+        btnSourceAnimeFlix = findViewById(R.id.btnSourceAnimeFlix)
+        btnSourceAnimeYT = findViewById(R.id.btnSourceAnimeYT)
         btnSidebarHome = findViewById(R.id.btnSidebarHome)
         btnSidebarReload = findViewById(R.id.btnSidebarReload)
         btnSidebarClose = findViewById(R.id.btnSidebarClose)
@@ -259,9 +278,30 @@ class MainActivity : AppCompatActivity() {
             switchSource(SOURCE_GOGOANIME)
         }
 
+        // Source 3: SoloLatino
+        btnSourceSoloLatino.setOnClickListener {
+            switchSource(SOURCE_SOLOLATINO)
+        }
+
+        // Source 4: AnimeFlix
+        btnSourceAnimeFlix.setOnClickListener {
+            switchSource(SOURCE_ANIMEFLIX)
+        }
+
+        // Source 5: AnimeYT
+        btnSourceAnimeYT.setOnClickListener {
+            switchSource(SOURCE_ANIMEYT)
+        }
+
         // Home
         btnSidebarHome.setOnClickListener {
-            val url = if (currentSource == SOURCE_GOGOANIME) URL_GOGOANIME else URL_9ANIME
+            val url = when (currentSource) {
+                SOURCE_GOGOANIME -> URL_GOGOANIME
+                SOURCE_SOLOLATINO -> URL_SOLOLATINO
+                SOURCE_ANIMEFLIX -> URL_ANIMEFLIX
+                SOURCE_ANIMEYT -> URL_ANIMEYT
+                else -> URL_9ANIME
+            }
             webView.loadUrl(url)
             closeSidebar()
         }
@@ -360,22 +400,24 @@ class MainActivity : AppCompatActivity() {
         )
 
         // Sources active styling
-        if (currentSource == SOURCE_GOGOANIME) {
-            btnSource9Anime.text = "○  9Anime"
-            btnSource9Anime.setBackgroundResource(R.drawable.bg_sidebar_item)
-            btnSource9Anime.setTextColor(android.graphics.Color.parseColor("#F0F0FF"))
+        val sources = listOf(
+            Triple(btnSource9Anime, SOURCE_9ANIME, "9Anime"),
+            Triple(btnSourceGogoAnime, SOURCE_GOGOANIME, "GogoAnime"),
+            Triple(btnSourceSoloLatino, SOURCE_SOLOLATINO, "SoloLatino (Español)"),
+            Triple(btnSourceAnimeFlix, SOURCE_ANIMEFLIX, "AnimeFlix"),
+            Triple(btnSourceAnimeYT, SOURCE_ANIMEYT, "AnimeYT (Español)")
+        )
 
-            btnSourceGogoAnime.text = "●  GogoAnime (Active)"
-            btnSourceGogoAnime.setBackgroundResource(R.drawable.bg_sidebar_active_source)
-            btnSourceGogoAnime.setTextColor(android.graphics.Color.WHITE)
-        } else {
-            btnSource9Anime.text = "●  9Anime (Active)"
-            btnSource9Anime.setBackgroundResource(R.drawable.bg_sidebar_active_source)
-            btnSource9Anime.setTextColor(android.graphics.Color.WHITE)
-
-            btnSourceGogoAnime.text = "○  GogoAnime"
-            btnSourceGogoAnime.setBackgroundResource(R.drawable.bg_sidebar_item)
-            btnSourceGogoAnime.setTextColor(android.graphics.Color.parseColor("#F0F0FF"))
+        for ((btn, src, name) in sources) {
+            if (currentSource == src) {
+                btn.text = "●  $name (Active)"
+                btn.setBackgroundResource(R.drawable.bg_sidebar_active_source)
+                btn.setTextColor(android.graphics.Color.WHITE)
+            } else {
+                btn.text = "○  $name"
+                btn.setBackgroundResource(R.drawable.bg_sidebar_item)
+                btn.setTextColor(android.graphics.Color.parseColor("#F0F0FF"))
+            }
         }
     }
 
@@ -385,8 +427,13 @@ class MainActivity : AppCompatActivity() {
         prefs.edit().putString(KEY_ACTIVE_SOURCE, source).apply()
         updateSidebarUi()
 
-        val url = if (source == SOURCE_GOGOANIME) URL_GOGOANIME else URL_9ANIME
-        val label = if (source == SOURCE_GOGOANIME) "GogoAnime" else "9Anime"
+        val (url, label) = when (source) {
+            SOURCE_GOGOANIME -> Pair(URL_GOGOANIME, "GogoAnime")
+            SOURCE_SOLOLATINO -> Pair(URL_SOLOLATINO, "SoloLatino")
+            SOURCE_ANIMEFLIX -> Pair(URL_ANIMEFLIX, "AnimeFlix")
+            SOURCE_ANIMEYT -> Pair(URL_ANIMEYT, "AnimeYT")
+            else -> Pair(URL_9ANIME, "9Anime")
+        }
         Toast.makeText(this, "🎌 Loading $label...", Toast.LENGTH_SHORT).show()
         webView.loadUrl(url)
         closeSidebar()
@@ -758,28 +805,50 @@ class MainActivity : AppCompatActivity() {
     }
 
 
+    private var touchStartX = 0f
+    private var touchStartY = 0f
+
+    override fun dispatchTouchEvent(ev: MotionEvent?): Boolean {
+        if (ev != null) {
+            val density = resources.displayMetrics.density
+            when (ev.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    touchStartX = ev.rawX
+                    touchStartY = ev.rawY
+                }
+                MotionEvent.ACTION_UP -> {
+                    val deltaX = ev.rawX - touchStartX
+                    val deltaY = Math.abs(ev.rawY - touchStartY)
+                    // Edge swipe from left (starts at x < 45dp, moves right > 50dp with low Y drift)
+                    if (!isSidebarOpen && touchStartX < 45f * density && deltaX > 50f * density && deltaY < 120f * density) {
+                        openSidebar()
+                        return true
+                    }
+                    // Tap outside open sidebar to close
+                    if (isSidebarOpen && touchStartX > 320f * density && ev.rawX > 320f * density) {
+                        closeSidebar()
+                        return true
+                    }
+                }
+            }
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
     private fun sendPlayerCommand(action: String, seconds: Int = 0) {
         val js = """
             (function() {
                 var payload = { action: '$action', seconds: $seconds };
                 
-                // 1. Send directly to primary player iframe
-                var ifr = document.getElementById('iframe-embed');
-                if (ifr && ifr.contentWindow) {
-                    try {
-                        ifr.contentWindow.postMessage(payload, '*');
-                    } catch(e) {}
-                }
-                
-                // 2. Broadcast to any other player iframes
-                var iframes = document.querySelectorAll('iframe:not(#iframe-embed)');
+                // 1. Broadcast to all iframes
+                var iframes = document.querySelectorAll('iframe');
                 for (var i = 0; i < iframes.length; i++) {
                     try {
                         iframes[i].contentWindow.postMessage(payload, '*');
                     } catch(e) {}
                 }
                 
-                // 3. Control top-level video elements if any
+                // 2. Control top-level video elements if any
                 var videos = document.querySelectorAll('video');
                 for (var j = 0; j < videos.length; j++) {
                     var v = videos[j];

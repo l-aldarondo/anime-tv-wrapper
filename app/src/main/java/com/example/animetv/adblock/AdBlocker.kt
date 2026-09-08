@@ -13,7 +13,7 @@ object AdBlocker {
     // Listener for UI updates
     var onBlockListener: ((Int) -> Unit)? = null
 
-    // Recognized base domains for 9anime, GogoAnime, and trusted streaming / resource CDNs
+    // Recognized base domains for 9anime, GogoAnime, SoloLatino, AnimeFlix, AnimeYT, and trusted streaming / resource CDNs
     val TRUSTED_DOMAINS = setOf(
         "9anime.or.at",
         "1anime.site",
@@ -33,6 +33,16 @@ object AdBlocker {
         "i0.wp.com",
         "i1.wp.com",
         "i2.wp.com",
+        "sololatino.net",
+        "embed69.org",
+        "xupalace.org",
+        "image.tmdb.org",
+        "tmdb.org",
+        "animeflix.team",
+        "9animes.me.uk",
+        "megaplay.buzz",
+        "animeyt.cc",
+        "mytsumi.com",
         "cdnjs.cloudflare.com",
         "fonts.googleapis.com",
         "fonts.gstatic.com",
@@ -66,6 +76,7 @@ object AdBlocker {
         "mp4upload.com",
         "filemoon.sx",
         "filemoon.to",
+        "filemoon.in",
         "doodstream.com",
         "dood.to",
         "dood.so",
@@ -76,11 +87,29 @@ object AdBlocker {
         "vidsrc.me",
         "vidsrc.to",
         "megaplay.su",
+        "megaplay.buzz",
         "megaplay",
         "googlevideo.com",
         "gogoanime.by",
         "jwplayer.com",
-        "jwpcdn.com"
+        "jwpcdn.com",
+        "sololatino.net",
+        "embed69.org",
+        "xupalace.org",
+        "animeflix.team",
+        "9animes.me.uk",
+        "animeyt.cc",
+        "mytsumi.com",
+        "streamwish",
+        "wishembed",
+        "luluvdo",
+        "ok.ru",
+        "mega.nz",
+        "uqload",
+        "vidmoly",
+        "voe.sx",
+        "mixdrop",
+        "yourupload"
     )
 
     // Known ad networks, pop-up/pop-under services, and tracking domains
@@ -156,7 +185,9 @@ object AdBlocker {
         "wunderloop.net",
         "optmnstr.com",
         "scorecardresearch.com",
-        "quantserve.com"
+        "quantserve.com",
+        "oxserver",
+        "player-oxserver.js"
     )
 
     // Patterns for matching ad/tracking paths and query parameters
@@ -326,7 +357,9 @@ object AdBlocker {
             }
 
             /* Ensure player containers and embed iframes are ALWAYS visible, sized, and interactive */
-            .wb_-playerarea, .player-embed, #player, #player-container, .player-wrap, .video-content {
+            .wb_-playerarea, .player-embed, #player, #player-container, .player-wrap, .video-content,
+            #main-player-wrap, #player-frame, #player-section, .mg-3mb3d, .mg3-player, #megaplay-player,
+            .azaku-player-container {
                 position: relative !important;
                 width: 100% !important;
                 aspect-ratio: 16 / 9 !important;
@@ -337,7 +370,8 @@ object AdBlocker {
                 opacity: 1 !important;
             }
 
-            #player-embed, .player-embed, .player-wrap, #player-container {
+            #player-embed, .player-embed, .player-wrap, #player-container, #main-player-wrap, #player-frame,
+            .mg-3mb3d, .mg3-player, #megaplay-player, .azaku-player-container {
                 display: block !important;
                 visibility: visible !important;
                 position: relative !important;
@@ -347,7 +381,16 @@ object AdBlocker {
                 opacity: 1 !important;
             }
 
-            iframe#iframe-embed, iframe.player-iframe, .player-embed iframe, iframe[src*="player"], iframe[src*="embed"], iframe[src*="megaplay"] {
+            #modal.modal-vast, .modal-vast, .download-panel, .tutorial-overlay, #decryptionLoader, .server-toast {
+                display: none !important;
+                visibility: hidden !important;
+                height: 0 !important;
+                pointer-events: none !important;
+            }
+
+            iframe#iframe-embed, iframe.player-iframe, .player-embed iframe, iframe[src*="player"],
+            iframe[src*="embed"], iframe[src*="megaplay"], iframe[src*="mytsumi"], iframe[src*="xupalace"],
+            iframe[src*="options.php"], iframe[src*="contenedor.php"], iframe#iframePlayer {
                 display: block !important;
                 visibility: visible !important;
                 width: 100% !important;
@@ -376,7 +419,13 @@ object AdBlocker {
             .animetv-fullscreen-wrap #player,
             .animetv-fullscreen-wrap #player-container,
             .animetv-fullscreen-wrap .player-wrap,
-            .animetv-fullscreen-wrap iframe {
+            .animetv-fullscreen-wrap #main-player-wrap,
+            .animetv-fullscreen-wrap #player-frame,
+            .animetv-fullscreen-wrap #megaplay-player,
+            .animetv-fullscreen-wrap .mg3-player,
+            .animetv-fullscreen-wrap .azaku-player-container,
+            .animetv-fullscreen-wrap iframe,
+            .animetv-fullscreen-wrap video {
                 width: 100vw !important;
                 height: 100vh !important;
                 max-width: 100vw !important;
@@ -419,7 +468,14 @@ object AdBlocker {
                     function isInternalLink(u) {
                         if (!u || u === '#' || u.indexOf('/') === 0 || u.indexOf('#') === 0 || u.indexOf('javascript:') === 0) return true;
                         var curHost = window.location.hostname;
-                        return (curHost && u.indexOf(curHost) !== -1) || u.indexOf('9anime.or.at') !== -1 || u.indexOf('gogoanime.by') !== -1;
+                        return (curHost && u.indexOf(curHost) !== -1) || 
+                               u.indexOf('9anime.or.at') !== -1 || 
+                               u.indexOf('gogoanime.by') !== -1 ||
+                               u.indexOf('sololatino.net') !== -1 ||
+                               u.indexOf('animeflix.team') !== -1 ||
+                               u.indexOf('9animes.me.uk') !== -1 ||
+                               u.indexOf('animeyt.cc') !== -1 ||
+                               u.indexOf('mytsumi.com') !== -1;
                     }
 
                     // 2. Neutralize anchor programmatic click-jacking
@@ -441,7 +497,7 @@ object AdBlocker {
                         var el = e.target;
                         
                         // Check if user clicked the player area -> trigger auto-fullscreen
-                        var playerArea = el.closest ? el.closest('.player-wrap, .wb_-playerarea, #player-embed, .player-embed, .video-content') : null;
+                        var playerArea = el.closest ? el.closest('.player-wrap, .wb_-playerarea, #player-embed, .player-embed, .video-content, #main-player-wrap, #player-section, .mg-3mb3d, .mg3-player, .azaku-player-container, #player-frame') : null;
                         if (playerArea) {
                             console.log('Player area clicked -> triggering fullscreen expansion');
                             if (window.expandPlayerFullscreen) {
@@ -471,9 +527,27 @@ object AdBlocker {
                     // 4. Purge overlay divs and fake player overlays
                     function purgeOverlays() {
                         // Remove fake overlay divs & popups (NEVER touch player, embed, or video iframes)
-                        var badElements = document.querySelectorAll('iframe[src*="furudloof"], iframe[src*="belchlipin"], iframe[src*="adsterra"], iframe[src*="monetag"], iframe[src*="popads"], iframe[src*="propeller"], iframe[src*="buildsstate"], div[data-area], .wrapper[data-area], div[class*="popup"], div[class*="popunder"]');
+                        var badElements = document.querySelectorAll('iframe[src*="furudloof"], iframe[src*="belchlipin"], iframe[src*="adsterra"], iframe[src*="monetag"], iframe[src*="popads"], iframe[src*="propeller"], iframe[src*="buildsstate"], iframe[src*="oxserver"], div[data-area], .wrapper[data-area], div[class*="popup"], div[class*="popunder"], #modal.modal-vast, .modal-vast, .tutorial-overlay');
                         for (var i = 0; i < badElements.length; i++) {
                             try { badElements[i].remove(); } catch(e) {}
+                        }
+
+                        // Auto-dismiss AnimeYT notices, dialogs, and cookies
+                        var dismissBtns = document.querySelectorAll('button[data-aniyt-cookie-dismiss], [data-abismo-login-dialog] .close, [aria-label="Cerrar"]');
+                        for (var d = 0; d < dismissBtns.length; d++) {
+                            try { dismissBtns[d].click(); } catch(e) {}
+                        }
+                        var allBtns = document.querySelectorAll('button');
+                        for (var b = 0; b < allBtns.length; b++) {
+                            if (allBtns[b].innerText && allBtns[b].innerText.trim().toLowerCase() === 'entendido') {
+                                try { allBtns[b].click(); } catch(e) {}
+                            }
+                        }
+
+                        // Auto-trigger SoloLatino play overlay if present
+                        var playOverlay = document.querySelector('.play-button-overlay');
+                        if (playOverlay && document.getElementById('fakePlayer') && document.getElementById('fakePlayer').style.display !== 'none') {
+                            try { playOverlay.click(); } catch(e) {}
                         }
 
                         // Hide main page Watch Now carousel / slider (both 9anime and gogoanime)
@@ -490,7 +564,16 @@ object AdBlocker {
                         }
 
                         // Ensure iframe player has allowfullscreen
-                        var ifr = document.getElementById('iframe-embed') || document.querySelector('.player-embed iframe') || document.querySelector('iframe.player-iframe') || document.querySelector('iframe[src*="player"]') || document.querySelector('iframe[src*="embed"]') || document.querySelector('iframe[src*="megaplay"]');
+                        var ifr = document.getElementById('iframe-embed') || 
+                                  document.querySelector('.player-embed iframe') || 
+                                  document.querySelector('iframe.player-iframe') || 
+                                  document.querySelector('iframe[src*="player"]') || 
+                                  document.querySelector('iframe[src*="embed"]') || 
+                                  document.querySelector('iframe[src*="megaplay"]') ||
+                                  document.getElementById('player-frame') ||
+                                  document.querySelector('iframe[src*="mytsumi"]') ||
+                                  document.querySelector('iframe[src*="embed69"]') ||
+                                  document.querySelector('iframe[src*="xupalace"]');
                         if (ifr) {
                             if (!ifr.hasAttribute('allowfullscreen')) {
                                 ifr.setAttribute('allowfullscreen', 'true');
@@ -518,8 +601,28 @@ object AdBlocker {
 
                     // 5. Expose Fullscreen Player Expand/Collapse to Android and Web
                     window.expandPlayerFullscreen = function(enable) {
-                        var wrap = document.querySelector('.player-wrap') || document.querySelector('.wb_-playerarea') || document.getElementById('player-embed') || document.querySelector('.player-embed') || document.querySelector('#player') || document.querySelector('#player-container') || document.querySelector('.video-content');
-                        var ifr = document.getElementById('iframe-embed') || document.querySelector('.player-embed iframe') || document.querySelector('iframe.player-iframe') || document.querySelector('iframe[src*="player"]') || document.querySelector('iframe[src*="embed"]') || document.querySelector('iframe[src*="megaplay"]');
+                        var wrap = document.querySelector('.player-wrap') || 
+                                   document.querySelector('.wb_-playerarea') || 
+                                   document.getElementById('player-embed') || 
+                                   document.querySelector('.player-embed') || 
+                                   document.querySelector('#player') || 
+                                   document.querySelector('#player-container') || 
+                                   document.querySelector('.video-content') ||
+                                   document.querySelector('#main-player-wrap') ||
+                                   document.querySelector('#player-section') ||
+                                   document.querySelector('.mg-3mb3d') ||
+                                   document.querySelector('.mg3-player') ||
+                                   document.querySelector('.azaku-player-container');
+                        var ifr = document.getElementById('iframe-embed') || 
+                                  document.querySelector('.player-embed iframe') || 
+                                  document.querySelector('iframe.player-iframe') || 
+                                  document.querySelector('iframe[src*="player"]') || 
+                                  document.querySelector('iframe[src*="embed"]') || 
+                                  document.querySelector('iframe[src*="megaplay"]') ||
+                                  document.getElementById('player-frame') ||
+                                  document.querySelector('iframe[src*="mytsumi"]') ||
+                                  document.querySelector('iframe[src*="embed69"]') ||
+                                  document.querySelector('iframe[src*="xupalace"]');
                         
                         if (enable) {
                             if (wrap) {

@@ -36,7 +36,10 @@ class AnimeWebViewClient : WebViewClient() {
         }
 
         // Sanitize player iframe embeds to purge in-frame ad scripts and inject remote playback controls
-        val isPlayerUrl = url.contains("/play/") || url.contains("/embed") || url.contains("/e-") || url.contains("/v/") || url.contains("stream") || url.contains("player") || url.contains("megaplay")
+        val isPlayerUrl = url.contains("/play/") || url.contains("/embed") || url.contains("/e-") || 
+                          url.contains("/v/") || url.contains("stream") || url.contains("player") || 
+                          url.contains("megaplay") || url.contains("mytsumi") || url.contains("options.php") || 
+                          url.contains("contenedor.php") || url.contains("embed69") || url.contains("xupalace")
         val isPlayerHost = AdBlocker.ALLOWED_VIDEO_HOSTS.any { host.contains(it) }
         val isMediaFile = url.contains(".m3u8") || url.contains(".mp4") || url.contains(".ts") || url.contains(".m4s") || url.contains(".js") || url.contains(".css")
         if (isPlayerUrl && isPlayerHost && !isMediaFile) {
@@ -59,7 +62,13 @@ class AnimeWebViewClient : WebViewClient() {
                     ?: "Mozilla/5.0 (Linux; Android 17; Pixel 10 Pro XL) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
             )
             val referer = request?.requestHeaders?.get("Referer")
-                ?: if (url.contains("gogoanime") || url.contains("megaplay")) "https://gogoanime.by/" else "https://9anime.or.at/"
+                ?: when {
+                    url.contains("sololatino") || url.contains("embed69") || url.contains("xupalace") -> "https://sololatino.net/"
+                    url.contains("animeflix") -> "https://animeflix.team/"
+                    url.contains("animeyt") || url.contains("mytsumi") -> "https://animeyt.cc/"
+                    url.contains("gogoanime") || url.contains("megaplay") -> "https://gogoanime.by/"
+                    else -> "https://9anime.or.at/"
+                }
             connection.setRequestProperty("Referer", referer)
 
             val responseCode = connection.responseCode
@@ -69,10 +78,10 @@ class AnimeWebViewClient : WebViewClient() {
 
             var html = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
 
-            // Strip ad networks (furudloof, belchlipin, monetize, adsterra, etc.)
+            // Strip ad networks (furudloof, belchlipin, monetize, adsterra, oxserver, etc.)
             html = html.replace(
                 Regex(
-                    "<script[^>]+src=[\"'][^\"']*(?:furudloof|belchlipin|adsterra|monetag|subduepaler|clickadu|popads|propeller|buildsstate)[^\"']*[\"'][^>]*>\\s*</script>",
+                    "<script[^>]+src=[\"'][^\"']*(?:furudloof|belchlipin|adsterra|monetag|subduepaler|clickadu|popads|propeller|buildsstate|oxserver)[^\"']*[\"'][^>]*>\\s*</script>",
                     RegexOption.IGNORE_CASE
                 ),
                 ""
@@ -87,12 +96,15 @@ class AnimeWebViewClient : WebViewClient() {
 
             // Auto-start videos on JWPlayer / Megaplay embeds
             html = html.replace("autostart: false", "autostart: true")
+            html = html.replace("autoPlay: false", "autoPlay: true")
+            html = html.replace("autoPlay: !1", "autoPlay: !0")
 
             // Inject anti-overlay style and bidirectional TV remote control bridge
             val injection = """
                 <style>
-                    iframe[src*="furudloof"], iframe[src*="ad"], iframe[src*="pop"], iframe[src*="doubleclick"],
-                    div[data-area], .wrapper[data-area], div[class*="popup"], div[class*="popunder"] { display: none !important; }
+                    iframe[src*="furudloof"], iframe[src*="ad"], iframe[src*="pop"], iframe[src*="doubleclick"], iframe[src*="oxserver"],
+                    div[data-area], .wrapper[data-area], div[class*="popup"], div[class*="popunder"],
+                    #modal.modal-vast, .modal-vast, .tutorial-overlay { display: none !important; }
                 </style>
                 <script>
                     (function() {
@@ -102,12 +114,17 @@ class AnimeWebViewClient : WebViewClient() {
                             return document.querySelector('video') || document.querySelector('audio');
                         }
                         function getPlayBtn() {
-                            return document.querySelector('.plyr__control--overlaid') ||
+                            return document.getElementById('azakuPlayButton') ||
+                                   document.querySelector('.azaku-player-button') ||
+                                   document.querySelector('.play-button-overlay') ||
+                                   document.querySelector('.plyr__control--overlaid') ||
                                    document.querySelector('button[data-plyr="play"]') ||
                                    document.querySelector('.play-btn') ||
                                    document.querySelector('.play-button') ||
                                    document.querySelector('.jw-display-icon-display') ||
-                                   document.querySelector('.jw-icon-playback');
+                                   document.querySelector('.jw-icon-playback') ||
+                                   document.querySelector('.art-state') ||
+                                   document.querySelector('.art-control-playAndPause');
                         }
                         function getJw() {
                             try {
@@ -117,11 +134,23 @@ class AnimeWebViewClient : WebViewClient() {
                             } catch(e) {}
                             return null;
                         }
+                        function getArt() {
+                            try {
+                                if (window.art && typeof window.art.play === 'function') {
+                                    return window.art;
+                                }
+                            } catch(e) {}
+                            return null;
+                        }
 
                         function doPlay() {
                             var jw = getJw();
                             if (jw && typeof jw.play === 'function') {
                                 try { jw.play(); } catch(e) {}
+                            }
+                            var art = getArt();
+                            if (art) {
+                                try { art.play(); } catch(e) {}
                             }
                             var v = getMedia();
                             var btn = getPlayBtn();
@@ -142,6 +171,10 @@ class AnimeWebViewClient : WebViewClient() {
                             var jw = getJw();
                             if (jw && typeof jw.pause === 'function') {
                                 try { jw.pause(); } catch(e) {}
+                            }
+                            var art = getArt();
+                            if (art) {
+                                try { art.pause(); } catch(e) {}
                             }
                             var v = getMedia();
                             if (v) {
@@ -176,6 +209,18 @@ class AnimeWebViewClient : WebViewClient() {
                                 } catch(e) {}
                             }
 
+                            var art = getArt();
+                            if (art) {
+                                try {
+                                    if (art.playing) {
+                                        art.pause();
+                                    } else {
+                                        art.play();
+                                    }
+                                    return;
+                                } catch(e) {}
+                            }
+
                             var v = getMedia();
                             if (v) {
                                 if (v.paused) {
@@ -196,6 +241,17 @@ class AnimeWebViewClient : WebViewClient() {
                                     var pos = jw.getPosition();
                                     var dur = typeof jw.getDuration === 'function' ? jw.getDuration() : 999999;
                                     jw.seek(Math.max(0, Math.min(dur, pos + seconds)));
+                                    return;
+                                } catch(e) {}
+                            }
+                            var art = getArt();
+                            if (art && (typeof art.seek === 'function' || typeof art.currentTime === 'number')) {
+                                try {
+                                    if (typeof art.seek === 'function') {
+                                        art.seek(Math.max(0, (art.currentTime || 0) + seconds));
+                                    } else {
+                                        art.currentTime = Math.max(0, art.currentTime + seconds);
+                                    }
                                     return;
                                 } catch(e) {}
                             }
@@ -245,6 +301,37 @@ class AnimeWebViewClient : WebViewClient() {
                         document.addEventListener('touchstart', notifyPlay, true);
 
                         function attemptAutoStart() {
+                            // Auto click AnimeYT intermediate button
+                            var azBtn = document.getElementById('azakuPlayButton') || document.querySelector('.azaku-player-button');
+                            if (azBtn) {
+                                try {
+                                    console.log('Auto clicking AnimeYT azakuPlayButton');
+                                    azBtn.click();
+                                } catch(e) {}
+                            }
+
+                            // Auto-show player interface on embed69 / SoloLatino
+                            if (typeof showPlayerInterface === 'function') {
+                                try {
+                                    var fakeP = document.getElementById('fakePlayer');
+                                    if (fakeP && fakeP.style.display !== 'none') {
+                                        showPlayerInterface();
+                                    }
+                                } catch(e) {}
+                            }
+                            var playOverlay = document.querySelector('.play-button-overlay');
+                            if (playOverlay) {
+                                try { playOverlay.click(); } catch(e) {}
+                            }
+                            var vastModal = document.getElementById('modal');
+                            if (vastModal && (vastModal.classList.contains('modal-vast') || vastModal.className.indexOf('vast') !== -1)) {
+                                try { vastModal.remove(); } catch(e) {}
+                            }
+
+                            var art = getArt();
+                            if (art) {
+                                try { art.play(); } catch(e) {}
+                            }
                             var jw = getJw();
                             if (jw) {
                                 try {
@@ -262,6 +349,10 @@ class AnimeWebViewClient : WebViewClient() {
                             var v = getMedia();
                             if (v) {
                                 try { v.play().catch(function(){}); } catch(e) {}
+                            }
+                            var playBtn = getPlayBtn();
+                            if (playBtn && (!v || v.paused)) {
+                                try { playBtn.click(); } catch(e) {}
                             }
                         }
 
@@ -321,13 +412,17 @@ class AnimeWebViewClient : WebViewClient() {
         }
 
         // STRICT MAIN-FRAME LOCK:
-        // The main viewport MUST remain on recognized anime providers (9anime, gogoanime, etc.).
+        // The main viewport MUST remain on recognized anime providers (9anime, gogoanime, sololatino, animeflix, animeyt, etc.).
         // Any main-frame navigation to unknown external domains is an ad redirect or popup and is blocked.
         val allowedMainHosts = setOf(
             "9anime.or.at",
             "gogoanime.by",
             "anitaku.to",
-            "gogoanime3.co"
+            "gogoanime3.co",
+            "sololatino.net",
+            "animeflix.team",
+            "9animes.me.uk",
+            "animeyt.cc"
         )
         val isAllowedMain = allowedMainHosts.any { host == it || host.endsWith(".$it") }
 
@@ -362,7 +457,11 @@ class AnimeWebViewClient : WebViewClient() {
             "9anime.or.at",
             "gogoanime.by",
             "anitaku.to",
-            "gogoanime3.co"
+            "gogoanime3.co",
+            "sololatino.net",
+            "animeflix.team",
+            "9animes.me.uk",
+            "animeyt.cc"
         )
         if (allowedMainHosts.any { host == it || host.endsWith(".$it") }) {
             return false

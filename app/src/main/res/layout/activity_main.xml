@@ -198,6 +198,54 @@
                     android:textSize="14sp"
                     android:textStyle="bold" />
 
+                <!-- Source 3: SoloLatino -->
+                <TextView
+                    android:id="@+id/btnSourceSoloLatino"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_sidebar_item"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="12dp"
+                    android:text="○  SoloLatino (Español)"
+                    android:textColor="#F0F0FF"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <!-- Source 4: AnimeFlix -->
+                <TextView
+                    android:id="@+id/btnSourceAnimeFlix"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_sidebar_item"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="12dp"
+                    android:text="○  AnimeFlix"
+                    android:textColor="#F0F0FF"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <!-- Source 5: AnimeYT -->
+                <TextView
+                    android:id="@+id/btnSourceAnimeYT"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_sidebar_item"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="12dp"
+                    android:text="○  AnimeYT (Español)"
+                    android:textColor="#F0F0FF"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
                 <!-- Divider -->
                 <View
                     android:layout_width="match_parent"
