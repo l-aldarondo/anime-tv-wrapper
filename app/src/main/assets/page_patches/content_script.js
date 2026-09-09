@@ -272,15 +272,14 @@
                 }
             }
 
-            // Auto-trigger SoloLatino/embed69 play overlay if present
-            var playOverlay = document.querySelector('.play-button-overlay');
-            var fakePlayer = document.getElementById('fakePlayer');
-            if (playOverlay && fakePlayer && fakePlayer.style.display !== 'none') {
-                try { playOverlay.click(); } catch (e) {}
-            }
-            if (typeof showPlayerInterface === 'function' && fakePlayer && fakePlayer.style.display !== 'none') {
-                try { showPlayerInterface(); } catch (e) {}
-            }
+            // NOTE: this used to auto-click .play-button-overlay / force-call
+            // showPlayerInterface() here. purgeOverlays() re-runs on every DOM mutation plus a
+            // 4s safety poll, so that synthetic click could fire repeatedly while the real
+            // player library (jwplayer/plyr/etc.) was still mid-initialization - racing its own
+            // setup and leaving a player with no working play button. Confirmed via isolation
+            // testing (disabling this whole content script fixed playback where it was otherwise
+            // broken) that this - not uBlock, not GeckoView, not the site itself - was the actual
+            // cause. Removed; the user taps the real play button like on desktop.
             var vastModal = document.getElementById('modal');
             if (vastModal && (vastModal.classList.contains('modal-vast') || vastModal.className.indexOf('vast') !== -1)) {
                 try { vastModal.remove(); } catch (e) {}

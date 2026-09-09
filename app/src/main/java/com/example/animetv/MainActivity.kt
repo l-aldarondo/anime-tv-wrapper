@@ -66,6 +66,12 @@ class MainActivity : AppCompatActivity() {
         // "Prueba con Servidor 1" symptom on SoloLatino's Premium tab persisted identically with
         // it off) - see commit history for the fuller isolation-test writeup.
         private const val DEBUG_DISABLE_PAGE_PATCHES = false
+        // Isolation test: with both extensions above ruled out (identical failure with neither
+        // active), the next candidate is GeckoView's default UA - it reports as a mobile Android
+        // Gecko browser (isTv's desktop-Chrome override doesn't apply on a phone), which some
+        // embed providers may serve a different/less-tested code path for versus the desktop
+        // Firefox UA the user's working comparison browsers all sent.
+        private const val DEBUG_FORCE_DESKTOP_UA = false
 
         private const val UBLOCK_EXTENSION_ID = "uBlock0@raymondhill.net"
         private const val UBLOCK_ASSET_PATH = "resource://android/assets/ublock_origin/"
@@ -284,31 +290,49 @@ class MainActivity : AppCompatActivity() {
         runtime.settings.contentBlocking.cookieBehavior = ContentBlocking.CookieBehavior.ACCEPT_ALL
 
         // Don't open the session/load the start URL until both extensions below have settled
-        // (installed or failed) - otherwise the very first page load could race ahead of
-        // uBlock Origin and land completely unprotected.
-        var pendingInstalls = (if (DEBUG_DISABLE_UBLOCK) 0 else 1) + (if (DEBUG_DISABLE_PAGE_PATCHES) 0 else 1)
+        // (installed/uninstalled or failed) - otherwise the very first page load could race ahead
+        // of uBlock Origin and land completely unprotected.
+        var pendingInstalls = 2
         val onInstallSettled = {
             pendingInstalls--
             if (pendingInstalls == 0) openGeckoSession()
         }
-        if (pendingInstalls == 0) openGeckoSession()
 
-        if (!DEBUG_DISABLE_UBLOCK) {
-            runtime.webExtensionController
-                .ensureBuiltIn(UBLOCK_ASSET_PATH, UBLOCK_EXTENSION_ID)
-                .accept({ onInstallSettled() }, { onInstallSettled() })
+        // ensureBuiltIn() installs into the profile's *persistent* extension storage - once
+        // installed, it stays installed (and active) across app restarts, since adb install -r
+        // preserves app data. Simply not calling ensureBuiltIn() on a later run when a DEBUG_*
+        // flag flips to true does NOT disable an extension installed by an earlier run - this was
+        // discovered when live network traces kept showing "Blocked By uBlock Origin" with
+        // DEBUG_DISABLE_UBLOCK = true. An isolation test needs an ACTUAL uninstall.
+        fun settleExtension(
+            disabled: Boolean,
+            assetPath: String,
+            extensionId: String,
+            onReady: ((WebExtension) -> Unit)? = null
+        ) {
+            if (disabled) {
+                runtime.webExtensionController.list().accept({ extensions ->
+                    val existing = extensions?.find { it.id == extensionId }
+                    if (existing != null) {
+                        runtime.webExtensionController.uninstall(existing)
+                            .accept({ onInstallSettled() }, { onInstallSettled() })
+                    } else {
+                        onInstallSettled()
+                    }
+                }, { onInstallSettled() })
+            } else {
+                runtime.webExtensionController.ensureBuiltIn(assetPath, extensionId)
+                    .accept(
+                        { extension -> extension?.let(onReady ?: {}); onInstallSettled() },
+                        { onInstallSettled() }
+                    )
+            }
         }
 
-        if (DEBUG_DISABLE_PAGE_PATCHES) return
-        runtime.webExtensionController
-            .ensureBuiltIn(PATCHES_ASSET_PATH, PATCHES_EXTENSION_ID)
-            .accept(
-                { extension ->
-                    extension?.setMessageDelegate(bridgeMessageDelegate, BRIDGE_NATIVE_APP_ID)
-                    onInstallSettled()
-                },
-                { onInstallSettled() }
-            )
+        settleExtension(DEBUG_DISABLE_UBLOCK, UBLOCK_ASSET_PATH, UBLOCK_EXTENSION_ID)
+        settleExtension(DEBUG_DISABLE_PAGE_PATCHES, PATCHES_ASSET_PATH, PATCHES_EXTENSION_ID) { extension ->
+            extension.setMessageDelegate(bridgeMessageDelegate, BRIDGE_NATIVE_APP_ID)
+        }
     }
 
     private fun openGeckoSession() {
@@ -319,6 +343,10 @@ class MainActivity : AppCompatActivity() {
             // Desktop/TV Chrome UA for a proper 16:9 widescreen layout instead of a mobile one.
             settingsBuilder.userAgentOverride(
                 "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 TV/GoogleTV"
+            )
+        } else if (DEBUG_FORCE_DESKTOP_UA) {
+            settingsBuilder.userAgentOverride(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0"
             )
         }
 
