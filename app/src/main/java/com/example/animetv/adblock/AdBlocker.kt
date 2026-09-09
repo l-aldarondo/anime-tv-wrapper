@@ -1,11 +1,14 @@
 package com.example.animetv.adblock
 
+import android.content.Context
 import android.net.Uri
 import android.util.Log
+import android.webkit.WebResourceRequest
 import java.util.concurrent.atomic.AtomicInteger
 
 object AdBlocker {
     private const val TAG = "AdBlocker"
+    private const val RULES_ASSET_PATH = "adblock/blocklist.txt"
 
     // Atomic counter for blocked requests to display in TV HUD
     val blockedCount = AtomicInteger(0)
@@ -13,7 +16,9 @@ object AdBlocker {
     // Listener for UI updates
     var onBlockListener: ((Int) -> Unit)? = null
 
-    // Recognized base domains for 9anime, GogoAnime, SoloLatino, AnimeFlix, AnimeYT, JKAnime, and trusted streaming / resource CDNs
+    // Recognized base domains for 9anime, GogoAnime, SoloLatino, AnimeFlix, AnimeYT, JKAnime, and trusted streaming / resource CDNs.
+    // NOTE: pure telemetry/tracking domains (Google Tag Manager, Cloudflare Insights) are intentionally
+    // NOT trusted here - the page renders fine without them, so they are blocked via blocklist.txt instead.
     val TRUSTED_DOMAINS = setOf(
         "9anime.or.at",
         "1anime.site",
@@ -72,14 +77,10 @@ object AdBlocker {
         "disquscdn.com",
         "code.jquery.com",
         "plyr.io",
-        "cdn.plyr.io",
-        "cloudflareinsights.com",
-        "static.cloudflareinsights.com",
-        "googletagmanager.com",
-        "www.googletagmanager.com"
+        "cdn.plyr.io"
     )
 
-    // Allowed video servers and embed streaming domains
+    // Allowed video servers and embed streaming domains (matched as exact host or subdomain).
     val ALLOWED_VIDEO_HOSTS = listOf(
         "1anime.site",
         "my.1anime.site",
@@ -106,7 +107,6 @@ object AdBlocker {
         "megaplay.su",
         "megaplay.buzz",
         "megaplay-1.buzz",
-        "megaplay",
         "googlevideo.com",
         "gogoanime.by",
         "jwplayer.com",
@@ -120,12 +120,6 @@ object AdBlocker {
         "mytsumi.com",
         "jkanime.net",
         "jkdesa.com",
-        "jkplayer",
-        "jkplayers",
-        "statlytic",
-        "streamwish",
-        "wishembed",
-        "luluvdo",
         "ok.ru",
         "cdn-vk.ru",
         "vk.com",
@@ -133,32 +127,52 @@ object AdBlocker {
         "mega.nz",
         "mega.co.nz",
         "mega.io",
+        "uqload.io",
+        "uqload.com",
+        "vidmoly.me",
+        "vidmoly.to",
+        "voe.sx",
+        "snapcdn.top",
+        "bysesukior.com",
+        "pelisserieshoy.com",
+        "desu.sh",
+        "f7hyg4q.org"
+    )
+
+    // Short brand-name fragments for video hosts that constantly rotate across TLDs/subdomains
+    // (e.g. mixdrop.co / mixdrop.to / mixdrop2.ag). Matched per-DNS-label via
+    // AdFilterEngine.hostContainsLabelToken, which is safer than a raw host.contains() check
+    // because it can never match across a "." boundary into an unrelated domain.
+    private val ALLOWED_VIDEO_HOST_FUZZY_TOKENS = listOf(
+        "jkplayer",
+        "jkplayers",
+        "statlytic",
+        "streamwish",
+        "wishembed",
+        "luluvdo",
+        "morencius",
         "mega",
         "uqload",
         "vidmoly",
-        "voe.sx",
-        "snapcdn.top",
         "snapcdn",
         "mixdrop",
         "yourupload",
-        "bysesukior.com",
         "sesukior",
         "byse",
-        "pelisserieshoy.com",
-        "pelisserieshoy",
         "vidhide",
         "vidhidepre",
         "vidhidevip",
         "filelions",
         "streamvid",
-        "desu.sh",
         "desu",
         "dplayer",
-        "f7hyg4q.org",
         "f7hyg4q"
     )
 
-    // Known ad networks, pop-up/pop-under services, and tracking domains
+    // Compiled-in safety-net of known ad networks, pop-up/pop-under services, and tracking domains.
+    // This always applies even if the bundled blocklist.txt fails to load; the asset file
+    // (assets/adblock/blocklist.txt) is the preferred place to add/remove rules going forward
+    // since it does not require recompiling the app.
     private val BLOCKED_DOMAINS = setOf(
         "ideecoral.com",
         "relateova.com",
@@ -195,7 +209,6 @@ object AdBlocker {
         "deloton.com",
         "a-ads.com",
         "monetag.com",
-        "yandex.ru",
         "aniview.com",
         "serving-sys.com",
         "rubiconproject.com",
@@ -240,7 +253,9 @@ object AdBlocker {
         "scorecardresearch.com",
         "quantserve.com",
         "oxserver",
-        "player-oxserver.js"
+        "player-oxserver.js",
+        "googletagmanager.com",
+        "cloudflareinsights.com"
     )
 
     // Patterns for matching ad/tracking paths and query parameters
@@ -250,13 +265,56 @@ object AdBlocker {
         Regex(".*[?&](zoneid|bannerid|campaignid|pop_id)=.*", RegexOption.IGNORE_CASE)
     )
 
+    // Rules parsed from assets/adblock/blocklist.txt at startup (see loadRules). Empty until loaded,
+    // in which case only the compiled-in lists above apply.
+    @Volatile private var runtimeRules: AdFilterEngine.ParsedRules = AdFilterEngine.ParsedRules.EMPTY
+    @Volatile private var rulesLoaded = false
+
     // Global toggle switch
     var isEnabled: Boolean = true
 
     /**
+     * Parses assets/adblock/blocklist.txt and merges it into the active rule set. Safe to call
+     * multiple times (e.g. to hot-reload after editing the bundled file during development);
+     * failures are logged and simply leave the compiled-in safety-net lists in effect.
+     */
+    fun loadRules(context: Context) {
+        try {
+            val text = context.assets.open(RULES_ASSET_PATH).bufferedReader(Charsets.UTF_8).use { it.readText() }
+            runtimeRules = AdFilterEngine.parse(text)
+            rulesLoaded = true
+            Log.d(
+                TAG,
+                "Loaded filter list: ${runtimeRules.blockedDomains.size} domains, " +
+                    "${runtimeRules.allowedDomains.size} exceptions, " +
+                    "${runtimeRules.blockedSubstrings.size} patterns, " +
+                    "${runtimeRules.cosmeticSelectors.size} cosmetic selectors"
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not load $RULES_ASSET_PATH, falling back to compiled-in lists only", e)
+        }
+    }
+
+    fun isTrustedDomain(host: String): Boolean = AdFilterEngine.hostMatchesAny(host, TRUSTED_DOMAINS)
+
+    fun isAllowedVideoHost(host: String): Boolean {
+        return AdFilterEngine.hostMatchesAny(host, ALLOWED_VIDEO_HOSTS) ||
+            AdFilterEngine.hostContainsAnyLabelToken(host, ALLOWED_VIDEO_HOST_FUZZY_TOKENS)
+    }
+
+    /**
      * Determine whether the given URL is an advertisement, tracker, or pop-up redirect.
      */
-    fun isAd(url: String?): Boolean {
+    fun isAd(url: String?): Boolean = isAd(url, isForMainFrame = false)
+
+    /** Overload that takes the intercepted request so main-frame document loads are never
+     * subjected to the "unknown third-party script" heuristic. */
+    fun isAd(request: WebResourceRequest?): Boolean {
+        val url = request?.url?.toString() ?: return false
+        return isAd(url, isForMainFrame = request.isForMainFrame)
+    }
+
+    private fun isAd(url: String?, isForMainFrame: Boolean): Boolean {
         if (!isEnabled) return false
         if (url.isNullOrBlank()) return false
 
@@ -284,20 +342,28 @@ object AdBlocker {
             }
         } ?: return false
 
-        // Check if host matches any explicitly blocked domain or subdomain
-        for (blocked in BLOCKED_DOMAINS) {
-            if (host == blocked || host.endsWith(".$blocked")) {
-                recordBlock(url, "Blocked domain match: $host -> $blocked")
-                return true
-            }
+        // CRITICAL: trusted site domains, recognized video streaming hosts, and explicit filter-list
+        // exceptions (@@||domain^) are never blocked, regardless of anything below.
+        if (isTrustedDomain(host) || isAllowedVideoHost(host) || AdFilterEngine.hostMatchesAny(host, runtimeRules.allowedDomains)) {
+            return false
         }
 
-        val isTrusted = TRUSTED_DOMAINS.any { host == it || host.endsWith(".$it") }
-        val isVideoHost = ALLOWED_VIDEO_HOSTS.any { host == it || host.endsWith(".$it") || host.contains(it) }
+        // Explicit blocked domain (compiled-in safety net + runtime filter list)
+        if (AdFilterEngine.hostMatchesAny(host, BLOCKED_DOMAINS)) {
+            recordBlock(url, "Blocked domain match: $host")
+            return true
+        }
+        if (AdFilterEngine.hostMatchesAny(host, runtimeRules.blockedDomains)) {
+            recordBlock(url, "Blocked domain match (filter list): $host")
+            return true
+        }
 
-        // CRITICAL: Never block trusted domains or recognized video streaming hosts
-        if (isTrusted || isVideoHost) {
-            return false
+        // Literal substring rules from the filter list (paths, query params, etc.)
+        for (pattern in runtimeRules.blockedSubstrings) {
+            if (lowerUrl.contains(pattern)) {
+                recordBlock(url, "Matched filter list pattern: $pattern")
+                return true
+            }
         }
 
         // Check ad regex patterns
@@ -316,22 +382,24 @@ object AdBlocker {
 
         // Allow video streaming media segments and files (HLS m3u8, ts chunks, mp4, disguised seg-.js, video player bundles, etc.)
         val isMedia = lowerUrl.contains(".m3u8") ||
-                lowerUrl.contains(".ts") ||
-                lowerUrl.contains(".mp4") ||
-                lowerUrl.contains(".m4s") ||
-                lowerUrl.contains("/stream/") ||
-                lowerUrl.contains("/play/") ||
-                lowerUrl.contains("seg-") ||
-                lowerUrl.contains("snapcdn") ||
-                lowerUrl.contains("/assets/") ||
-                lowerUrl.contains("/player/") ||
-                lowerUrl.contains("/embed/") ||
-                lowerUrl.contains("/video/")
+            lowerUrl.contains(".ts") ||
+            lowerUrl.contains(".mp4") ||
+            lowerUrl.contains(".m4s") ||
+            lowerUrl.contains("/stream/") ||
+            lowerUrl.contains("/play/") ||
+            lowerUrl.contains("seg-") ||
+            lowerUrl.contains("snapcdn") ||
+            lowerUrl.contains("/assets/") ||
+            lowerUrl.contains("/player/") ||
+            lowerUrl.contains("/embed/") ||
+            lowerUrl.contains("/video/")
 
-        if (!isMedia) {
-            // If it's a JavaScript script or iframe from an unknown third party domain,
-            // it is an ad network script (e.g. Monetag, Adsterra rotator). Block it!
-            if (lowerUrl.contains(".js") || lowerUrl.contains("/script") || lowerUrl.contains("/tag") || lowerUrl.endsWith("/")) {
+        // Never apply the "unknown third-party script" heuristic to a main-frame document load -
+        // it exists to catch ad-network <script>/<iframe> sub-resources, not page navigations.
+        if (!isMedia && !isForMainFrame) {
+            // If it's a JavaScript script from an unknown third party domain, it is very likely an
+            // ad network script (e.g. Monetag, Adsterra rotator). Block it.
+            if (lowerUrl.contains(".js") || lowerUrl.contains("/script") || lowerUrl.contains("/tag")) {
                 recordBlock(url, "Blocked unknown third-party script/domain: $host")
                 return true
             }
@@ -355,6 +423,13 @@ object AdBlocker {
      * Also defines full-screen player expansion rules.
      */
     fun getAntiAdCss(): String {
+        val cosmeticFromRules = runtimeRules.cosmeticSelectors
+        val cosmeticBlock = if (cosmeticFromRules.isNotEmpty()) {
+            cosmeticFromRules.joinToString(", ") + " { display: none !important; visibility: hidden !important; }"
+        } else {
+            ""
+        }
+
         return """
             /* Hide all scrollbars and scroll indicators */
             ::-webkit-scrollbar {
@@ -386,7 +461,10 @@ object AdBlocker {
             #overlay, .modal-backdrop, .sweet-alert,
             a[href*="bet"], a[href*="affiliate"], a[href*="gamble"],
             .ts-ad-banner, .widget_banner, [data-ad-slot],
-            .wb__-cover, .tutorial-overlay, div[class*="tutorial"] {
+            .wb__-cover, .tutorial-overlay, div[class*="tutorial"],
+            [class*="adblock" i], [id*="adblock" i], [class*="ad-block" i], [class*="antiadblock" i],
+            [class*="disable-ad" i], [class*="social-bar" i], [class*="sociallocker" i],
+            [class*="ads-modal" i], [class*="ad-modal" i], [class*="ad-warning" i] {
                 display: none !important;
                 visibility: hidden !important;
                 width: 0 !important;
@@ -500,6 +578,8 @@ object AdBlocker {
                 margin: 0 !important;
                 padding: 0 !important;
             }
+
+            $cosmeticBlock
         """.trimIndent().replace("\n", " ")
     }
 
@@ -507,20 +587,49 @@ object AdBlocker {
      * Injected JavaScript code to:
      * 1. Suppress window.open completely
      * 2. Intercept click-jacking on fake overlays and external ad links
-     * 3. Kill anti-adblock modals & fake voice-message overlays
+     * 3. Kill anti-adblock modals & fake voice-message overlays via a MutationObserver
+     *    (reacts to DOM insertions immediately instead of polling on a fixed timer)
      * 4. Expose window.expandPlayerFullscreen() and auto-expand player on play
      */
     fun getAntiAdJs(): String {
         return """
             (function() {
                 try {
-                    // Neutralize SoloLatino ad payload
+                    // Neutralize SoloLatino ad payload. The actual data lives in a
+                    // <script id="__sl_ads" type="application/json">{"h":"<ad script tags>","b":""}</script>
+                    // element in the DOM - overriding the *global* window.__sl_ads (below) does
+                    // nothing on its own, since the site's own code reads the element by id and
+                    // JSON.parses its text content directly, never touching window.__sl_ads. Clear
+                    // the actual element's content too, and keep re-clearing it since some pages
+                    // re-render this element (e.g. on a server switch) with a fresh ad payload.
+                    function neutralizeSlAdsElement() {
+                        try {
+                            var slAdsEl = document.getElementById('__sl_ads');
+                            if (slAdsEl && slAdsEl.textContent !== '{"h":"","b":""}') {
+                                slAdsEl.textContent = '{"h":"","b":""}';
+                            }
+                        } catch(e) {}
+                    }
+                    neutralizeSlAdsElement();
                     try {
                         window.__sl_ads = { h: "" };
                         Object.defineProperty(window, '__sl_ads', {
                             get: function() { return { h: "" }; },
                             set: function() {}
                         });
+                    } catch(e) {}
+
+                    // Any <img> whose source we blocked at the network level (a tracking pixel or
+                    // ad creative from a blocked domain) still leaves behind the browser's "broken
+                    // image" placeholder icon, since blocking the request doesn't remove the <img>
+                    // element itself. img load errors don't bubble, but a capture-phase listener on
+                    // the document still sees them - hide any image that fails to load, globally.
+                    try {
+                        document.addEventListener('error', function(e) {
+                            if (e.target && e.target.tagName === 'IMG') {
+                                try { e.target.style.setProperty('display', 'none', 'important'); } catch(err) {}
+                            }
+                        }, true);
                     } catch(e) {}
 
                     // 1. Completely neutralize window.open
@@ -543,8 +652,8 @@ object AdBlocker {
                     function isInternalLink(u) {
                         if (!u || u === '#' || u.indexOf('/') === 0 || u.indexOf('#') === 0 || u.indexOf('javascript:') === 0) return true;
                         var curHost = window.location.hostname;
-                        return (curHost && u.indexOf(curHost) !== -1) || 
-                               u.indexOf('9anime.or.at') !== -1 || 
+                        return (curHost && u.indexOf(curHost) !== -1) ||
+                               u.indexOf('9anime.or.at') !== -1 ||
                                u.indexOf('gogoanime.by') !== -1 ||
                                u.indexOf('sololatino.net') !== -1 ||
                                u.indexOf('animeflix.team') !== -1 ||
@@ -593,6 +702,8 @@ object AdBlocker {
 
                     // 4. Purge overlay divs and fake player overlays
                     function purgeOverlays() {
+                        neutralizeSlAdsElement();
+
                         // Remove rogue elements attached directly to <html> (fake robot modals, skip ad overlays, push prompts)
                         var directBad = document.querySelectorAll('html > iframe, html > div, .D1BnW, [class*="D1BnW"]');
                         for (var db = 0; db < directBad.length; db++) {
@@ -600,10 +711,119 @@ object AdBlocker {
                         }
 
                         // Remove fake overlay divs & popups (NEVER touch player, embed, or video iframes)
-                        var badElements = document.querySelectorAll('iframe[src*="furudloof"], iframe[src*="belchlipin"], iframe[src*="adsterra"], iframe[src*="monetag"], iframe[src*="popads"], iframe[src*="propeller"], iframe[src*="buildsstate"], iframe[src*="oxserver"], iframe[src*="excavatenearbywand"], div[data-area], .wrapper[data-area], div[class*="popup"], div[class*="popunder"], #modal.modal-vast, .modal-vast, .tutorial-overlay, div[class*="tutorial"]');
+                        var badElements = document.querySelectorAll('iframe[src*="furudloof"], iframe[src*="belchlipin"], iframe[src*="adsterra"], iframe[src*="monetag"], iframe[src*="popads"], iframe[src*="propeller"], iframe[src*="buildsstate"], iframe[src*="oxserver"], iframe[src*="excavatenearbywand"], div[data-area], .wrapper[data-area], div[class*="popup"], div[class*="popunder"], #modal.modal-vast, .modal-vast, .tutorial-overlay, div[class*="tutorial"], [class*="adblock" i], [id*="adblock" i], [class*="ad-block" i], [class*="antiadblock" i], [class*="disable-ad" i], [class*="social-bar" i], [class*="sociallocker" i], [class*="ads-modal" i], [class*="ad-modal" i], [class*="ad-warning" i]');
                         for (var i = 0; i < badElements.length; i++) {
                             try { badElements[i].remove(); } catch(e) {}
                         }
+
+                        // Remove adblock-detection warning walls AND clickbait ad banners by keyword
+                        // match, in case the site injects them without a recognizable class/id
+                        // ("Este video tiene ventanas emergentes y anuncios", "disable your ad
+                        // blocker", the classic green "Click this button" banner creative, etc.)
+                        try {
+                            var adWallTextRe = /anuncio|publicidad|adblock|ad.?block|ventana.?emergente|ventanas.?emergentes|pop.?up|bloqueador|desactiva.*(ad|anuncio)|click this button|click here to continue|you.?ve won|you have won|claim your (prize|reward)|verify you.?re human/i;
+                            var textCandidates = document.querySelectorAll('div, section, aside, p, a, button');
+                            for (var tc = 0; tc < textCandidates.length; tc++) {
+                                var tEl = textCandidates[tc];
+                                if (!tEl || tEl.tagName === 'VIDEO' || (tEl.querySelector && tEl.querySelector('video'))) continue;
+                                var tTxt = (tEl.innerText || tEl.textContent || '').trim();
+                                if (!tTxt || tTxt.length > 400 || !adWallTextRe.test(tTxt)) continue;
+                                var tCs = window.getComputedStyle(tEl);
+                                var tZ = parseInt(tCs.zIndex || '0', 10) || 0;
+                                if (tCs.position === 'fixed' || tCs.position === 'absolute' || tZ > 100 || tEl.offsetWidth > window.innerWidth * 0.5) {
+                                    try { tEl.remove(); } catch(e) {}
+                                }
+                            }
+                        } catch(e) {}
+
+                        // Generic ad interstitial/modal detector: native ad networks constantly
+                        // rotate the exact wording ("Click this button" one day, "Explore the World
+                        // Your Way... CONTINUE" the next), so chasing each new sentence is a losing
+                        // game. Instead detect the STRUCTURE nearly all of them share: a large
+                        // fixed/absolute overlay darkening most of the screen, containing a
+                        // prominently-styled call-to-action button with generic
+                        // continue/discover/claim-style wording. Legitimate full-screen modals on
+                        // these sites are exactly two, both excluded by id/class below - anything
+                        // else matching this shape mid-playback is not going to be real site UI.
+                        try {
+                            var adCtaRe = /^(continue|continuar|discover|explore|claim|unlock|get started|watch now|start now|download now|install now|join now|sign up|allow|next)$/i;
+                            var modalCandidates = document.querySelectorAll('div');
+                            for (var am = 0; am < modalCandidates.length; am++) {
+                                var mEl = modalCandidates[am];
+                                if (!mEl || (mEl.querySelector && mEl.querySelector('video'))) continue;
+                                if (mEl.id === 'trailer-modal' || mEl.id === 'auth-modal' || (mEl.className && mEl.className.toString().indexOf('auth-modal') !== -1)) continue;
+                                var mCs = window.getComputedStyle(mEl);
+                                if (mCs.position !== 'fixed' && mCs.position !== 'absolute') continue;
+                                var mRect = mEl.getBoundingClientRect();
+                                if (mRect.width < window.innerWidth * 0.7 || mRect.height < window.innerHeight * 0.5) continue;
+                                var ctaEls = mEl.querySelectorAll('button, a, [role="button"]');
+                                var hasAdCta = false;
+                                for (var ci = 0; ci < ctaEls.length; ci++) {
+                                    var ctaTxt = (ctaEls[ci].innerText || '').trim();
+                                    if (adCtaRe.test(ctaTxt)) { hasAdCta = true; break; }
+                                }
+                                if (hasAdCta) {
+                                    try { mEl.remove(); } catch(e) {}
+                                }
+                            }
+                        } catch(e) {}
+
+                        // Smaller ad cards: not every rotating ad creative is a full-screen modal -
+                        // some render as a card roughly the size of the player itself (e.g. a
+                        // gradient "Explore Trending Styles Now... More / Close" card), with button
+                        // labels too generic/common ("More", "Close") to safely text-match on their
+                        // own. What's still a reliable signal regardless of wording: a positioned
+                        // card with 2+ short generic buttons/links alongside a short marketing-style
+                        // blurb (a heading plus a sentence or two), that isn't wrapping the actual
+                        // player. Legitimate UI on these sites doesn't pair exactly that shape.
+                        try {
+                            var cardCandidates = document.querySelectorAll('div');
+                            for (var ac = 0; ac < cardCandidates.length; ac++) {
+                                var cEl = cardCandidates[ac];
+                                if (!cEl || (cEl.querySelector && (cEl.querySelector('video') || cEl.querySelector('iframe')))) continue;
+                                if (cEl.id === 'trailer-modal' || cEl.id === 'auth-modal' || (cEl.className && cEl.className.toString().indexOf('auth-modal') !== -1)) continue;
+                                var cCs = window.getComputedStyle(cEl);
+                                if (cCs.position !== 'fixed' && cCs.position !== 'absolute') continue;
+                                var cRect = cEl.getBoundingClientRect();
+                                if (cRect.width < 150 || cRect.height < 80) continue;
+                                var cActions = cEl.querySelectorAll(':scope > button, :scope > a, :scope > div > button, :scope > div > a');
+                                if (cActions.length < 2) continue;
+                                var cTxt = (cEl.innerText || '').trim();
+                                if (cTxt.length < 15 || cTxt.length > 250) continue;
+                                try { cEl.remove(); } catch(e) {}
+                            }
+                        } catch(e) {}
+
+                        // "Nuked z-index" bait overlays (fake "watch in HD now" style elements some
+                        // embed CDNs float on top of the real player, either as a src-less iframe or a
+                        // plain div - z-index right at the 32-bit signed int max in both observed
+                        // cases). No legitimate site UI needs a z-index anywhere near 2^31-1. However a
+                        // near-fullscreen instance of this pattern turned out, in testing, to sometimes
+                        // BE the player's own legitimate click-to-play/gesture layer - deleting it left
+                        // the player with no way to start playback at all. So only delete small,
+                        // clearly-decorative matches; for anything covering most of the screen, just
+                        // strip pointer-events so a real tap passes through to whatever is underneath
+                        // instead of destroying a node the player might depend on.
+                        try {
+                            var extremeZEls = document.querySelectorAll('body *');
+                            for (var ez = 0; ez < extremeZEls.length; ez++) {
+                                var eEl = extremeZEls[ez];
+                                if (!eEl || eEl.tagName === 'VIDEO' || (eEl.querySelector && eEl.querySelector('video'))) continue;
+                                var eCs = window.getComputedStyle(eEl);
+                                var eZ = parseInt(eCs.zIndex || '0', 10) || 0;
+                                if ((eCs.position === 'fixed' || eCs.position === 'absolute') && eZ > 2000000000) {
+                                    var eRect = eEl.getBoundingClientRect();
+                                    var eCoversMost = eRect.width >= window.innerWidth * 0.75 && eRect.height >= window.innerHeight * 0.75;
+                                    try {
+                                        if (eCoversMost) {
+                                            eEl.style.setProperty('pointer-events', 'none', 'important');
+                                        } else {
+                                            eEl.remove();
+                                        }
+                                    } catch(e) {}
+                                }
+                            }
+                        } catch(e) {}
 
                         // Auto-dismiss tutorial steps (e.g. embed69 "Cambiar Idioma")
                         var skipBtns = document.querySelectorAll('button, a, div');
@@ -626,20 +846,28 @@ object AdBlocker {
                             }
                         }
 
-                        // SoloLatino: Auto-select free server (Servidor 1) and dismiss auth modal
+                        // SoloLatino: dismiss the auth modal and visually de-emphasize paid-tier
+                        // server buttons (Premium/VIP) so they're less tempting to tap by mistake.
+                        //
+                        // This used to also auto-click the free server for the user, but every
+                        // attempt at that caused a *different* problem: clicking a hidden language
+                        // tab's button by accident, a reload loop when the "active" class never
+                        // showed up in time, and finally interrupting an already-playing free server
+                        // because the polling ran too eagerly. Each fix traded one failure for
+                        // another without ever confirming the original was solved, so this is
+                        // intentionally hands-off now - no reading "active" state, no clicking
+                        // anything. The user picks their own server from the visible buttons, same as
+                        // always; this only makes the paid ones look less like the right choice.
                         if (window.location.hostname.indexOf('sololatino.net') !== -1) {
                             var authM = document.getElementById('auth-modal') || document.querySelector('.auth-modal');
                             if (authM) { try { authM.remove(); } catch(e) {} }
 
-                            var sBtns = document.querySelectorAll('button[data-server-btn], .server-btn');
-                            for (var s = 0; s < sBtns.length; s++) {
-                                var bTxt = (sBtns[s].innerText || '').toLowerCase();
-                                if (bTxt.indexOf('servidor 1') !== -1 || bTxt.indexOf('server 1') !== -1) {
-                                    var hasPlayerIfr = document.querySelector('iframe#iframePlayer, iframe[src*="embed69"], iframe[src*="xupalace"]');
-                                    if (!hasPlayerIfr && !sBtns[s].classList.contains('active')) {
-                                        try { sBtns[s].click(); } catch(e) {}
-                                    }
-                                    break;
+                            var paidTierRe = /premium|\bvip\b/i;
+                            var allServerBtns = document.querySelectorAll('button[data-server-btn], .server-btn');
+                            for (var s = 0; s < allServerBtns.length; s++) {
+                                var bTxt = (allServerBtns[s].innerText || '').trim();
+                                if (paidTierRe.test(bTxt)) {
+                                    try { allServerBtns[s].style.setProperty('opacity', '0.45', 'important'); } catch(e) {}
                                 }
                             }
                         }
@@ -659,20 +887,20 @@ object AdBlocker {
 
                         // Remove '9anime is back' announcement banner
                         var banners = document.querySelectorAll('.ts-announcement, .ts-announcement-general, div[class*="ts-announcement"], div[class*="announcement"], .notice-bar, .domain-alert, #notice');
-                        for (var b = 0; b < banners.length; b++) {
-                            try { banners[b].remove(); } catch(e) {}
+                        for (var b2 = 0; b2 < banners.length; b2++) {
+                            try { banners[b2].remove(); } catch(e) {}
                         }
 
                         // Ensure iframe player has allowfullscreen
-                        var ifr = document.getElementById('iframe-embed') || 
-                                  document.querySelector('.player-embed iframe') || 
-                                  document.querySelector('iframe.player-iframe') || 
-                                  document.querySelector('iframe[src*="player"]') || 
-                                  document.querySelector('iframe[src*="embed"]') || 
-                                  document.querySelector('iframe[src*="megaplay"]') || 
-                                  document.getElementById('player-frame') || 
-                                  document.querySelector('iframe[src*="mytsumi"]') || 
-                                  document.querySelector('iframe[src*="embed69"]') || 
+                        var ifr = document.getElementById('iframe-embed') ||
+                                  document.querySelector('.player-embed iframe') ||
+                                  document.querySelector('iframe.player-iframe') ||
+                                  document.querySelector('iframe[src*="player"]') ||
+                                  document.querySelector('iframe[src*="embed"]') ||
+                                  document.querySelector('iframe[src*="megaplay"]') ||
+                                  document.getElementById('player-frame') ||
+                                  document.querySelector('iframe[src*="mytsumi"]') ||
+                                  document.querySelector('iframe[src*="embed69"]') ||
                                   document.querySelector('iframe[src*="xupalace"]') ||
                                   document.querySelector('iframe#iframePlayer') ||
                                   document.querySelector('iframe.player_conte') ||
@@ -699,38 +927,67 @@ object AdBlocker {
                         }
                     }
 
-                    setInterval(purgeOverlays, 1000);
                     purgeOverlays();
+
+                    // React to DOM insertions immediately instead of waiting on a fixed-interval poll,
+                    // which shortens the "ad flash" window from up to 1s down to effectively 0.
+                    try {
+                        var purgeScheduled = false;
+                        var scheduledPurge = function() {
+                            if (purgeScheduled) return;
+                            purgeScheduled = true;
+                            var run = function() {
+                                purgeScheduled = false;
+                                purgeOverlays();
+                            };
+                            if (window.requestAnimationFrame) requestAnimationFrame(run);
+                            else setTimeout(run, 16);
+                        };
+                        var observerTarget = document.documentElement || document.body;
+                        if (observerTarget && window.MutationObserver) {
+                            var mo = new MutationObserver(scheduledPurge);
+                            mo.observe(observerTarget, {
+                                childList: true,
+                                subtree: true,
+                                attributes: true,
+                                attributeFilter: ['style', 'class', 'src']
+                            });
+                        }
+                    } catch(e) {}
+
+                    // Safety-net slow poll in case something evades the MutationObserver
+                    // (much less frequent now that mutations are handled reactively above).
+                    setInterval(purgeOverlays, 4000);
 
                     // 5. Expose Fullscreen Player Expand/Collapse to Android and Web
                     window.expandPlayerFullscreen = function(enable) {
-                        var wrap = document.querySelector('.player-wrap') || 
-                                   document.querySelector('.wb_-playerarea') || 
-                                   document.getElementById('player-embed') || 
-                                   document.querySelector('.player-embed') || 
-                                   document.querySelector('#player') || 
-                                   document.querySelector('#player-container') || 
-                                   document.querySelector('.video-content') || 
-                                   document.querySelector('#main-player-wrap') || 
-                                   document.querySelector('#player-section') || 
-                                   document.querySelector('.mg-3mb3d') || 
-                                   document.querySelector('.mg3-player') || 
+                        var wrap = document.querySelector('.player-wrap') ||
+                                   document.querySelector('.wb_-playerarea') ||
+                                   document.getElementById('player-embed') ||
+                                   document.querySelector('.player-embed') ||
+                                   document.querySelector('#player') ||
+                                   document.querySelector('#player-container') ||
+                                   document.querySelector('.video-content') ||
+                                   document.querySelector('#main-player-wrap') ||
+                                   document.querySelector('#player-section') ||
+                                   document.querySelector('.mg-3mb3d') ||
+                                   document.querySelector('.mg3-player') ||
                                    document.querySelector('.azaku-player-container') ||
                                    document.querySelector('.player_conte');
-                        var ifr = document.getElementById('iframe-embed') || 
-                                  document.querySelector('.player-embed iframe') || 
-                                  document.querySelector('iframe.player-iframe') || 
-                                  document.querySelector('iframe[src*="player"]') || 
-                                  document.querySelector('iframe[src*="embed"]') || 
-                                  document.querySelector('iframe[src*="megaplay"]') || 
-                                  document.getElementById('player-frame') || 
-                                  document.querySelector('iframe[src*="mytsumi"]') || 
-                                  document.querySelector('iframe[src*="embed69"]') || 
+                        var ifr = document.getElementById('iframe-embed') ||
+                                  document.querySelector('.player-embed iframe') ||
+                                  document.querySelector('iframe.player-iframe') ||
+                                  document.querySelector('iframe[src*="player"]') ||
+                                  document.querySelector('iframe[src*="embed"]') ||
+                                  document.querySelector('iframe[src*="megaplay"]') ||
+                                  document.getElementById('player-frame') ||
+                                  document.querySelector('iframe[src*="mytsumi"]') ||
+                                  document.querySelector('iframe[src*="embed69"]') ||
                                   document.querySelector('iframe[src*="xupalace"]') ||
                                   document.querySelector('iframe#iframePlayer') ||
                                   document.querySelector('iframe.player_conte') ||
                                   document.querySelector('iframe[src*="jkplayer"]');
-                        
+
                         if (enable) {
                             if (wrap) {
                                 wrap.classList.add('animetv-fullscreen-wrap');
