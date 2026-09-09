@@ -40,7 +40,17 @@
                    u.indexOf('mytsumi.com') !== -1 ||
                    u.indexOf('bysesukior.com') !== -1 ||
                    u.indexOf('embed69.org') !== -1 ||
-                   u.indexOf('pelisserieshoy.com') !== -1;
+                   u.indexOf('pelisserieshoy.com') !== -1 ||
+                   u.indexOf('mediafire.com') !== -1 ||
+                   u.indexOf('morencius.com') !== -1 ||
+                   u.indexOf('audinifer.com') !== -1 ||
+                   u.indexOf('cloudwindow-route.com') !== -1 ||
+                   u.indexOf('minochinos.com') !== -1 ||
+                   u.indexOf('ghbrisk.com') !== -1 ||
+                   u.indexOf('bysedikamoum.com') !== -1 ||
+                   u.indexOf('voe.sx') !== -1 ||
+                   u.indexOf('gofile.io') !== -1 ||
+                   u.indexOf('sololatino.co') !== -1;
         }
 
         // 2. Neutralize anchor programmatic click-jacking
@@ -121,6 +131,14 @@
         // the top document, one injected per sanitized iframe); now there's exactly one.
         function purgeOverlays() {
             neutralizeSlAdsElement();
+            // Remove fake robot verification / notification / loading / APK download prompts
+            var botCards = document.querySelectorAll('div, section, dialog');
+            for (var bc = 0; bc < botCards.length; bc++) {
+                var bcTxt = (botCards[bc].innerText || '').toLowerCase();
+                if ((bcTxt.indexOf('not a robot') !== -1 || bcTxt.indexOf('kindly verify') !== -1 || bcTxt.indexOf('robot') !== -1 || bcTxt.indexOf('need to "allow"') !== -1 || bcTxt.indexOf('need to allow') !== -1 || (bcTxt.indexOf('loading...') !== -1 && bcTxt.indexOf('allow') !== -1) || bcTxt.indexOf("we're ready") !== -1 || bcTxt.indexOf('file_download.apk') !== -1 || (bcTxt.indexOf('.apk') !== -1 && bcTxt.indexOf('download') !== -1)) && (bcTxt.indexOf('attention') !== -1 || bcTxt.indexOf('cancel') !== -1 || bcTxt.indexOf('allow') !== -1 || bcTxt.indexOf('continue') !== -1 || bcTxt.indexOf('ok') !== -1 || bcTxt.indexOf('download') !== -1)) {
+                    try { botCards[bc].remove(); } catch (e) {}
+                }
+            }
 
             // Rogue elements attached directly to <html> (fake robot modals, skip-ad overlays)
             var directBad = document.querySelectorAll('html > iframe, html > div, .D1BnW, [class*="D1BnW"]');
@@ -523,7 +541,15 @@
             } catch (ignore) {}
         }, false);
 
+        function isSoloLatinoPage() {
+            var h = (window.location.hostname || '').toLowerCase();
+            return h.indexOf('sololatino') !== -1 || h.indexOf('pelisserieshoy') !== -1 || h.indexOf('embed69') !== -1;
+        }
+
         function notifyPlay() {
+            // Disabled auto-fullscreen for SoloAnime / SoloStream per user request
+            if (isSoloLatinoPage()) return;
+
             try { browser.runtime.sendMessage({ type: 'anime-video-play' }); } catch (e) {}
             if (isTop && window.expandPlayerFullscreen) {
                 window.expandPlayerFullscreen(true);

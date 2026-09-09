@@ -121,3 +121,19 @@ iframe.player_conte, iframe[src*="jkplayer"] {
     margin: 0 !important;
     padding: 0 !important;
 }
+
+.swal2-container, .swal-overlay, [class*="sweet-alert"], div[class*="swal2"], div[id*="swal2"],
+.skip-ad, .skip-btn, [class*="skip-ad"], [class*="skipad"],
+div[id*="clickoverlay"], div[class*="clickoverlay"], div[id*="ad_overlay"] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
+
+#warning, .warning-popup, .v-modal, .modal-backdrop, [class*="warning-popup"],
+div[id*="ad_layer"], div[class*="ad_layer"], div[id*="fake_player"] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}

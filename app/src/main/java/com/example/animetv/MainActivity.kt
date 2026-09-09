@@ -23,6 +23,7 @@ import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.ContentBlocking
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
+import org.mozilla.geckoview.GeckoRuntimeSettings
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
@@ -72,6 +73,15 @@ class MainActivity : AppCompatActivity() {
         private const val PATCHES_ASSET_PATH = "resource://android/assets/page_patches/"
         private const val BRIDGE_NATIVE_APP_ID = "anime_tv_bridge"
 
+        // GeckoRuntime.getDefault() can't take a GeckoRuntimeSettings (it always builds one with
+        // no options), and GeckoRuntime.create(context, settings) throws "Failed to initialize
+        // GeckoRuntime" if called a second time in the same process (there's only ever one real
+        // native Gecko runtime per process) - so this process-wide cache lets bootGeckoViewEngine()
+        // call create() exactly once (with remoteDebuggingEnabled, for `about:debugging` USB
+        // inspection of the live session) and safely reuse that same instance across any Activity
+        // recreation, the same way getDefault()'s own internal null-check does.
+        @Volatile private var cachedRuntime: GeckoRuntime? = null
+
         // Main-frame navigation lock: the viewport must stay on a recognized anime provider.
         // uBlock Origin + the page-patches content script handle ad/overlay suppression inside
         // iframes now, so this list only needs to police the TOP-LEVEL document.
@@ -81,10 +91,33 @@ class MainActivity : AppCompatActivity() {
             "anitaku.to",
             "gogoanime3.co",
             "sololatino.net",
+            "sololatino.co",
             "animeflix.team",
             "9animes.me.uk",
             "animeyt.cc",
-            "jkanime.net"
+            "jkanime.net",
+            "pelisserieshoy.com",
+            "mediafire.com",
+            "morencius.com",
+            "audinifer.com",
+            "cloudwindow-route.com",
+            "minochinos.com",
+            "ghbrisk.com",
+            "bysedikamoum.com",
+            "voe.sx",
+            "gofile.io",
+            "embed69.org",
+            "xupalace.org",
+            "mega.nz",
+            "mega.co.nz",
+            "mega.io",
+            "ok.ru",
+            "vk.com",
+            "snapcdn.top",
+            "f7hyg4q.org",
+            "desu.sh",
+            "mytsumi.com",
+            "bysesukior.com"
         )
     }
 
@@ -227,9 +260,14 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("SetTextI18n")
     private fun bootGeckoViewEngine() {
-        // getDefault(), not create() - create() throws if a runtime already exists in this
-        // process; getDefault() is the safe choice for an Activity that may be recreated.
-        runtime = GeckoRuntime.getDefault(this)
+        // See cachedRuntime's own comment: create() (not getDefault(), which can't accept custom
+        // settings) exactly once per process, cached for any later Activity recreation.
+        runtime = cachedRuntime ?: GeckoRuntime.create(
+            this,
+            GeckoRuntimeSettings.Builder()
+                .remoteDebuggingEnabled(true)
+                .build()
+        ).also { cachedRuntime = it }
 
         // GeckoView defaults to cookieBehavior ACCEPT_FIRST_PARTY_AND_ISOLATE_OTHERS ("Total
         // Cookie Protection" / dynamic First-Party Isolation) - it gives every third-party origin
@@ -326,6 +364,9 @@ class MainActivity : AppCompatActivity() {
             ): GeckoResult<AllowOrDeny> {
                 val uri = try { Uri.parse(request.uri) } catch (e: Exception) { null }
                 val scheme = uri?.scheme?.lowercase() ?: ""
+                if (scheme == "about" || scheme == "data" || scheme == "blob" || scheme == "resource" || scheme == "moz-extension") {
+                    return GeckoResult.fromValue(AllowOrDeny.ALLOW)
+                }
                 if (scheme != "http" && scheme != "https") {
                     return GeckoResult.fromValue(AllowOrDeny.DENY)
                 }
@@ -420,7 +461,9 @@ class MainActivity : AppCompatActivity() {
             } ?: return
             when (json.optString("type")) {
                 "anime-video-play" -> runOnUiThread {
-                    if (!isPlayerFullscreen) setPlayerFullscreen(true)
+                    if (!isPlayerFullscreen && currentSource != SOURCE_SOLOLATINO && currentSource != SOURCE_SOLOLATINO_HOME) {
+                        setPlayerFullscreen(true)
+                    }
                 }
                 "anime-doubletap" -> runOnUiThread {
                     togglePlayerFullscreen()
