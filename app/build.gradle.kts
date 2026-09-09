@@ -9,8 +9,8 @@ android {
         applicationId = "com.example.animetv"
         minSdk = 26
         targetSdk = 35
-        versionCode = 15
-        versionName = "2.0.0"
+        versionCode = 16
+        versionName = "2.0.1"
 
         // GeckoView ships no 32-bit x86 .so files for this build.
         ndk {
