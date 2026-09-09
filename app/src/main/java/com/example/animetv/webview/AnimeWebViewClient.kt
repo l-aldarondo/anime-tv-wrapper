@@ -150,6 +150,9 @@ class AnimeWebViewClient : WebViewClient() {
                     [class*="adblock" i], [id*="adblock" i], [class*="ad-block" i], [class*="antiadblock" i],
                     [class*="disable-ad" i], [class*="social-bar" i], [class*="sociallocker" i],
                     [class*="ads-modal" i], [class*="ad-modal" i], [class*="ad-warning" i] { display: none !important; }
+                    /* This iframe IS the player - suppress native double-tap-to-zoom so our own
+                       double-tap-to-fullscreen listener below is the only thing that reacts to it. */
+                    html, body { touch-action: manipulation; }
                 </style>
                 <script>
                     (function() {
@@ -475,6 +478,24 @@ class AnimeWebViewClient : WebViewClient() {
                         }
                         document.addEventListener('click', notifyPlay, true);
                         document.addEventListener('touchstart', notifyPlay, true);
+
+                        // Double-tap anywhere in this iframe (it IS the player, for these
+                        // providers) toggles fullscreen. evaluateJavascript() from the Android side
+                        // can't reach into this cross-origin iframe directly, so bubble it up to the
+                        // top document via postMessage instead of calling AndroidBridge from here.
+                        (function() {
+                            var lastTap = 0;
+                            document.addEventListener('touchend', function(e) {
+                                var now = Date.now();
+                                if (now - lastTap < 350) {
+                                    e.preventDefault();
+                                    lastTap = 0;
+                                    try { window.top.postMessage({event: 'doubletap'}, '*'); } catch(err) {}
+                                } else {
+                                    lastTap = now;
+                                }
+                            }, { passive: false, capture: true });
+                        })();
 
                         function attemptAutoStart() {
                             purgeAdWalls();

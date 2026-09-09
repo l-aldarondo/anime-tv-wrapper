@@ -63,7 +63,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnFullscreen: TextView
 
     // Hidden Sidebar UI elements
-    private lateinit var btnSidebarTrigger: View
     private lateinit var sidebarDrawer: LinearLayout
     private lateinit var btnSidebarFullscreen: TextView
     private lateinit var btnSidebarAdBlock: TextView
@@ -133,15 +132,10 @@ class MainActivity : AppCompatActivity() {
 
         if (isTv) {
             scheduleGuideDismiss()
-            // Persistent "which mode am I in" indicator: previously the only feedback was a 2s
-            // Toast on the moment the mode changed, with nothing to check back on afterward. The
-            // container also held a clickable-looking fullscreen/AdBlock chip pair that isn't
-            // reachable naturally with a D-pad, which is why it used to be hidden entirely - keep
-            // those two hidden, but the mode badge itself is plain informational text, not a
-            // control, so there's no reason to hide it too.
-            btnFullscreen.visibility = View.GONE
-            txtAdBlockBadge.visibility = View.GONE
-            osdTopBar.visibility = View.VISIBLE
+            // Tried making the mode badge persistently visible here, but on TV it sits top-right
+            // over the same corner the page's own search/notification icons use, covering them.
+            // Back to hidden; the mode toggle already shows a Toast on change, and reflects the
+            // current mode in the sidebar's own "Mode: Pointer/Scroll" entry.
         } else {
             // On phones with touch screens, hide the virtual D-Pad cursor and TV remote hints
             virtualCursorView.visibility = View.GONE
@@ -187,7 +181,6 @@ class MainActivity : AppCompatActivity() {
         btnFullscreen = findViewById(R.id.btnFullscreen)
 
         // Sidebar references
-        btnSidebarTrigger = findViewById(R.id.btnSidebarTrigger)
         sidebarDrawer = findViewById(R.id.sidebarDrawer)
         btnSidebarFullscreen = findViewById(R.id.btnSidebarFullscreen)
         btnSidebarAdBlock = findViewById(R.id.btnSidebarAdBlock)
@@ -202,13 +195,6 @@ class MainActivity : AppCompatActivity() {
         btnSidebarHome = findViewById(R.id.btnSidebarHome)
         btnSidebarReload = findViewById(R.id.btnSidebarReload)
         btnSidebarClose = findViewById(R.id.btnSidebarClose)
-
-        btnSidebarTrigger.setOnClickListener {
-            openSidebar()
-        }
-        if (isTv) {
-            btnSidebarTrigger.visibility = View.GONE
-        }
 
         btnFullscreen.setOnClickListener {
             togglePlayerFullscreen()
@@ -402,7 +388,6 @@ class MainActivity : AppCompatActivity() {
     private fun openSidebar() {
         if (isSidebarOpen || isPlayerFullscreen || webChromeClient.isFullscreen) return
         isSidebarOpen = true
-        btnSidebarTrigger.visibility = View.GONE
         val density = resources.displayMetrics.density
         val startX = -sidebarDrawer.width.toFloat().let { if (it <= 0f) -330f * density else -it }
         sidebarDrawer.translationX = startX
@@ -435,16 +420,15 @@ class MainActivity : AppCompatActivity() {
             .withEndAction {
                 if (!isSidebarOpen) {
                     sidebarDrawer.visibility = View.GONE
-                    if (!isTv && !isPlayerFullscreen && !webChromeClient.isFullscreen) {
-                        btnSidebarTrigger.visibility = View.VISIBLE
-                    }
                 }
             }
             .start()
 
-        // Hand focus (and the cursor, if applicable) back to the page.
+        // Hand focus (and the cursor, if applicable) back to the page. The cursor overlay only
+        // exists on TV - showing it here unconditionally used to leave a stray cursor icon stuck
+        // on phones/tablets after closing the sidebar, with no D-pad available to move or hide it.
         webView.requestFocus()
-        if (currentNavMode == MODE_POINTER) {
+        if (isTv && currentNavMode == MODE_POINTER) {
             virtualCursorView.isCursorVisible = true
         }
     }
@@ -562,18 +546,15 @@ class MainActivity : AppCompatActivity() {
         }
         if (isFullscreen) {
             closeSidebar()
-            btnSidebarTrigger.visibility = View.GONE
             virtualCursorView.visibility = View.GONE
             osdTopBar.visibility = View.GONE
             osdControlsGuide.visibility = View.GONE
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             enableImmersiveMode()
         } else {
-            if (!isTv) btnSidebarTrigger.visibility = View.VISIBLE
             virtualCursorView.visibility = if (currentNavMode == MODE_POINTER && isTv) View.VISIBLE else View.GONE
-            // Restore the persistent mode badge on TV (the fullscreen/AdBlock chips inside this same
-            // container stay hidden - see onCreate).
-            osdTopBar.visibility = if (isTv) View.VISIBLE else View.GONE
+            // osdTopBar (mode badge) stays hidden - it used to sit top-right, the same corner
+            // sites put their own search icon in, and covered it. See onCreate.
             btnFullscreen.text = "⛶ Fullscreen"
             btnFullscreen.setTextColor(android.graphics.Color.parseColor("#FFD600"))
             enableImmersiveMode()
@@ -592,7 +573,6 @@ class MainActivity : AppCompatActivity() {
         runOnUiThread {
             if (enabled) {
                 closeSidebar()
-                btnSidebarTrigger.visibility = View.GONE
             }
             webView.evaluateJavascript("if (window.expandPlayerFullscreen) window.expandPlayerFullscreen($enabled);", null)
             if (enabled) {
@@ -606,9 +586,6 @@ class MainActivity : AppCompatActivity() {
                     playVideo()
                 }, 300L)
             } else {
-                if (!isTv && !webChromeClient.isFullscreen) {
-                    btnSidebarTrigger.visibility = View.VISIBLE
-                }
                 btnFullscreen.text = "⛶ Fullscreen"
                 btnFullscreen.setTextColor(android.graphics.Color.parseColor("#FFD600"))
                 enableImmersiveMode()
@@ -638,16 +615,17 @@ class MainActivity : AppCompatActivity() {
     private fun toggleNavigationMode() {
         currentNavMode = if (currentNavMode == MODE_POINTER) MODE_SCROLL else MODE_POINTER
         virtualCursorView.isDirectScrollMode = (currentNavMode == MODE_SCROLL)
+        // The reticle stays visible in both modes now - Scroll Mode still needs it as a click
+        // target (LEFT/RIGHT glide it sideways, OK clicks), UP/DOWN just also scrolls the page.
+        virtualCursorView.isCursorVisible = true
         if (currentNavMode == MODE_POINTER) {
-            virtualCursorView.isCursorVisible = true
             txtNavModeBadge.text = "🖱️ Pointer Mode"
             txtNavModeBadge.setTextColor(android.graphics.Color.parseColor("#E0AAFF"))
             Toast.makeText(this, "Pointer Mode: D-Pad glides cursor, OK clicks", Toast.LENGTH_SHORT).show()
         } else {
-            virtualCursorView.isCursorVisible = false
             txtNavModeBadge.text = "📜 Scroll Mode"
             txtNavModeBadge.setTextColor(android.graphics.Color.parseColor("#80D8FF"))
-            Toast.makeText(this, "Scroll Mode: D-Pad glides page directly", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Scroll Mode: UP/DOWN scrolls, LEFT/RIGHT moves the click reticle, OK clicks", Toast.LENGTH_SHORT).show()
         }
         scheduleGuideDismiss()
     }
@@ -659,6 +637,13 @@ class MainActivity : AppCompatActivity() {
                 if (!isPlayerFullscreen && !webChromeClient.isFullscreen) {
                     setPlayerFullscreen(true)
                 }
+            }
+        }
+
+        @android.webkit.JavascriptInterface
+        fun onPlayerDoubleTap() {
+            runOnUiThread {
+                togglePlayerFullscreen()
             }
         }
     }
@@ -825,16 +810,15 @@ class MainActivity : AppCompatActivity() {
                 }
                 if (isDown) {
                     scheduleGuideDismiss()
-                    if (currentNavMode == MODE_POINTER) {
-                        virtualCursorView.visibility = View.VISIBLE
-                        virtualCursorView.isCursorVisible = true
-                    }
+                    virtualCursorView.visibility = View.VISIBLE
+                    virtualCursorView.isCursorVisible = true
                 }
                 virtualCursorView.onDpadKey(event.keyCode, isDown)
                 return true
             }
 
-            // D-Pad OK / Center Click
+            // D-Pad OK / Center Click - dispatches a click at the reticle position in both modes;
+            // in Scroll Mode that reticle is moved with LEFT/RIGHT (see VirtualCursorView).
             KeyEvent.KEYCODE_DPAD_CENTER,
             KeyEvent.KEYCODE_ENTER,
             KeyEvent.KEYCODE_NUMPAD_ENTER,
@@ -845,14 +829,11 @@ class MainActivity : AppCompatActivity() {
                     }
                     return true
                 }
-                if (currentNavMode == MODE_POINTER) {
-                    if (isUp) {
-                        scheduleGuideDismiss()
-                        virtualCursorView.dispatchClick(webView)
-                    }
-                    return true
+                if (isUp) {
+                    scheduleGuideDismiss()
+                    virtualCursorView.dispatchClick(webView)
                 }
-                // In Scroll Mode, pass enter through to web elements
+                return true
             }
 
             // Back button
@@ -922,15 +903,22 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    // Trigger sidebar open on quick rightward swipe starting near the left edge or trigger tab
+                    // Trigger sidebar open on a rightward swipe starting right at the screen's left edge -
+                    // this is the ONLY way to open it on touch; there is no persistent button.
                     if (!isSwipeConsumed && !isSidebarOpen && !isPlayerFullscreen && !webChromeClient.isFullscreen) {
                         val deltaX = ev.rawX - touchStartX
                         val deltaY = Math.abs(ev.rawY - touchStartY)
-                        if (touchStartX < 90f * density && deltaX > 35f * density && deltaY < 80f * density) {
+                        if (touchStartX < 24f * density && deltaX > 20f * density && deltaY < 80f * density) {
                             isSwipeConsumed = true
                             openSidebar()
                             return true
                         }
+                    }
+                    // Close as soon as the finger drags off the panel, rather than requiring a
+                    // separate tap outside afterwards.
+                    if (isSidebarOpen && ev.rawX > 310f * density) {
+                        closeSidebar()
+                        return true
                     }
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {

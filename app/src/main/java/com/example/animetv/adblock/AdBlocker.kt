@@ -1036,9 +1036,57 @@ object AdBlocker {
                                 if (window.AndroidBridge && window.AndroidBridge.onVideoPlayDetected) {
                                     window.AndroidBridge.onVideoPlayDetected();
                                 }
+                            } else if (data && data.event === 'doubletap') {
+                                // Bubbled up from a sanitized embed iframe's own double-tap detector -
+                                // evaluateJavascript() can't reach into a cross-origin iframe directly,
+                                // so that script posts up to us instead of calling AndroidBridge itself.
+                                if (window.AndroidBridge && window.AndroidBridge.onPlayerDoubleTap) {
+                                    window.AndroidBridge.onPlayerDoubleTap();
+                                }
                             }
                         } catch(ignore) {}
                     }, false);
+
+                    // Double-tap on the player toggles fullscreen. touch-action:manipulation plus
+                    // our own preventDefault() on the second tap keep this from also triggering
+                    // the WebView's native double-tap-to-zoom on the same gesture. Guarded so
+                    // re-injecting this script (happens on every page load event) doesn't stack a
+                    // second listener and fire the toggle twice per tap.
+                    if (!window.__ab_dblTapInstalled) {
+                        window.__ab_dblTapInstalled = true;
+                        var lastPlayerTap = 0;
+                        document.addEventListener('touchend', function(e) {
+                            var wrap = document.querySelector('.player-wrap') ||
+                                       document.querySelector('.wb_-playerarea') ||
+                                       document.getElementById('player-embed') ||
+                                       document.querySelector('.player-embed') ||
+                                       document.querySelector('#player') ||
+                                       document.querySelector('#player-container') ||
+                                       document.querySelector('.video-content') ||
+                                       document.querySelector('#main-player-wrap') ||
+                                       document.querySelector('#player-section') ||
+                                       document.querySelector('.mg-3mb3d') ||
+                                       document.querySelector('.mg3-player') ||
+                                       document.querySelector('.azaku-player-container') ||
+                                       document.querySelector('.player_conte');
+                            if (!wrap) return;
+                            try { wrap.style.setProperty('touch-action', 'manipulation'); } catch(ignore) {}
+                            var t = e.target;
+                            var insideWrap = false;
+                            while (t) { if (t === wrap) { insideWrap = true; break; } t = t.parentElement; }
+                            if (!insideWrap) return;
+                            var now = Date.now();
+                            if (now - lastPlayerTap < 350) {
+                                e.preventDefault();
+                                lastPlayerTap = 0;
+                                if (window.AndroidBridge && window.AndroidBridge.onPlayerDoubleTap) {
+                                    window.AndroidBridge.onPlayerDoubleTap();
+                                }
+                            } else {
+                                lastPlayerTap = now;
+                            }
+                        }, { passive: false, capture: true });
+                    }
 
                 } catch(e) {
                     console.error('AdBlocker script error: ', e);

@@ -154,12 +154,21 @@ class VirtualCursorView @JvmOverloads constructor(
         }
 
         if (isDirectScrollMode) {
-            // Direct scroll velocity: smoothly glides page at 260dp/s to 600dp/s
+            // UP/DOWN glides the page directly at 260dp/s to 600dp/s...
             val scrollSpeed = (260f + (holdDurationMs * 0.25f).coerceAtMost(340f)) * density
             var sDirY = 0f
             if (upHeld) sDirY -= 1f
             if (downHeld) sDirY += 1f
             directScrollVy = sDirY * scrollSpeed
+
+            // ...while LEFT/RIGHT instead glides the click reticle sideways, so Scroll Mode can
+            // still aim at and click on-page elements instead of only ever scrolling.
+            val reticleSpeed = (480f + (holdDurationMs * 0.45f).coerceAtMost(520f)) * density
+            var dirX = 0f
+            if (leftHeld) dirX -= 1f
+            if (rightHeld) dirX += 1f
+            targetVx = dirX * reticleSpeed
+            targetVy = 0f
             return
         }
 
@@ -202,6 +211,24 @@ class VirtualCursorView @JvmOverloads constructor(
                     if (px != 0) {
                         target.scrollBy(0, px)
                         directScrollAccumulatorY -= px
+                    }
+                }
+
+                // Horizontal glide for the click reticle (LEFT/RIGHT), same lerp smoothing as
+                // the pointer-mode cursor uses.
+                val lerpFactor = (1.0 - Math.exp(-22.0 * dt)).toFloat()
+                vx += (targetVx - vx) * lerpFactor
+                if (Math.abs(vx) < 1f && targetVx == 0f) vx = 0f
+
+                if (vx != 0f) {
+                    val pad = 12f * density
+                    cursorX = (cursorX + (vx * dt)).coerceIn(pad, (width - pad).coerceAtLeast(pad))
+                    invalidate()
+
+                    onCursorMoved?.invoke(cursorX, cursorY)
+
+                    if (cursorX <= pad + (4f * density) && (vx < 0f || leftHeld)) {
+                        onLeftEdgeTrigger?.invoke()
                     }
                 }
             } else {
