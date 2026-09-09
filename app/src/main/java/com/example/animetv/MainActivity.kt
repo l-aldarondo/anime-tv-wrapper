@@ -32,6 +32,7 @@ class MainActivity : AppCompatActivity() {
         const val SOURCE_9ANIME = "9anime"
         const val SOURCE_GOGOANIME = "gogoanime"
         const val SOURCE_SOLOLATINO = "sololatino"
+        const val SOURCE_SOLOLATINO_HOME = "sololatino_home"
         const val SOURCE_ANIMEFLIX = "animeflix"
         const val SOURCE_ANIMEYT = "animeyt"
         const val SOURCE_JKANIME = "jkanime"
@@ -39,6 +40,7 @@ class MainActivity : AppCompatActivity() {
         const val URL_9ANIME = "https://9anime.or.at/"
         const val URL_GOGOANIME = "https://gogoanime.by/"
         const val URL_SOLOLATINO = "https://sololatino.net/animes"
+        const val URL_SOLOLATINO_HOME = "https://sololatino.net/"
         const val URL_ANIMEFLIX = "https://animeflix.team/"
         const val URL_ANIMEYT = "https://animeyt.cc/"
         const val URL_JKANIME = "https://jkanime.net/"
@@ -50,7 +52,6 @@ class MainActivity : AppCompatActivity() {
 
     private var isTv = false
 
-    private lateinit var rootContainer: FrameLayout
     private lateinit var webView: WebView
     private lateinit var videoContainer: FrameLayout
     private lateinit var pageLoadingBar: ProgressBar
@@ -70,6 +71,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnSource9Anime: TextView
     private lateinit var btnSourceGogoAnime: TextView
     private lateinit var btnSourceSoloLatino: TextView
+    private lateinit var btnSourceSoloLatinoHome: TextView
     private lateinit var btnSourceAnimeFlix: TextView
     private lateinit var btnSourceAnimeYT: TextView
     private lateinit var btnSourceJKAnime: TextView
@@ -131,6 +133,15 @@ class MainActivity : AppCompatActivity() {
 
         if (isTv) {
             scheduleGuideDismiss()
+            // Persistent "which mode am I in" indicator: previously the only feedback was a 2s
+            // Toast on the moment the mode changed, with nothing to check back on afterward. The
+            // container also held a clickable-looking fullscreen/AdBlock chip pair that isn't
+            // reachable naturally with a D-pad, which is why it used to be hidden entirely - keep
+            // those two hidden, but the mode badge itself is plain informational text, not a
+            // control, so there's no reason to hide it too.
+            btnFullscreen.visibility = View.GONE
+            txtAdBlockBadge.visibility = View.GONE
+            osdTopBar.visibility = View.VISIBLE
         } else {
             // On phones with touch screens, hide the virtual D-Pad cursor and TV remote hints
             virtualCursorView.visibility = View.GONE
@@ -142,6 +153,7 @@ class MainActivity : AppCompatActivity() {
         val defaultUrl = when (currentSource) {
             SOURCE_GOGOANIME -> URL_GOGOANIME
             SOURCE_SOLOLATINO -> URL_SOLOLATINO
+            SOURCE_SOLOLATINO_HOME -> URL_SOLOLATINO_HOME
             SOURCE_ANIMEFLIX -> URL_ANIMEFLIX
             SOURCE_ANIMEYT -> URL_ANIMEYT
             SOURCE_JKANIME -> URL_JKANIME
@@ -163,7 +175,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun initViews() {
-        rootContainer = findViewById(R.id.rootContainer)
         webView = findViewById(R.id.webView)
         videoContainer = findViewById(R.id.videoContainer)
         pageLoadingBar = findViewById(R.id.pageLoadingBar)
@@ -184,6 +195,7 @@ class MainActivity : AppCompatActivity() {
         btnSource9Anime = findViewById(R.id.btnSource9Anime)
         btnSourceGogoAnime = findViewById(R.id.btnSourceGogoAnime)
         btnSourceSoloLatino = findViewById(R.id.btnSourceSoloLatino)
+        btnSourceSoloLatinoHome = findViewById(R.id.btnSourceSoloLatinoHome)
         btnSourceAnimeFlix = findViewById(R.id.btnSourceAnimeFlix)
         btnSourceAnimeYT = findViewById(R.id.btnSourceAnimeYT)
         btnSourceJKAnime = findViewById(R.id.btnSourceJKAnime)
@@ -298,6 +310,11 @@ class MainActivity : AppCompatActivity() {
             switchSource(SOURCE_SOLOLATINO)
         }
 
+        // Source: SoloLatino Home (full catalog - movies/series/doramas, not anime-filtered)
+        btnSourceSoloLatinoHome.setOnClickListener {
+            switchSource(SOURCE_SOLOLATINO_HOME)
+        }
+
         // Source 4: AnimeFlix
         btnSourceAnimeFlix.setOnClickListener {
             switchSource(SOURCE_ANIMEFLIX)
@@ -318,6 +335,7 @@ class MainActivity : AppCompatActivity() {
             val url = when (currentSource) {
                 SOURCE_GOGOANIME -> URL_GOGOANIME
                 SOURCE_SOLOLATINO -> URL_SOLOLATINO
+                SOURCE_SOLOLATINO_HOME -> URL_SOLOLATINO_HOME
                 SOURCE_ANIMEFLIX -> URL_ANIMEFLIX
                 SOURCE_ANIMEYT -> URL_ANIMEYT
                 SOURCE_JKANIME -> URL_JKANIME
@@ -358,6 +376,29 @@ class MainActivity : AppCompatActivity() {
         updateSidebarUi()
     }
 
+    // Ordered top-to-bottom for D-pad UP/DOWN focus navigation inside the sidebar - see
+    // moveSidebarFocus(). Plain click-based (cursor) interaction still works too, but this lets a
+    // D-pad jump directly between items the way the drawables' unused `state_focused` styles were
+    // already built for, instead of requiring the user to "aim" a physics-based cursor at each one.
+    private val sidebarFocusOrder: List<View> by lazy {
+        listOf(
+            btnSidebarFullscreen, btnSidebarAdBlock, btnSidebarMode,
+            btnSource9Anime, btnSourceGogoAnime, btnSourceSoloLatino, btnSourceSoloLatinoHome, btnSourceAnimeFlix, btnSourceAnimeYT, btnSourceJKAnime,
+            btnSidebarHome, btnSidebarReload, btnSidebarClose
+        )
+    }
+
+    private fun moveSidebarFocus(forward: Boolean) {
+        val order = sidebarFocusOrder
+        val currentIndex = order.indexOfFirst { it.isFocused }
+        val nextIndex = when {
+            currentIndex == -1 -> 0
+            forward -> (currentIndex + 1).coerceAtMost(order.size - 1)
+            else -> (currentIndex - 1).coerceAtLeast(0)
+        }
+        order[nextIndex].requestFocus()
+    }
+
     private fun openSidebar() {
         if (isSidebarOpen || isPlayerFullscreen || webChromeClient.isFullscreen) return
         isSidebarOpen = true
@@ -374,10 +415,12 @@ class MainActivity : AppCompatActivity() {
 
         updateSidebarUi()
 
-        // Gently steer virtual cursor slightly onto the sidebar if it was pinned against the screen edge
-        if (virtualCursorView.cursorX < 30f * density) {
-            virtualCursorView.setCursorPosition(150f * density, virtualCursorView.cursorY)
-        }
+        // While the sidebar is open, D-pad UP/DOWN move logical focus between its items instead of
+        // gliding the mouse-style cursor around - having both a focus highlight and a separate
+        // cursor dot fighting for attention on the same small drawer is confusing, so hide the
+        // cursor and seed focus on the first item.
+        virtualCursorView.isCursorVisible = false
+        sidebarFocusOrder.firstOrNull()?.requestFocus()
     }
 
     private fun closeSidebar() {
@@ -398,6 +441,12 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             .start()
+
+        // Hand focus (and the cursor, if applicable) back to the page.
+        webView.requestFocus()
+        if (currentNavMode == MODE_POINTER) {
+            virtualCursorView.isCursorVisible = true
+        }
     }
 
     private fun toggleSidebar() {
@@ -431,6 +480,7 @@ class MainActivity : AppCompatActivity() {
             Triple(btnSource9Anime, SOURCE_9ANIME, "9Anime"),
             Triple(btnSourceGogoAnime, SOURCE_GOGOANIME, "GogoAnime"),
             Triple(btnSourceSoloLatino, SOURCE_SOLOLATINO, "SoloLatino (Español)"),
+            Triple(btnSourceSoloLatinoHome, SOURCE_SOLOLATINO_HOME, "SoloLatino (Inicio)"),
             Triple(btnSourceAnimeFlix, SOURCE_ANIMEFLIX, "AnimeFlix"),
             Triple(btnSourceAnimeYT, SOURCE_ANIMEYT, "AnimeYT (Español)"),
             Triple(btnSourceJKAnime, SOURCE_JKANIME, "JKAnime (Español)")
@@ -458,6 +508,7 @@ class MainActivity : AppCompatActivity() {
         val (url, label) = when (source) {
             SOURCE_GOGOANIME -> Pair(URL_GOGOANIME, "GogoAnime")
             SOURCE_SOLOLATINO -> Pair(URL_SOLOLATINO, "SoloLatino")
+            SOURCE_SOLOLATINO_HOME -> Pair(URL_SOLOLATINO_HOME, "SoloLatino (Inicio)")
             SOURCE_ANIMEFLIX -> Pair(URL_ANIMEFLIX, "AnimeFlix")
             SOURCE_ANIMEYT -> Pair(URL_ANIMEYT, "AnimeYT")
             SOURCE_JKANIME -> Pair(URL_JKANIME, "JKAnime")
@@ -520,7 +571,9 @@ class MainActivity : AppCompatActivity() {
         } else {
             if (!isTv) btnSidebarTrigger.visibility = View.VISIBLE
             virtualCursorView.visibility = if (currentNavMode == MODE_POINTER && isTv) View.VISIBLE else View.GONE
-            osdTopBar.visibility = View.GONE
+            // Restore the persistent mode badge on TV (the fullscreen/AdBlock chips inside this same
+            // container stay hidden - see onCreate).
+            osdTopBar.visibility = if (isTv) View.VISIBLE else View.GONE
             btnFullscreen.text = "⛶ Fullscreen"
             btnFullscreen.setTextColor(android.graphics.Color.parseColor("#FFD600"))
             enableImmersiveMode()
@@ -761,6 +814,15 @@ class MainActivity : AppCompatActivity() {
             KeyEvent.KEYCODE_DPAD_DOWN,
             KeyEvent.KEYCODE_DPAD_LEFT,
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                // While the sidebar is open, UP/DOWN move real logical focus between its items
+                // instead of gliding the cursor - see openSidebar(). LEFT/RIGHT are left unhandled
+                // here (BACK already closes the drawer).
+                if (isSidebarOpen) {
+                    if (isDown && (event.keyCode == KeyEvent.KEYCODE_DPAD_UP || event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN)) {
+                        moveSidebarFocus(forward = event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN)
+                    }
+                    return true
+                }
                 if (isDown) {
                     scheduleGuideDismiss()
                     if (currentNavMode == MODE_POINTER) {
@@ -777,16 +839,16 @@ class MainActivity : AppCompatActivity() {
             KeyEvent.KEYCODE_ENTER,
             KeyEvent.KEYCODE_NUMPAD_ENTER,
             KeyEvent.KEYCODE_BUTTON_A -> {
+                if (isSidebarOpen) {
+                    if (isUp) {
+                        currentFocus?.takeIf { sidebarFocusOrder.contains(it) }?.performClick()
+                    }
+                    return true
+                }
                 if (currentNavMode == MODE_POINTER) {
                     if (isUp) {
                         scheduleGuideDismiss()
-                        val density = resources.displayMetrics.density
-                        val clickTarget = if (isSidebarOpen && virtualCursorView.cursorX <= 320f * density) {
-                            rootContainer
-                        } else {
-                            webView
-                        }
-                        virtualCursorView.dispatchClick(clickTarget)
+                        virtualCursorView.dispatchClick(webView)
                     }
                     return true
                 }

@@ -226,9 +226,14 @@ class VirtualCursorView @JvmOverloads constructor(
                     }
                 }
 
-                // Ultra-smooth controllable edge scrolling while pointer is near borders
+                // Ultra-smooth controllable edge scrolling while pointer is near borders. Gated on a
+                // direction key actually being held - without this, parking the cursor inside the
+                // edge zone (e.g. while lining up a click near the top/bottom of the page) kept the
+                // page scrolling by itself indefinitely, with no key pressed and no way to stop it
+                // short of moving the cursor back out of the zone.
                 val target = targetView
-                if (target != null && height > 0 && width > 0 && isCursorVisible) {
+                val anyHeld = upHeld || downHeld || leftHeld || rightHeld
+                if (target != null && height > 0 && width > 0 && isCursorVisible && anyHeld) {
                     val edgeZone = 90f * density
                     var scrollRate = 0f
 
