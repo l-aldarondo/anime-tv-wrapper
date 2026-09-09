@@ -61,6 +61,10 @@ class MainActivity : AppCompatActivity() {
         // Left in place, defaulted to false, in case another site needs the same isolation test.
         private const val DEBUG_DISABLE_UBLOCK = false
         private const val DEBUG_DISABLE_TRACKING_PROTECTION = false
+        // Also tested and ruled out: disabling our OWN page_patches content script entirely (the
+        // "Prueba con Servidor 1" symptom on SoloLatino's Premium tab persisted identically with
+        // it off) - see commit history for the fuller isolation-test writeup.
+        private const val DEBUG_DISABLE_PAGE_PATCHES = false
 
         private const val UBLOCK_EXTENSION_ID = "uBlock0@raymondhill.net"
         private const val UBLOCK_ASSET_PATH = "resource://android/assets/ublock_origin/"
@@ -244,11 +248,12 @@ class MainActivity : AppCompatActivity() {
         // Don't open the session/load the start URL until both extensions below have settled
         // (installed or failed) - otherwise the very first page load could race ahead of
         // uBlock Origin and land completely unprotected.
-        var pendingInstalls = if (DEBUG_DISABLE_UBLOCK) 1 else 2
+        var pendingInstalls = (if (DEBUG_DISABLE_UBLOCK) 0 else 1) + (if (DEBUG_DISABLE_PAGE_PATCHES) 0 else 1)
         val onInstallSettled = {
             pendingInstalls--
             if (pendingInstalls == 0) openGeckoSession()
         }
+        if (pendingInstalls == 0) openGeckoSession()
 
         if (!DEBUG_DISABLE_UBLOCK) {
             runtime.webExtensionController
@@ -256,6 +261,7 @@ class MainActivity : AppCompatActivity() {
                 .accept({ onInstallSettled() }, { onInstallSettled() })
         }
 
+        if (DEBUG_DISABLE_PAGE_PATCHES) return
         runtime.webExtensionController
             .ensureBuiltIn(PATCHES_ASSET_PATH, PATCHES_EXTENSION_ID)
             .accept(
