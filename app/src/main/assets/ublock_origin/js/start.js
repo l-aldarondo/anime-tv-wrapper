@@ -153,6 +153,17 @@ const onVersionReady = async lastVersion => {
 
     // Special case: first installation
     if ( lastVersionInt === 0 ) {
+        // Anime TV: player-oxserver.js is embed69.org's actual player-init script (confirmed
+        // on-device: "this.videoPlayer is null" thrown, breaking playback entirely) despite its
+        // name matching uBO's default filter lists' generic ad/tracker-server heuristics. Seeded
+        // here (not via the dashboard) so it's in effect before the very first request uBO ever
+        // evaluates - see js/storage.js loadSelectedFilterLists(), which auto-selects
+        // 'user-filters' into selectedFilterLists on a fresh profile.
+        await vAPI.storage.set({
+            'user-filters': [
+                '@@||player-oxserver.js^',
+            ].join('\n'),
+        });
         vAPI.net.unsuspend({ all: true, discard: true });
         return;
     }

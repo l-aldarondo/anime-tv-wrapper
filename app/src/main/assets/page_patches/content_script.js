@@ -531,12 +531,16 @@
         }
         document.addEventListener('play', notifyPlay, true);
         document.addEventListener('playing', notifyPlay, true);
-        if (!isTop) {
-            // In an embed iframe, any tap/click is a reasonable proxy for "the user is
-            // interacting with the player" - matches the old per-iframe injected script.
-            document.addEventListener('click', notifyPlay, true);
-            document.addEventListener('touchstart', notifyPlay, true);
-        }
+        // NOTE: an earlier version of this also treated any click/touchstart inside an embed
+        // iframe as a play signal - that was a workaround from the old WebView-based
+        // architecture, where evaluateJavascript() couldn't see real play/playing events firing
+        // inside a cross-origin iframe at all, only a same-origin top document. A content script
+        // has no such restriction (it runs natively inside the iframe's own origin), so it can
+        // just listen for the real event directly. Keeping the click/touchstart proxy on top of
+        // that made every tap on the player - including the very first tap that starts it -
+        // immediately fire the fullscreen request before the video had actually started,
+        // confirmed on-device: the page visually snapped into a broken "fullscreen" layout and
+        // playback never started.
 
         function findPlayerWrap() {
             return document.querySelector('.player-wrap') ||
