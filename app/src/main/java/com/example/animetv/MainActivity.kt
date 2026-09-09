@@ -800,11 +800,18 @@ class MainActivity : AppCompatActivity() {
             KeyEvent.KEYCODE_DPAD_LEFT,
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
                 // While the sidebar is open, UP/DOWN move real logical focus between its items
-                // instead of gliding the cursor - see openSidebar(). LEFT/RIGHT are left unhandled
-                // here (BACK already closes the drawer).
+                // instead of gliding the cursor - see openSidebar(). Since the cursor never moves
+                // in here, it can never reach the "push it past the right edge" gesture that used
+                // to close the drawer - RIGHT instead directly closes it, standing in for that
+                // gesture (mirrors the touch swipe-away/BACK closing methods).
                 if (isSidebarOpen) {
-                    if (isDown && (event.keyCode == KeyEvent.KEYCODE_DPAD_UP || event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN)) {
-                        moveSidebarFocus(forward = event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN)
+                    if (isDown) {
+                        when (event.keyCode) {
+                            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN ->
+                                moveSidebarFocus(forward = event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN)
+                            KeyEvent.KEYCODE_DPAD_RIGHT -> closeSidebar()
+                            else -> {}
+                        }
                     }
                     return true
                 }
