@@ -2,6 +2,8 @@ package com.example.animetv
 
 import android.annotation.SuppressLint
 import android.content.pm.ActivityInfo
+import android.graphics.Color
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -9,20 +11,21 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
-import android.webkit.CookieManager
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
-import com.example.animetv.adblock.AdBlocker
 import com.example.animetv.tv.VirtualCursorView
-import com.example.animetv.webview.AnimeWebChromeClient
-import com.example.animetv.webview.AnimeWebViewClient
+import org.json.JSONObject
+import org.mozilla.geckoview.AllowOrDeny
+import org.mozilla.geckoview.GeckoResult
+import org.mozilla.geckoview.GeckoRuntime
+import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.GeckoSessionSettings
+import org.mozilla.geckoview.GeckoView
+import org.mozilla.geckoview.WebExtension
 
 class MainActivity : AppCompatActivity() {
 
@@ -48,24 +51,45 @@ class MainActivity : AppCompatActivity() {
         const val MODE_POINTER = 0
         const val MODE_SCROLL = 1
         private const val BACK_PRESS_INTERVAL = 2000L
+        private const val DOUBLE_OK_INTERVAL_MS = 400L
+
+        private const val UBLOCK_EXTENSION_ID = "uBlock0@raymondhill.net"
+        private const val UBLOCK_ASSET_PATH = "resource://android/assets/ublock_origin/"
+        private const val PATCHES_EXTENSION_ID = "patches@animetv.app"
+        private const val PATCHES_ASSET_PATH = "resource://android/assets/page_patches/"
+        private const val BRIDGE_NATIVE_APP_ID = "anime_tv_bridge"
+
+        // Main-frame navigation lock: the viewport must stay on a recognized anime provider.
+        // uBlock Origin + the page-patches content script handle ad/overlay suppression inside
+        // iframes now, so this list only needs to police the TOP-LEVEL document.
+        private val ALLOWED_MAIN_HOSTS = setOf(
+            "9anime.or.at",
+            "gogoanime.by",
+            "anitaku.to",
+            "gogoanime3.co",
+            "sololatino.net",
+            "animeflix.team",
+            "9animes.me.uk",
+            "animeyt.cc",
+            "jkanime.net"
+        )
     }
 
     private var isTv = false
 
-    private lateinit var webView: WebView
-    private lateinit var videoContainer: FrameLayout
+    private lateinit var geckoView: GeckoView
+    private lateinit var runtime: GeckoRuntime
+    private lateinit var geckoSession: GeckoSession
     private lateinit var pageLoadingBar: ProgressBar
     private lateinit var virtualCursorView: VirtualCursorView
     private lateinit var osdTopBar: View
     private lateinit var osdControlsGuide: View
-    private lateinit var txtAdBlockBadge: TextView
     private lateinit var txtNavModeBadge: TextView
     private lateinit var btnFullscreen: TextView
 
     // Hidden Sidebar UI elements
     private lateinit var sidebarDrawer: LinearLayout
     private lateinit var btnSidebarFullscreen: TextView
-    private lateinit var btnSidebarAdBlock: TextView
     private lateinit var btnSidebarMode: TextView
     private lateinit var btnSource9Anime: TextView
     private lateinit var btnSourceGogoAnime: TextView
@@ -78,15 +102,18 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnSidebarReload: TextView
     private lateinit var btnSidebarClose: TextView
 
-    private lateinit var webChromeClient: AnimeWebChromeClient
-    private lateinit var webViewClient: AnimeWebViewClient
-
     private var isSidebarOpen = false
-    private var isAdBlockEnabled = true
     private var currentSource = SOURCE_9ANIME
-    private var currentNavMode = MODE_POINTER
+    private var currentNavMode = MODE_SCROLL
     private var isPlayerFullscreen = false
+    private var canGoBackFlag = false
     private var lastBackPressTime = 0L
+    private var lastOkUpTime = 0L
+
+    // Native <-> page bridge (video-play-detected, double-tap, player commands, fullscreen
+    // toggle) - see app/src/main/assets/page_patches/. GeckoView has no evaluateJavascript()
+    // equivalent; this WebExtension native-messaging port replaces it entirely.
+    private var bridgePort: WebExtension.Port? = null
 
     private val handler = Handler(Looper.getMainLooper())
     private val hideGuideRunnable = Runnable {
@@ -100,42 +127,29 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Load saved anime source preference
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         currentSource = prefs.getString(KEY_ACTIVE_SOURCE, SOURCE_9ANIME) ?: SOURCE_9ANIME
 
-        // Detect if device is an Android TV / Google TV or a Phone / Tablet
         val uiModeManager = getSystemService(android.content.Context.UI_MODE_SERVICE) as? android.app.UiModeManager
         isTv = (uiModeManager?.currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION)
             || !packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TOUCHSCREEN)
 
-        // TV devices lock to landscape; Phones/Tablets auto-rotate freely
         requestedOrientation = if (isTv) {
             ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         } else {
             ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
 
-        // Keep screen on for continuous video watching
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
-        // Enable immersive sticky fullscreen
         enableImmersiveMode()
 
         setContentView(R.layout.activity_main)
 
         initViews()
-        AdBlocker.loadRules(this)
-        setupWebView()
-        setupAdBlockListener()
         setupBackPressedHandler()
 
         if (isTv) {
             scheduleGuideDismiss()
-            // Tried making the mode badge persistently visible here, but on TV it sits top-right
-            // over the same corner the page's own search/notification icons use, covering them.
-            // Back to hidden; the mode toggle already shows a Toast on change, and reflects the
-            // current mode in the sidebar's own "Mode: Pointer/Scroll" entry.
         } else {
             // On phones with touch screens, hide the virtual D-Pad cursor and TV remote hints
             virtualCursorView.visibility = View.GONE
@@ -143,47 +157,40 @@ class MainActivity : AppCompatActivity() {
             txtNavModeBadge.visibility = View.GONE
         }
 
-        // Load starting URL based on selected source
-        val defaultUrl = when (currentSource) {
-            SOURCE_GOGOANIME -> URL_GOGOANIME
-            SOURCE_SOLOLATINO -> URL_SOLOLATINO
-            SOURCE_SOLOLATINO_HOME -> URL_SOLOLATINO_HOME
-            SOURCE_ANIMEFLIX -> URL_ANIMEFLIX
-            SOURCE_ANIMEYT -> URL_ANIMEYT
-            SOURCE_JKANIME -> URL_JKANIME
-            else -> URL_9ANIME
-        }
-        val startUrl = intent?.dataString ?: defaultUrl
-        if (savedInstanceState == null) {
-            webView.loadUrl(startUrl)
-        } else {
-            webView.restoreState(savedInstanceState)
-        }
+        bootGeckoViewEngine()
     }
 
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         intent.dataString?.let { newUrl ->
-            webView.loadUrl(newUrl)
+            if (::geckoSession.isInitialized) geckoSession.loadUri(newUrl)
         }
     }
 
+    private fun urlForSource(source: String): String = when (source) {
+        SOURCE_GOGOANIME -> URL_GOGOANIME
+        SOURCE_SOLOLATINO -> URL_SOLOLATINO
+        SOURCE_SOLOLATINO_HOME -> URL_SOLOLATINO_HOME
+        SOURCE_ANIMEFLIX -> URL_ANIMEFLIX
+        SOURCE_ANIMEYT -> URL_ANIMEYT
+        SOURCE_JKANIME -> URL_JKANIME
+        else -> URL_9ANIME
+    }
+
     private fun initViews() {
-        webView = findViewById(R.id.webView)
-        videoContainer = findViewById(R.id.videoContainer)
+        geckoView = findViewById(R.id.webView)
         pageLoadingBar = findViewById(R.id.pageLoadingBar)
         virtualCursorView = findViewById(R.id.virtualCursorView)
-        virtualCursorView.targetView = webView
+        virtualCursorView.targetView = geckoView
+        virtualCursorView.isDirectScrollMode = (currentNavMode == MODE_SCROLL)
         osdTopBar = findViewById(R.id.osdTopBar)
         osdControlsGuide = findViewById(R.id.osdControlsGuide)
-        txtAdBlockBadge = findViewById(R.id.txtAdBlockBadge)
         txtNavModeBadge = findViewById(R.id.txtNavModeBadge)
         btnFullscreen = findViewById(R.id.btnFullscreen)
 
         // Sidebar references
         sidebarDrawer = findViewById(R.id.sidebarDrawer)
         btnSidebarFullscreen = findViewById(R.id.btnSidebarFullscreen)
-        btnSidebarAdBlock = findViewById(R.id.btnSidebarAdBlock)
         btnSidebarMode = findViewById(R.id.btnSidebarMode)
         btnSource9Anime = findViewById(R.id.btnSource9Anime)
         btnSourceGogoAnime = findViewById(R.id.btnSourceGogoAnime)
@@ -203,149 +210,221 @@ class MainActivity : AppCompatActivity() {
         setupSidebar()
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun setupWebView() {
-        webChromeClient = AnimeWebChromeClient(
-            webView = webView,
-            videoContainer = videoContainer,
-            progressBar = pageLoadingBar,
-            onFullscreenChanged = { isFullscreen ->
-                handleFullscreenChange(isFullscreen)
-            }
-        )
-        webViewClient = AnimeWebViewClient()
+    // ── GeckoView engine boot ────────────────────────────────────────────────
 
-        webView.webChromeClient = webChromeClient
-        webView.webViewClient = webViewClient
+    @SuppressLint("SetTextI18n")
+    private fun bootGeckoViewEngine() {
+        // getDefault(), not create() - create() throws if a runtime already exists in this
+        // process; getDefault() is the safe choice for an Activity that may be recreated.
+        runtime = GeckoRuntime.getDefault(this)
 
-        // Hardware acceleration
-        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
-        webView.isFocusable = true
-        webView.isFocusableInTouchMode = true
-        webView.isVerticalScrollBarEnabled = false
-        webView.isHorizontalScrollBarEnabled = false
-        webView.overScrollMode = View.OVER_SCROLL_NEVER
-
-        val settings = webView.settings
-        settings.javaScriptEnabled = true
-        settings.domStorageEnabled = true
-
-        // Essential for seamless TV playback without requiring touch gestures
-        settings.mediaPlaybackRequiresUserGesture = false
-
-        // Enable multiple windows so ChromeClient.onCreateWindow catches and drops popups
-        settings.setSupportMultipleWindows(true)
-        settings.javaScriptCanOpenWindowsAutomatically = false
-
-        // Widescreen 16:9 layout formatting
-        settings.loadWithOverviewMode = true
-        settings.useWideViewPort = true
-        settings.builtInZoomControls = true
-        settings.displayZoomControls = false
-
-        // Enable devtools debugging
-        WebView.setWebContentsDebuggingEnabled(true)
-
-        // Set Desktop/TV Chrome User Agent for optimal 16:9 widescreen layout on TV
-        if (isTv) {
-            settings.userAgentString = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 TV/GoogleTV"
+        // Don't open the session/load the start URL until both extensions below have settled
+        // (installed or failed) - otherwise the very first page load could race ahead of
+        // uBlock Origin and land completely unprotected.
+        var pendingInstalls = 2
+        val onInstallSettled = {
+            pendingInstalls--
+            if (pendingInstalls == 0) openGeckoSession()
         }
 
-        // Register JavaScript interface for auto-fullscreen and player event callbacks
-        webView.addJavascriptInterface(WebAppInterface(), "AndroidBridge")
+        runtime.webExtensionController
+            .ensureBuiltIn(UBLOCK_ASSET_PATH, UBLOCK_EXTENSION_ID)
+            .accept({ onInstallSettled() }, { onInstallSettled() })
 
-        // Cache & Cookies
-        settings.cacheMode = WebSettings.LOAD_DEFAULT
-        CookieManager.getInstance().setAcceptCookie(true)
-        CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
+        runtime.webExtensionController
+            .ensureBuiltIn(PATCHES_ASSET_PATH, PATCHES_EXTENSION_ID)
+            .accept(
+                { extension ->
+                    extension?.setMessageDelegate(bridgeMessageDelegate, BRIDGE_NATIVE_APP_ID)
+                    onInstallSettled()
+                },
+                { onInstallSettled() }
+            )
     }
 
+    private fun openGeckoSession() {
+        val settingsBuilder = GeckoSessionSettings.Builder()
+            .allowJavascript(true)
+            .useTrackingProtection(true)
+        if (isTv) {
+            // Desktop/TV Chrome UA for a proper 16:9 widescreen layout instead of a mobile one.
+            settingsBuilder.userAgentOverride(
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 TV/GoogleTV"
+            )
+        }
+
+        geckoSession = GeckoSession(settingsBuilder.build())
+        attachGeckoSessionDelegates(geckoSession)
+        geckoSession.open(runtime)
+        geckoView.setSession(geckoSession)
+        virtualCursorView.geckoSession = geckoSession
+
+        val startUrl = intent?.dataString ?: urlForSource(currentSource)
+        geckoSession.loadUri(startUrl)
+    }
+
+    private fun attachGeckoSessionDelegates(session: GeckoSession) {
+        session.contentDelegate = object : GeckoSession.ContentDelegate {
+            override fun onFullScreen(session: GeckoSession, fullScreen: Boolean) {
+                handleFullscreenChange(fullScreen)
+            }
+        }
+
+        session.progressDelegate = object : GeckoSession.ProgressDelegate {
+            override fun onPageStart(session: GeckoSession, url: String) {
+                runOnUiThread { pageLoadingBar.visibility = View.GONE }
+            }
+            override fun onPageStop(session: GeckoSession, success: Boolean) {
+                runOnUiThread { pageLoadingBar.visibility = View.GONE }
+            }
+        }
+
+        session.navigationDelegate = object : GeckoSession.NavigationDelegate {
+            override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) {
+                canGoBackFlag = canGoBack
+            }
+
+            // Fires for top-level/main-frame navigations only (subframe/iframe navigation -
+            // e.g. an embed provider's own internal redirects - goes through
+            // onSubframeLoadRequest instead, which is deliberately left unhandled here: uBlock
+            // Origin's own network-level filtering now polices unwanted iframe loads, so the
+            // old WebView-era "allowed video host" allowlist gate for subframes is redundant).
+            override fun onLoadRequest(
+                session: GeckoSession,
+                request: GeckoSession.NavigationDelegate.LoadRequest
+            ): GeckoResult<AllowOrDeny> {
+                val uri = try { Uri.parse(request.uri) } catch (e: Exception) { null }
+                val scheme = uri?.scheme?.lowercase() ?: ""
+                if (scheme != "http" && scheme != "https") {
+                    return GeckoResult.fromValue(AllowOrDeny.DENY)
+                }
+                val host = uri?.host?.lowercase() ?: ""
+                val isAllowed = ALLOWED_MAIN_HOSTS.any { host == it || host.endsWith(".$it") }
+                return GeckoResult.fromValue(if (isAllowed) AllowOrDeny.ALLOW else AllowOrDeny.DENY)
+            }
+
+            // Not overriding this returns null, which GeckoView treats as "deny the popup" -
+            // window.open()/target="_blank" requests just fail silently. The page-patches
+            // content script's own window.open() override (belt and suspenders) covers any
+            // popup attempt that fires before this would even be consulted.
+            override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession>? = null
+        }
+
+        // GeckoView blocks audible autoplay by default unless the load had a genuine user
+        // gesture. Safe to grant unconditionally here since this app only ever loads a small,
+        // fixed set of first-party anime sites, never arbitrary third-party content.
+        session.permissionDelegate = object : GeckoSession.PermissionDelegate {
+            override fun onContentPermissionRequest(
+                session: GeckoSession,
+                perm: GeckoSession.PermissionDelegate.ContentPermission
+            ): GeckoResult<Int> {
+                return if (perm.permission == GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_AUDIBLE ||
+                    perm.permission == GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_INAUDIBLE
+                ) {
+                    GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
+                } else {
+                    GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT)
+                }
+            }
+        }
+    }
+
+    // ── Native <-> page WebExtension bridge ──────────────────────────────────
+
+    private val bridgeMessageDelegate = object : WebExtension.MessageDelegate {
+        override fun onConnect(port: WebExtension.Port) {
+            bridgePort = port
+            port.setDelegate(bridgePortDelegate)
+        }
+    }
+
+    private val bridgePortDelegate = object : WebExtension.PortDelegate {
+        override fun onPortMessage(message: Any, port: WebExtension.Port) {
+            val json = when (message) {
+                is JSONObject -> message
+                is String -> try { JSONObject(message) } catch (e: Exception) { null }
+                else -> null
+            } ?: return
+            when (json.optString("type")) {
+                "anime-video-play" -> runOnUiThread {
+                    if (!isPlayerFullscreen) setPlayerFullscreen(true)
+                }
+                "anime-doubletap" -> runOnUiThread {
+                    togglePlayerFullscreen()
+                }
+            }
+        }
+        override fun onDisconnect(port: WebExtension.Port) {
+            if (bridgePort === port) bridgePort = null
+        }
+    }
+
+    private fun sendPlayerCommand(action: String, seconds: Int = 0) {
+        bridgePort?.postMessage(JSONObject().apply {
+            put("type", "anime-player-command")
+            put("payload", JSONObject().apply {
+                put("action", action)
+                put("seconds", seconds)
+            })
+        })
+    }
+
+    private fun toggleVideoPlayback() = sendPlayerCommand("toggle")
+    private fun playVideo() = sendPlayerCommand("play")
+    private fun pauseVideo() {
+        sendPlayerCommand("pause")
+        Toast.makeText(this, "⏸️ Paused", Toast.LENGTH_SHORT).show()
+    }
+    private fun seekVideo(seconds: Int) = sendPlayerCommand("seek", seconds)
+    private fun triggerNextEpisode() {
+        sendPlayerCommand("next-episode")
+        Toast.makeText(this, "⏭️ Next Episode...", Toast.LENGTH_SHORT).show()
+    }
+    private fun triggerPreviousEpisode() {
+        sendPlayerCommand("prev-episode")
+        Toast.makeText(this, "⏮️ Previous Episode...", Toast.LENGTH_SHORT).show()
+    }
+
+    // ── Sidebar ──────────────────────────────────────────────────────────────
+
     private fun setupSidebar() {
-        // Toggle Fullscreen
         btnSidebarFullscreen.setOnClickListener {
             togglePlayerFullscreen()
             closeSidebar()
         }
 
-        // Toggle AdBlocker
-        btnSidebarAdBlock.setOnClickListener {
-            isAdBlockEnabled = !isAdBlockEnabled
-            AdBlocker.isEnabled = isAdBlockEnabled
-            updateSidebarUi()
-            Toast.makeText(this, if (isAdBlockEnabled) "🛡️ AdBlocker Enabled" else "⚠️ AdBlocker Disabled", Toast.LENGTH_SHORT).show()
-        }
-
-        // Toggle Navigation Mode
         btnSidebarMode.setOnClickListener {
             toggleNavigationMode()
             updateSidebarUi()
         }
 
-        // Source 1: 9Anime
-        btnSource9Anime.setOnClickListener {
-            switchSource(SOURCE_9ANIME)
-        }
+        btnSource9Anime.setOnClickListener { switchSource(SOURCE_9ANIME) }
+        btnSourceGogoAnime.setOnClickListener { switchSource(SOURCE_GOGOANIME) }
+        btnSourceSoloLatino.setOnClickListener { switchSource(SOURCE_SOLOLATINO) }
+        btnSourceSoloLatinoHome.setOnClickListener { switchSource(SOURCE_SOLOLATINO_HOME) }
+        btnSourceAnimeFlix.setOnClickListener { switchSource(SOURCE_ANIMEFLIX) }
+        btnSourceAnimeYT.setOnClickListener { switchSource(SOURCE_ANIMEYT) }
+        btnSourceJKAnime.setOnClickListener { switchSource(SOURCE_JKANIME) }
 
-        // Source 2: GogoAnime
-        btnSourceGogoAnime.setOnClickListener {
-            switchSource(SOURCE_GOGOANIME)
-        }
-
-        // Source 3: SoloLatino
-        btnSourceSoloLatino.setOnClickListener {
-            switchSource(SOURCE_SOLOLATINO)
-        }
-
-        // Source: SoloLatino Home (full catalog - movies/series/doramas, not anime-filtered)
-        btnSourceSoloLatinoHome.setOnClickListener {
-            switchSource(SOURCE_SOLOLATINO_HOME)
-        }
-
-        // Source 4: AnimeFlix
-        btnSourceAnimeFlix.setOnClickListener {
-            switchSource(SOURCE_ANIMEFLIX)
-        }
-
-        // Source 5: AnimeYT
-        btnSourceAnimeYT.setOnClickListener {
-            switchSource(SOURCE_ANIMEYT)
-        }
-
-        // Source 6: JKAnime
-        btnSourceJKAnime.setOnClickListener {
-            switchSource(SOURCE_JKANIME)
-        }
-
-        // Home
         btnSidebarHome.setOnClickListener {
-            val url = when (currentSource) {
-                SOURCE_GOGOANIME -> URL_GOGOANIME
-                SOURCE_SOLOLATINO -> URL_SOLOLATINO
-                SOURCE_SOLOLATINO_HOME -> URL_SOLOLATINO_HOME
-                SOURCE_ANIMEFLIX -> URL_ANIMEFLIX
-                SOURCE_ANIMEYT -> URL_ANIMEYT
-                SOURCE_JKANIME -> URL_JKANIME
-                else -> URL_9ANIME
-            }
-            webView.loadUrl(url)
+            geckoSession.loadUri(urlForSource(currentSource))
             closeSidebar()
         }
 
-        // Reload
         btnSidebarReload.setOnClickListener {
-            webView.reload()
+            geckoSession.reload()
             closeSidebar()
         }
 
-        // Close
         btnSidebarClose.setOnClickListener {
             closeSidebar()
         }
 
-        // Virtual Cursor edge triggers
+        // Virtual Cursor edge triggers - works identically in Pointer and Scroll mode (the
+        // reticle moves in both, see VirtualCursorView).
         virtualCursorView.onLeftEdgeTrigger = {
             runOnUiThread {
-                if (!isSidebarOpen && !isPlayerFullscreen && !webChromeClient.isFullscreen) {
+                if (!isSidebarOpen && !isPlayerFullscreen) {
                     openSidebar()
                 }
             }
@@ -362,15 +441,12 @@ class MainActivity : AppCompatActivity() {
         updateSidebarUi()
     }
 
-    // Ordered top-to-bottom for D-pad UP/DOWN focus navigation inside the sidebar - see
-    // moveSidebarFocus(). Plain click-based (cursor) interaction still works too, but this lets a
-    // D-pad jump directly between items the way the drawables' unused `state_focused` styles were
-    // already built for, instead of requiring the user to "aim" a physics-based cursor at each one.
+    // Sources first (this is what a user actually wants quick access to), settings/shortcuts
+    // last - see activity_main.xml. Also the D-pad UP/DOWN focus-navigation order.
     private val sidebarFocusOrder: List<View> by lazy {
         listOf(
-            btnSidebarFullscreen, btnSidebarAdBlock, btnSidebarMode,
             btnSource9Anime, btnSourceGogoAnime, btnSourceSoloLatino, btnSourceSoloLatinoHome, btnSourceAnimeFlix, btnSourceAnimeYT, btnSourceJKAnime,
-            btnSidebarHome, btnSidebarReload, btnSidebarClose
+            btnSidebarFullscreen, btnSidebarMode, btnSidebarHome, btnSidebarReload, btnSidebarClose
         )
     }
 
@@ -386,7 +462,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openSidebar() {
-        if (isSidebarOpen || isPlayerFullscreen || webChromeClient.isFullscreen) return
+        if (isSidebarOpen || isPlayerFullscreen) return
         isSidebarOpen = true
         val density = resources.displayMetrics.density
         val startX = -sidebarDrawer.width.toFloat().let { if (it <= 0f) -330f * density else -it }
@@ -400,10 +476,6 @@ class MainActivity : AppCompatActivity() {
 
         updateSidebarUi()
 
-        // While the sidebar is open, D-pad UP/DOWN move logical focus between its items instead of
-        // gliding the mouse-style cursor around - having both a focus highlight and a separate
-        // cursor dot fighting for attention on the same small drawer is confusing, so hide the
-        // cursor and seed focus on the first item.
         virtualCursorView.isCursorVisible = false
         sidebarFocusOrder.firstOrNull()?.requestFocus()
     }
@@ -424,10 +496,7 @@ class MainActivity : AppCompatActivity() {
             }
             .start()
 
-        // Hand focus (and the cursor, if applicable) back to the page. The cursor overlay only
-        // exists on TV - showing it here unconditionally used to leave a stray cursor icon stuck
-        // on phones/tablets after closing the sidebar, with no D-pad available to move or hide it.
-        webView.requestFocus()
+        geckoView.requestFocus()
         if (isTv && currentNavMode == MODE_POINTER) {
             virtualCursorView.isCursorVisible = true
         }
@@ -438,33 +507,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateSidebarUi() {
-        // Fullscreen
         btnSidebarFullscreen.text = if (isPlayerFullscreen) "⛶  Exit Fullscreen" else "⛶  Enter Fullscreen"
         btnSidebarFullscreen.setTextColor(
-            if (isPlayerFullscreen) android.graphics.Color.parseColor("#FF5252")
-            else android.graphics.Color.parseColor("#FFD600")
+            if (isPlayerFullscreen) Color.parseColor("#FF5252") else Color.parseColor("#FFD600")
         )
 
-        // AdBlocker
-        btnSidebarAdBlock.text = if (isAdBlockEnabled) "🛡️  AdBlocker: ON" else "🛡️  AdBlocker: OFF"
-        btnSidebarAdBlock.setTextColor(
-            if (isAdBlockEnabled) android.graphics.Color.parseColor("#00E676")
-            else android.graphics.Color.parseColor("#FF5252")
-        )
-
-        // Mode
         btnSidebarMode.text = if (currentNavMode == MODE_POINTER) "🖱️  Mode: Pointer" else "📜  Mode: Scroll"
         btnSidebarMode.setTextColor(
-            if (currentNavMode == MODE_POINTER) android.graphics.Color.parseColor("#E0AAFF")
-            else android.graphics.Color.parseColor("#00E676")
+            if (currentNavMode == MODE_POINTER) Color.parseColor("#E0AAFF") else Color.parseColor("#00E676")
         )
 
-        // Sources active styling
         val sources = listOf(
             Triple(btnSource9Anime, SOURCE_9ANIME, "9Anime"),
             Triple(btnSourceGogoAnime, SOURCE_GOGOANIME, "GogoAnime"),
-            Triple(btnSourceSoloLatino, SOURCE_SOLOLATINO, "SoloLatino (Español)"),
-            Triple(btnSourceSoloLatinoHome, SOURCE_SOLOLATINO_HOME, "SoloLatino (Inicio)"),
+            Triple(btnSourceSoloLatino, SOURCE_SOLOLATINO, "SoloAnime ES"),
+            Triple(btnSourceSoloLatinoHome, SOURCE_SOLOLATINO_HOME, "SoloStream ES"),
             Triple(btnSourceAnimeFlix, SOURCE_ANIMEFLIX, "AnimeFlix"),
             Triple(btnSourceAnimeYT, SOURCE_ANIMEYT, "AnimeYT (Español)"),
             Triple(btnSourceJKAnime, SOURCE_JKANIME, "JKAnime (Español)")
@@ -474,11 +531,11 @@ class MainActivity : AppCompatActivity() {
             if (currentSource == src) {
                 btn.text = "●  $name (Active)"
                 btn.setBackgroundResource(R.drawable.bg_sidebar_active_source)
-                btn.setTextColor(android.graphics.Color.WHITE)
+                btn.setTextColor(Color.WHITE)
             } else {
                 btn.text = "○  $name"
                 btn.setBackgroundResource(R.drawable.bg_sidebar_item)
-                btn.setTextColor(android.graphics.Color.parseColor("#F0F0FF"))
+                btn.setTextColor(Color.parseColor("#F0F0FF"))
             }
         }
     }
@@ -489,26 +546,18 @@ class MainActivity : AppCompatActivity() {
         prefs.edit().putString(KEY_ACTIVE_SOURCE, source).apply()
         updateSidebarUi()
 
-        val (url, label) = when (source) {
-            SOURCE_GOGOANIME -> Pair(URL_GOGOANIME, "GogoAnime")
-            SOURCE_SOLOLATINO -> Pair(URL_SOLOLATINO, "SoloLatino")
-            SOURCE_SOLOLATINO_HOME -> Pair(URL_SOLOLATINO_HOME, "SoloLatino (Inicio)")
-            SOURCE_ANIMEFLIX -> Pair(URL_ANIMEFLIX, "AnimeFlix")
-            SOURCE_ANIMEYT -> Pair(URL_ANIMEYT, "AnimeYT")
-            SOURCE_JKANIME -> Pair(URL_JKANIME, "JKAnime")
-            else -> Pair(URL_9ANIME, "9Anime")
+        val label = when (source) {
+            SOURCE_GOGOANIME -> "GogoAnime"
+            SOURCE_SOLOLATINO -> "SoloAnime ES"
+            SOURCE_SOLOLATINO_HOME -> "SoloStream ES"
+            SOURCE_ANIMEFLIX -> "AnimeFlix"
+            SOURCE_ANIMEYT -> "AnimeYT"
+            SOURCE_JKANIME -> "JKAnime"
+            else -> "9Anime"
         }
         Toast.makeText(this, "🎌 Loading $label...", Toast.LENGTH_SHORT).show()
-        webView.loadUrl(url)
+        geckoSession.loadUri(urlForSource(source))
         closeSidebar()
-    }
-
-    private fun setupAdBlockListener() {
-        AdBlocker.onBlockListener = { count ->
-            runOnUiThread {
-                txtAdBlockBadge.text = "🛡️ AdBlock ON ($count)"
-            }
-        }
     }
 
     private fun setupBackPressedHandler() {
@@ -516,12 +565,10 @@ class MainActivity : AppCompatActivity() {
             override fun handleOnBackPressed() {
                 if (isSidebarOpen) {
                     closeSidebar()
-                } else if (webChromeClient.isFullscreen) {
-                    webChromeClient.onHideCustomView()
                 } else if (isPlayerFullscreen) {
-                    setPlayerFullscreen(false)
-                } else if (webView.canGoBack()) {
-                    webView.goBack()
+                    geckoSession.exitFullScreen()
+                } else if (canGoBackFlag) {
+                    geckoSession.goBack()
                 } else {
                     val now = System.currentTimeMillis()
                     if (now - lastBackPressTime < BACK_PRESS_INTERVAL) {
@@ -535,61 +582,44 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    private fun handleFullscreenChange(isFullscreen: Boolean) {
-        isPlayerFullscreen = isFullscreen
+    // ── Fullscreen ───────────────────────────────────────────────────────────
+
+    private fun handleFullscreenChange(fullScreen: Boolean) {
+        isPlayerFullscreen = fullScreen
         if (!isTv) {
-            requestedOrientation = if (isFullscreen) {
+            requestedOrientation = if (fullScreen) {
                 ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             } else {
                 ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             }
         }
-        if (isFullscreen) {
+        if (fullScreen) {
             closeSidebar()
             virtualCursorView.visibility = View.GONE
             osdTopBar.visibility = View.GONE
             osdControlsGuide.visibility = View.GONE
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            enableImmersiveMode()
+            btnFullscreen.text = "✖ Exit Fullscreen"
+            btnFullscreen.setTextColor(Color.parseColor("#FF5252"))
         } else {
             virtualCursorView.visibility = if (currentNavMode == MODE_POINTER && isTv) View.VISIBLE else View.GONE
-            // osdTopBar (mode badge) stays hidden - it used to sit top-right, the same corner
-            // sites put their own search icon in, and covered it. See onCreate.
             btnFullscreen.text = "⛶ Fullscreen"
-            btnFullscreen.setTextColor(android.graphics.Color.parseColor("#FFD600"))
-            enableImmersiveMode()
+            btnFullscreen.setTextColor(Color.parseColor("#FFD600"))
         }
+        enableImmersiveMode()
     }
 
+    // Requests the page to enter/exit fullscreen via the bridge - the actual state change (and
+    // all UI/orientation updates above) only happens once ContentDelegate.onFullScreen confirms
+    // it really did, so this is a request, not an immediate state flip.
     fun setPlayerFullscreen(enabled: Boolean) {
-        isPlayerFullscreen = enabled
-        if (!isTv) {
-            requestedOrientation = if (enabled) {
-                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-            } else {
-                ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-            }
-        }
-        runOnUiThread {
-            if (enabled) {
-                closeSidebar()
-            }
-            webView.evaluateJavascript("if (window.expandPlayerFullscreen) window.expandPlayerFullscreen($enabled);", null)
-            if (enabled) {
-                btnFullscreen.text = "✖ Exit Fullscreen"
-                btnFullscreen.setTextColor(android.graphics.Color.parseColor("#FF5252"))
-                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                enableImmersiveMode()
-                Toast.makeText(this, "⛶ Fullscreen Active (Press BACK to exit)", Toast.LENGTH_SHORT).show()
-                // Auto-play the video if paused / waiting on overlay play button
-                handler.postDelayed({
-                    playVideo()
-                }, 300L)
-            } else {
-                btnFullscreen.text = "⛶ Fullscreen"
-                btnFullscreen.setTextColor(android.graphics.Color.parseColor("#FFD600"))
-                enableImmersiveMode()
-            }
+        bridgePort?.postMessage(JSONObject().apply {
+            put("type", "anime-set-fullscreen")
+            put("enabled", enabled)
+        })
+        if (enabled) {
+            Toast.makeText(this, "⛶ Fullscreen Active (Press BACK to exit)", Toast.LENGTH_SHORT).show()
+            handler.postDelayed({ playVideo() }, 300L)
         }
     }
 
@@ -615,37 +645,19 @@ class MainActivity : AppCompatActivity() {
     private fun toggleNavigationMode() {
         currentNavMode = if (currentNavMode == MODE_POINTER) MODE_SCROLL else MODE_POINTER
         virtualCursorView.isDirectScrollMode = (currentNavMode == MODE_SCROLL)
-        // The reticle stays visible in both modes now - Scroll Mode still needs it as a click
-        // target (LEFT/RIGHT glide it sideways, OK clicks), UP/DOWN just also scrolls the page.
+        // The reticle stays visible in both modes - Scroll Mode still needs it as a click target
+        // (LEFT/RIGHT glide it sideways, OK clicks), UP/DOWN just also scrolls the page.
         virtualCursorView.isCursorVisible = true
         if (currentNavMode == MODE_POINTER) {
             txtNavModeBadge.text = "🖱️ Pointer Mode"
-            txtNavModeBadge.setTextColor(android.graphics.Color.parseColor("#E0AAFF"))
+            txtNavModeBadge.setTextColor(Color.parseColor("#E0AAFF"))
             Toast.makeText(this, "Pointer Mode: D-Pad glides cursor, OK clicks", Toast.LENGTH_SHORT).show()
         } else {
             txtNavModeBadge.text = "📜 Scroll Mode"
-            txtNavModeBadge.setTextColor(android.graphics.Color.parseColor("#80D8FF"))
+            txtNavModeBadge.setTextColor(Color.parseColor("#80D8FF"))
             Toast.makeText(this, "Scroll Mode: UP/DOWN scrolls, LEFT/RIGHT moves the click reticle, OK clicks", Toast.LENGTH_SHORT).show()
         }
         scheduleGuideDismiss()
-    }
-
-    inner class WebAppInterface {
-        @android.webkit.JavascriptInterface
-        fun onVideoPlayDetected() {
-            runOnUiThread {
-                if (!isPlayerFullscreen && !webChromeClient.isFullscreen) {
-                    setPlayerFullscreen(true)
-                }
-            }
-        }
-
-        @android.webkit.JavascriptInterface
-        fun onPlayerDoubleTap() {
-            runOnUiThread {
-                togglePlayerFullscreen()
-            }
-        }
     }
 
     /**
@@ -656,50 +668,39 @@ class MainActivity : AppCompatActivity() {
         val isUp = event.action == KeyEvent.ACTION_UP
 
         // ── FULLSCREEN VIDEO REMOTE CONTROLS ────────────────────────────────
-        if (webChromeClient.isFullscreen || isPlayerFullscreen) {
+        if (isPlayerFullscreen) {
             when (event.keyCode) {
-                // Exit fullscreen
                 KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_BUTTON_B -> {
-                    if (isUp) {
-                        if (webChromeClient.isFullscreen) {
-                            webChromeClient.onHideCustomView()
-                        }
-                        if (isPlayerFullscreen) {
-                            setPlayerFullscreen(false)
-                        }
-                    }
+                    if (isUp) geckoSession.exitFullScreen()
                     return true
                 }
 
-                // Explicit Pause
                 KeyEvent.KEYCODE_MEDIA_PAUSE -> {
-                    if (isUp) {
-                        pauseVideo()
-                    }
+                    if (isUp) pauseVideo()
                     return true
                 }
 
-                // Explicit Play
                 KeyEvent.KEYCODE_MEDIA_PLAY -> {
-                    if (isUp) {
-                        playVideo()
-                    }
+                    if (isUp) playVideo()
                     return true
                 }
 
-                // Play / Pause toggle
+                // Single OK toggles play/pause; a second OK within DOUBLE_OK_INTERVAL_MS instead
+                // exits fullscreen (suppressing the toggle, so it doesn't also flicker play/pause).
                 KeyEvent.KEYCODE_DPAD_CENTER,
                 KeyEvent.KEYCODE_ENTER,
                 KeyEvent.KEYCODE_NUMPAD_ENTER,
                 KeyEvent.KEYCODE_BUTTON_A,
                 KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
                     if (isUp) {
-                        toggleVideoPlayback()
+                        val now = System.currentTimeMillis()
+                        val isDoubleOk = now - lastOkUpTime < DOUBLE_OK_INTERVAL_MS
+                        lastOkUpTime = now
+                        if (isDoubleOk) geckoSession.exitFullScreen() else toggleVideoPlayback()
                     }
                     return true
                 }
 
-                // Fast forward 10 seconds
                 KeyEvent.KEYCODE_DPAD_RIGHT,
                 KeyEvent.KEYCODE_MEDIA_FAST_FORWARD,
                 KeyEvent.KEYCODE_MEDIA_STEP_FORWARD,
@@ -711,7 +712,6 @@ class MainActivity : AppCompatActivity() {
                     return true
                 }
 
-                // Rewind 10 seconds
                 KeyEvent.KEYCODE_DPAD_LEFT,
                 KeyEvent.KEYCODE_MEDIA_REWIND,
                 KeyEvent.KEYCODE_MEDIA_STEP_BACKWARD,
@@ -723,7 +723,6 @@ class MainActivity : AppCompatActivity() {
                     return true
                 }
 
-                // Skip Intro (+85 seconds, standard anime opening duration)
                 KeyEvent.KEYCODE_DPAD_UP -> {
                     if (isUp) {
                         seekVideo(85)
@@ -732,7 +731,6 @@ class MainActivity : AppCompatActivity() {
                     return true
                 }
 
-                // Rewind 30 seconds
                 KeyEvent.KEYCODE_DPAD_DOWN -> {
                     if (isUp) {
                         seekVideo(-30)
@@ -741,19 +739,13 @@ class MainActivity : AppCompatActivity() {
                     return true
                 }
 
-                // Next Episode shortcut
                 KeyEvent.KEYCODE_MEDIA_NEXT -> {
-                    if (isUp) {
-                        triggerNextEpisode()
-                    }
+                    if (isUp) triggerNextEpisode()
                     return true
                 }
 
-                // Previous Episode shortcut
                 KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
-                    if (isUp) {
-                        triggerPreviousEpisode()
-                    }
+                    if (isUp) triggerPreviousEpisode()
                     return true
                 }
             }
@@ -762,48 +754,36 @@ class MainActivity : AppCompatActivity() {
 
         // ── BROWSING MODE REMOTE CONTROLS ──────────────────────────────────
         when (event.keyCode) {
-            // Mode / Settings sidebar toggle button (Menu, Info, Guide, Settings, or Gamepad Y)
             KeyEvent.KEYCODE_MENU,
             KeyEvent.KEYCODE_INFO,
             KeyEvent.KEYCODE_GUIDE,
             KeyEvent.KEYCODE_SETTINGS,
             KeyEvent.KEYCODE_BUTTON_Y -> {
-                if (isUp) {
-                    toggleSidebar()
-                }
+                if (isUp) toggleSidebar()
                 return true
             }
 
-            // Quick Play/Pause keys when browsing
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
-                if (isUp) {
-                    toggleVideoPlayback()
-                }
+                if (isUp) toggleVideoPlayback()
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_PLAY -> {
-                if (isUp) {
-                    playVideo()
-                }
+                if (isUp) playVideo()
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_PAUSE -> {
-                if (isUp) {
-                    pauseVideo()
-                }
+                if (isUp) pauseVideo()
                 return true
             }
 
-            // D-Pad Directions
             KeyEvent.KEYCODE_DPAD_UP,
             KeyEvent.KEYCODE_DPAD_DOWN,
             KeyEvent.KEYCODE_DPAD_LEFT,
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
                 // While the sidebar is open, UP/DOWN move real logical focus between its items
                 // instead of gliding the cursor - see openSidebar(). Since the cursor never moves
-                // in here, it can never reach the "push it past the right edge" gesture that used
-                // to close the drawer - RIGHT instead directly closes it, standing in for that
-                // gesture (mirrors the touch swipe-away/BACK closing methods).
+                // in here, RIGHT directly closes the drawer, standing in for the "push it past
+                // the right edge" gesture that closes it everywhere else.
                 if (isSidebarOpen) {
                     if (isDown) {
                         when (event.keyCode) {
@@ -824,8 +804,9 @@ class MainActivity : AppCompatActivity() {
                 return true
             }
 
-            // D-Pad OK / Center Click - dispatches a click at the reticle position in both modes;
-            // in Scroll Mode that reticle is moved with LEFT/RIGHT (see VirtualCursorView).
+            // D-Pad OK / Center Click - single press selects/clicks at the reticle position; a
+            // second press within DOUBLE_OK_INTERVAL_MS instead toggles fullscreen (suppressing
+            // the click, so it doesn't also fire on whatever's under the reticle).
             KeyEvent.KEYCODE_DPAD_CENTER,
             KeyEvent.KEYCODE_ENTER,
             KeyEvent.KEYCODE_NUMPAD_ENTER,
@@ -837,23 +818,26 @@ class MainActivity : AppCompatActivity() {
                     return true
                 }
                 if (isUp) {
-                    scheduleGuideDismiss()
-                    virtualCursorView.dispatchClick(webView)
+                    val now = System.currentTimeMillis()
+                    val isDoubleOk = now - lastOkUpTime < DOUBLE_OK_INTERVAL_MS
+                    lastOkUpTime = now
+                    if (isDoubleOk) {
+                        togglePlayerFullscreen()
+                    } else {
+                        scheduleGuideDismiss()
+                        virtualCursorView.dispatchClick(geckoView)
+                    }
                 }
                 return true
             }
 
-            // Back button
             KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_BUTTON_B -> {
                 if (isUp) {
                     if (isSidebarOpen) {
                         closeSidebar()
                         return true
-                    } else if (isPlayerFullscreen) {
-                        setPlayerFullscreen(false)
-                        return true
-                    } else if (webView.canGoBack()) {
-                        webView.goBack()
+                    } else if (canGoBackFlag) {
+                        geckoSession.goBack()
                         return true
                     } else {
                         val now = System.currentTimeMillis()
@@ -873,23 +857,6 @@ class MainActivity : AppCompatActivity() {
         return super.dispatchKeyEvent(event)
     }
 
-    /**
-     * Handle trackpad and air-mouse motion from Google TV remotes and remote mobile apps.
-     */
-    override fun onGenericMotionEvent(event: MotionEvent?): Boolean {
-        if (event != null && event.action == MotionEvent.ACTION_SCROLL) {
-            val vScroll = event.getAxisValue(MotionEvent.AXIS_VSCROLL)
-            val hScroll = event.getAxisValue(MotionEvent.AXIS_HSCROLL)
-            if (vScroll != 0f || hScroll != 0f) {
-                val scrollFactor = 60 * resources.displayMetrics.density
-                webView.scrollBy((-hScroll * scrollFactor).toInt(), (-vScroll * scrollFactor).toInt())
-                return true
-            }
-        }
-        return super.onGenericMotionEvent(event)
-    }
-
-
     private var touchStartX = 0f
     private var touchStartY = 0f
     private var isSwipeConsumed = false
@@ -903,16 +870,16 @@ class MainActivity : AppCompatActivity() {
                     touchStartY = ev.rawY
                     isSwipeConsumed = false
 
-                    // If sidebar is open and user taps outside the drawer (x > 310dp), close drawer immediately
                     if (isSidebarOpen && ev.rawX > 310f * density) {
                         closeSidebar()
                         return true
                     }
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    // Trigger sidebar open on a rightward swipe starting right at the screen's left edge -
-                    // this is the ONLY way to open it on touch; there is no persistent button.
-                    if (!isSwipeConsumed && !isSidebarOpen && !isPlayerFullscreen && !webChromeClient.isFullscreen) {
+                    // Trigger sidebar open on a rightward swipe starting right at the screen's
+                    // left edge - this is the ONLY way to open it on touch; there is no
+                    // persistent button.
+                    if (!isSwipeConsumed && !isSidebarOpen && !isPlayerFullscreen) {
                         val deltaX = ev.rawX - touchStartX
                         val deltaY = Math.abs(ev.rawY - touchStartY)
                         if (touchStartX < 24f * density && deltaX > 20f * density && deltaY < 80f * density) {
@@ -936,111 +903,19 @@ class MainActivity : AppCompatActivity() {
         return super.dispatchTouchEvent(ev)
     }
 
-    private fun sendPlayerCommand(action: String, seconds: Int = 0) {
-        val js = """
-            (function() {
-                var payload = { action: '$action', seconds: $seconds };
-                
-                // 1. Broadcast to all iframes
-                var iframes = document.querySelectorAll('iframe');
-                for (var i = 0; i < iframes.length; i++) {
-                    try {
-                        iframes[i].contentWindow.postMessage(payload, '*');
-                    } catch(e) {}
-                }
-                
-                // 2. Control top-level video elements if any
-                var videos = document.querySelectorAll('video');
-                for (var j = 0; j < videos.length; j++) {
-                    var v = videos[j];
-                    try {
-                        if ('$action' === 'toggle') {
-                            if (v.paused) v.play(); else v.pause();
-                        } else if ('$action' === 'play') {
-                            if (v.paused) v.play();
-                        } else if ('$action' === 'pause') {
-                            if (!v.paused) v.pause();
-                        } else if ('$action' === 'seek') {
-                            v.currentTime = Math.max(0, v.currentTime + $seconds);
-                        }
-                    } catch(e) {}
-                }
-            })();
-        """.trimIndent()
-        webView.evaluateJavascript(js, null)
-    }
-
-    private fun toggleVideoPlayback() {
-        sendPlayerCommand("toggle")
-    }
-
-    private fun playVideo() {
-        sendPlayerCommand("play")
-    }
-
-    private fun pauseVideo() {
-        sendPlayerCommand("pause")
-        Toast.makeText(this, "⏸️ Paused", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun seekVideo(seconds: Int) {
-        sendPlayerCommand("seek", seconds)
-    }
-
-    private fun triggerNextEpisode() {
-        val js = """
-            (function() {
-                var nextBtn = document.querySelector('.next-episode, .btn-next, a[rel="next"], .naveps .next, a.next');
-                if (nextBtn) {
-                    nextBtn.click();
-                    return true;
-                }
-                return false;
-            })();
-        """.trimIndent()
-        webView.evaluateJavascript(js) { res ->
-            if (res == "true") {
-                Toast.makeText(this, "⏭️ Next Episode...", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    private fun triggerPreviousEpisode() {
-        val js = """
-            (function() {
-                var prevBtn = document.querySelector('.prev-episode, .btn-prev, a[rel="prev"], .naveps .prev, a.prev');
-                if (prevBtn) {
-                    prevBtn.click();
-                    return true;
-                }
-                return false;
-            })();
-        """.trimIndent()
-        webView.evaluateJavascript(js) { res ->
-            if (res == "true") {
-                Toast.makeText(this, "⏮️ Previous Episode...", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        webView.saveState(outState)
-    }
-
     override fun onResume() {
         super.onResume()
-        webView.onResume()
+        if (::geckoSession.isInitialized) geckoSession.setActive(true)
         enableImmersiveMode()
     }
 
     override fun onPause() {
         super.onPause()
-        webView.onPause()
+        if (::geckoSession.isInitialized) geckoSession.setActive(false)
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        webView.destroy()
+        if (::geckoSession.isInitialized) geckoSession.close()
     }
 }

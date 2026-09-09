@@ -6,24 +6,14 @@
     android:background="#000000"
     android:focusable="false">
 
-    <!-- Primary TV WebView -->
-    <WebView
+    <!-- Primary TV browsing engine -->
+    <org.mozilla.geckoview.GeckoView
         android:id="@+id/webView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="#000000"
         android:scrollbars="none"
         android:overScrollMode="never"
-        android:focusable="true"
-        android:focusableInTouchMode="true" />
-
-    <!-- Fullscreen Video Container (For WebChromeClient HTML5 Video) -->
-    <FrameLayout
-        android:id="@+id/videoContainer"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="#000000"
-        android:visibility="gone"
         android:focusable="true"
         android:focusableInTouchMode="true" />
 
@@ -91,75 +81,7 @@
                     android:layout_marginVertical="14dp"
                     android:background="#3D2660" />
 
-                <!-- Quick Settings -->
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="QUICK SETTINGS"
-                    android:textColor="#C77DFF"
-                    android:textSize="11sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.08" />
-
-                <!-- Fullscreen Toggle -->
-                <TextView
-                    android:id="@+id/btnSidebarFullscreen"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:background="@drawable/bg_sidebar_item"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:focusableInTouchMode="true"
-                    android:paddingHorizontal="14dp"
-                    android:paddingVertical="12dp"
-                    android:text="⛶  Toggle Fullscreen"
-                    android:textColor="#FFD600"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
-
-                <!-- AdBlocker Toggle -->
-                <TextView
-                    android:id="@+id/btnSidebarAdBlock"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:background="@drawable/bg_sidebar_item"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:focusableInTouchMode="true"
-                    android:paddingHorizontal="14dp"
-                    android:paddingVertical="12dp"
-                    android:text="🛡️  AdBlocker: ON"
-                    android:textColor="#00E676"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
-
-                <!-- Pointer Mode / Scroll Mode Toggle -->
-                <TextView
-                    android:id="@+id/btnSidebarMode"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:background="@drawable/bg_sidebar_item"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:focusableInTouchMode="true"
-                    android:paddingHorizontal="14dp"
-                    android:paddingVertical="12dp"
-                    android:text="🖱️  Mode: Pointer"
-                    android:textColor="#E0AAFF"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
-
-                <!-- Divider -->
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginVertical="14dp"
-                    android:background="#3D2660" />
-
-                <!-- Anime Sources -->
+                <!-- Anime Sources - listed first, this is what you actually came here for -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -215,7 +137,7 @@
                     android:focusableInTouchMode="true"
                     android:paddingHorizontal="14dp"
                     android:paddingVertical="12dp"
-                    android:text="○  SoloLatino (Español)"
+                    android:text="○  SoloAnime ES"
                     android:textColor="#F0F0FF"
                     android:textSize="14sp"
                     android:textStyle="bold" />
@@ -232,7 +154,7 @@
                     android:focusableInTouchMode="true"
                     android:paddingHorizontal="14dp"
                     android:paddingVertical="12dp"
-                    android:text="○  SoloLatino (Inicio)"
+                    android:text="○  SoloStream ES"
                     android:textColor="#F0F0FF"
                     android:textSize="14sp"
                     android:textStyle="bold" />
@@ -285,6 +207,57 @@
                     android:paddingVertical="12dp"
                     android:text="○  JKAnime (Español)"
                     android:textColor="#F0F0FF"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <!-- Divider -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginVertical="14dp"
+                    android:background="#3D2660" />
+
+                <!-- Settings - de-emphasized at the bottom, below the sources you actually want -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="SETTINGS"
+                    android:textColor="#C77DFF"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.08" />
+
+                <!-- Fullscreen Toggle -->
+                <TextView
+                    android:id="@+id/btnSidebarFullscreen"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_sidebar_item"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="12dp"
+                    android:text="⛶  Toggle Fullscreen"
+                    android:textColor="#FFD600"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <!-- Pointer Mode / Scroll Mode Toggle -->
+                <TextView
+                    android:id="@+id/btnSidebarMode"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_sidebar_item"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="12dp"
+                    android:text="📜  Mode: Scroll"
+                    android:textColor="#00E676"
                     android:textSize="14sp"
                     android:textStyle="bold" />
 
@@ -393,26 +366,14 @@
             android:clickable="true"
             android:focusable="true" />
 
-        <!-- AdBlock Shield Badge -->
-        <TextView
-            android:id="@+id/txtAdBlockBadge"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="10dp"
-            android:background="@drawable/bg_osd_badge"
-            android:text="🛡️ AdBlock ON (0)"
-            android:textColor="#00E676"
-            android:textSize="13sp"
-            android:textStyle="bold" />
-
         <!-- Navigation Mode Badge -->
         <TextView
             android:id="@+id/txtNavModeBadge"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:background="@drawable/bg_osd_badge"
-            android:text="🖱️ Pointer Mode"
-            android:textColor="#E0AAFF"
+            android:text="📜 Scroll Mode"
+            android:textColor="#80D8FF"
             android:textSize="13sp"
             android:textStyle="bold" />
     </LinearLayout>
@@ -434,7 +395,7 @@
             android:id="@+id/txtGuideText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="🎮 D-Pad: Move Pointer  •  Left Edge / [MENU]: Settings  •  OK: Click  •  [BACK]: Back"
+            android:text="🎮 D-Pad: Scroll  •  Left Edge / [MENU]: Settings  •  OK: Click  •  [BACK]: Back"
             android:textColor="#F0F0FF"
             android:textSize="12sp" />
     </LinearLayout>

@@ -1,0 +1,27 @@
+{
+  "manifest_version": 2,
+  "name": "Anime TV Page Patches",
+  "version": "1.0",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "patches@animetv.app"
+    }
+  },
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "permissions": [
+    "nativeMessaging",
+    "geckoViewAddons",
+    "<all_urls>"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content_script.js"],
+      "css": ["fixes.css"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ]
+}

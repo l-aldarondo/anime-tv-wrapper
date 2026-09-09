@@ -12,6 +12,9 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.animation.DecelerateInterpolator
+import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.PanZoomController
+import org.mozilla.geckoview.ScreenLength
 
 /**
  * High-performance virtual pointer overlay for Google TV & Android TV remotes.
@@ -36,7 +39,39 @@ class VirtualCursorView @JvmOverloads constructor(
             invalidate()
         }
 
+    // The View synthetic clicks are dispatched to (see dispatchClick) - a plain View works fine
+    // for this, GeckoView needs no special entry point (dispatchTouchEvent isn't overridden by
+    // it, confirmed against the pinned engine version).
     var targetView: View? = null
+
+    // GeckoView doesn't scroll via the standard View.scrollBy() offset mechanism the way WebView
+    // did (it renders/scrolls through its own compositor) - programmatic scroll goes through this
+    // instead. Set once the session is opened (see MainActivity).
+    var geckoSession: GeckoSession? = null
+
+    // Each scrollBy() call is a Binder IPC round-trip into the Gecko process - calling it every
+    // Choreographer frame (60-120Hz) was confirmed on-device to accumulate enough outstanding
+    // Binder objects to trip Android's "sent too many Binders" protection and have the whole app
+    // killed by the system after a few seconds of held-key scrolling. Coalesce frames' worth of
+    // delta into one flush at a capped rate instead - well below what's needed for scrolling to
+    // still look and feel continuous.
+    private var pendingScrollPx = 0
+    private var lastScrollFlushNanos = 0L
+    private val minScrollFlushIntervalNanos = 33_000_000L // ~30Hz cap on scroll IPC calls
+
+    private fun scrollTargetBy(px: Int, frameTimeNanos: Long) {
+        pendingScrollPx += px
+        if (lastScrollFlushNanos != 0L && frameTimeNanos - lastScrollFlushNanos < minScrollFlushIntervalNanos) return
+        lastScrollFlushNanos = frameTimeNanos
+        val flush = pendingScrollPx
+        pendingScrollPx = 0
+        if (flush == 0) return
+        geckoSession?.panZoomController?.scrollBy(
+            ScreenLength.zero(),
+            ScreenLength.fromPixels(flush.toDouble()),
+            PanZoomController.SCROLL_BEHAVIOR_AUTO
+        )
+    }
 
     private val density = resources.displayMetrics.density
     private val baseRadius = 14f * density
@@ -150,6 +185,7 @@ class VirtualCursorView @JvmOverloads constructor(
             targetVx = 0f
             targetVy = 0f
             directScrollVy = 0f
+            lastScrollFlushNanos = 0L
             return
         }
 
@@ -204,12 +240,11 @@ class VirtualCursorView @JvmOverloads constructor(
             }
 
             if (isDirectScrollMode) {
-                val target = targetView
-                if (target != null && directScrollVy != 0f) {
+                if (directScrollVy != 0f) {
                     directScrollAccumulatorY += directScrollVy * dt
                     val px = directScrollAccumulatorY.toInt()
                     if (px != 0) {
-                        target.scrollBy(0, px)
+                        scrollTargetBy(px, frameTimeNanos)
                         directScrollAccumulatorY -= px
                     }
                 }
@@ -258,9 +293,8 @@ class VirtualCursorView @JvmOverloads constructor(
                 // edge zone (e.g. while lining up a click near the top/bottom of the page) kept the
                 // page scrolling by itself indefinitely, with no key pressed and no way to stop it
                 // short of moving the cursor back out of the zone.
-                val target = targetView
                 val anyHeld = upHeld || downHeld || leftHeld || rightHeld
-                if (target != null && height > 0 && width > 0 && isCursorVisible && anyHeld) {
+                if (height > 0 && width > 0 && isCursorVisible && anyHeld) {
                     val edgeZone = 90f * density
                     var scrollRate = 0f
 
@@ -276,7 +310,7 @@ class VirtualCursorView @JvmOverloads constructor(
                         scrollAccumulatorY += scrollRate * dt
                         val scrollPixels = scrollAccumulatorY.toInt()
                         if (scrollPixels != 0) {
-                            target.scrollBy(0, scrollPixels)
+                            scrollTargetBy(scrollPixels, frameTimeNanos)
                             scrollAccumulatorY -= scrollPixels
                         }
                     } else {
@@ -291,7 +325,8 @@ class VirtualCursorView @JvmOverloads constructor(
     }
 
     /**
-     * Dispatch touch event at current cursor position to simulate remote click on WebView.
+     * Dispatch touch event at current cursor position to simulate a remote click on the target
+     * view (the GeckoView).
      */
     fun dispatchClick(target: View) {
         val now = SystemClock.uptimeMillis()

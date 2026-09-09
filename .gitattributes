@@ -1,0 +1,6 @@
+# The bundled uBlock Origin extension (app/src/main/assets/ublock_origin/) is a vendored,
+# unmodified third-party tree that includes signature/integrity manifests
+# (META-INF/mozilla.sf, cose.manifest) - treat it as binary so Git never rewrites line endings
+# in it on checkout (e.g. LF -> CRLF on Windows), which could otherwise corrupt those manifests
+# or any file whose exact bytes the extension loader/signature check might care about.
+app/src/main/assets/ublock_origin/** -text

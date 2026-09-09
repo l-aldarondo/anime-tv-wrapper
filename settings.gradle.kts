@@ -22,6 +22,8 @@ dependencyResolutionManagement {
             }
         }
         mavenCentral()
+        // Mozilla's Maven repository, required for GeckoView
+        maven { url = uri("https://maven.mozilla.org/maven2/") }
     }
 }
 

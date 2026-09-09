@@ -1,0 +1,123 @@
+/* Site-structural presentation fixes - NOT ad-hiding (uBlock Origin's own filter lists and
+   cosmetic filtering already do a much better job of that than a hand-rolled selector list
+   ever could). Applied to every frame; selectors simply match nothing where irrelevant. */
+
+/* Hide all scrollbars and scroll indicators - this is a TV app with no visible chrome for them */
+::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
+}
+* {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+}
+html, body {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+    touch-action: manipulation !important;
+}
+
+/* Hide the 'Watch Now' featured carousel/slider on the main page (9anime and gogoanime) */
+.deslide-wrap, #slider, .swiper-container#slider, .deslide-item, .top-slider,
+div[class*="deslide"], .slidtop, .slidtop * {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    max-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+/* Hide the '9anime is back' domain notice banner and similar announcements */
+.ts-announcement, .ts-announcement-general, div[class*="ts-announcement"],
+div[class*="announcement"], .notice-bar, .domain-alert, #notice {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    max-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+/* Ensure player containers and embed iframes are ALWAYS visible, sized, and interactive */
+.wb_-playerarea, .player-embed, #player, #player-container, .player-wrap, .video-content,
+#main-player-wrap, #player-frame, #player-section, .mg-3mb3d, .mg3-player, #megaplay-player,
+.azaku-player-container {
+    width: 100% !important;
+    aspect-ratio: 16 / 9 !important;
+    min-height: 240px !important;
+    background: #000000 !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+#player-embed, .player-embed, .player-wrap, #player-container, #main-player-wrap, #player-frame,
+.mg-3mb3d, .mg3-player, #megaplay-player, .azaku-player-container {
+    position: relative !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 240px !important;
+    opacity: 1 !important;
+}
+
+#modal.modal-vast, .modal-vast, .download-panel, .tutorial-overlay, #decryptionLoader, .server-toast,
+#auth-modal, .auth-modal, .modal-auth, .auth-modal__backdrop {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    pointer-events: none !important;
+}
+
+iframe#iframe-embed, iframe.player-iframe, .player-embed iframe, iframe[src*="player"],
+iframe[src*="embed"], iframe[src*="megaplay"], iframe[src*="mytsumi"], iframe[src*="xupalace"],
+iframe[src*="options.php"], iframe[src*="contenedor.php"], iframe#iframePlayer,
+iframe.player_conte, iframe[src*="jkplayer"] {
+    display: block !important;
+    visibility: visible !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 240px !important;
+    border: 0 !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}
+
+/* Dedicated fullscreen player expansion, toggled via expandPlayerFullscreen() (content_script.js) */
+.animetv-fullscreen-wrap {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: 2147483647 !important;
+    background: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+.animetv-fullscreen-wrap .wb_-playerarea,
+.animetv-fullscreen-wrap .player-embed,
+.animetv-fullscreen-wrap #player-embed,
+.animetv-fullscreen-wrap #player,
+.animetv-fullscreen-wrap #player-container,
+.animetv-fullscreen-wrap .player-wrap,
+.animetv-fullscreen-wrap #main-player-wrap,
+.animetv-fullscreen-wrap #player-frame,
+.animetv-fullscreen-wrap #megaplay-player,
+.animetv-fullscreen-wrap .mg3-player,
+.animetv-fullscreen-wrap .azaku-player-container,
+.animetv-fullscreen-wrap .player_conte,
+.animetv-fullscreen-wrap iframe,
+.animetv-fullscreen-wrap video {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+    border: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
