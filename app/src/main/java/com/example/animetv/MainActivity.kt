@@ -20,6 +20,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.example.animetv.tv.VirtualCursorView
 import org.json.JSONObject
 import org.mozilla.geckoview.AllowOrDeny
+import org.mozilla.geckoview.ContentBlocking
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
@@ -52,6 +53,14 @@ class MainActivity : AppCompatActivity() {
         const val MODE_SCROLL = 1
         private const val BACK_PRESS_INTERVAL = 2000L
         private const val DOUBLE_OK_INTERVAL_MS = 400L
+
+        // Reverse-engineering kill switches used to isolate a playback-breaking layer (see
+        // bootGeckoViewEngine/openGeckoSession) - both OFF here confirmed neither uBlock Origin
+        // nor useTrackingProtection was the cause. The real culprit was GeckoView's cookie
+        // partitioning (Total Cookie Protection), fixed separately below via cookieBehavior.
+        // Left in place, defaulted to false, in case another site needs the same isolation test.
+        private const val DEBUG_DISABLE_UBLOCK = false
+        private const val DEBUG_DISABLE_TRACKING_PROTECTION = false
 
         private const val UBLOCK_EXTENSION_ID = "uBlock0@raymondhill.net"
         private const val UBLOCK_ASSET_PATH = "resource://android/assets/ublock_origin/"
@@ -218,18 +227,34 @@ class MainActivity : AppCompatActivity() {
         // process; getDefault() is the safe choice for an Activity that may be recreated.
         runtime = GeckoRuntime.getDefault(this)
 
+        // GeckoView defaults to cookieBehavior ACCEPT_FIRST_PARTY_AND_ISOLATE_OTHERS ("Total
+        // Cookie Protection" / dynamic First-Party Isolation) - it gives every third-party origin
+        // a separate cookie/storage jar PER top-level site it's embedded in, instead of one
+        // shared jar. Confirmed on-device (via a controlled test with uBlock Origin AND
+        // useTrackingProtection both fully disabled, which made no difference) that this - not
+        // either adblock layer - is what breaks playback on providers whose embed depends on a
+        // normal, unpartitioned third-party session (logcat showed the exact
+        // "Partitioned cookie or storage access was provided to ... third-party context" line for
+        // player.pelisserieshoy.com right where it fails). This is a single-purpose media wrapper
+        // around a small, fixed set of anime-site embeds, not a general browser, so there's no
+        // privacy upside to isolating them from themselves - ACCEPT_ALL matches how a real
+        // desktop browser with no special third-party cookie restrictions behaves for these sites.
+        runtime.settings.contentBlocking.cookieBehavior = ContentBlocking.CookieBehavior.ACCEPT_ALL
+
         // Don't open the session/load the start URL until both extensions below have settled
         // (installed or failed) - otherwise the very first page load could race ahead of
         // uBlock Origin and land completely unprotected.
-        var pendingInstalls = 2
+        var pendingInstalls = if (DEBUG_DISABLE_UBLOCK) 1 else 2
         val onInstallSettled = {
             pendingInstalls--
             if (pendingInstalls == 0) openGeckoSession()
         }
 
-        runtime.webExtensionController
-            .ensureBuiltIn(UBLOCK_ASSET_PATH, UBLOCK_EXTENSION_ID)
-            .accept({ onInstallSettled() }, { onInstallSettled() })
+        if (!DEBUG_DISABLE_UBLOCK) {
+            runtime.webExtensionController
+                .ensureBuiltIn(UBLOCK_ASSET_PATH, UBLOCK_EXTENSION_ID)
+                .accept({ onInstallSettled() }, { onInstallSettled() })
+        }
 
         runtime.webExtensionController
             .ensureBuiltIn(PATCHES_ASSET_PATH, PATCHES_EXTENSION_ID)
@@ -245,7 +270,7 @@ class MainActivity : AppCompatActivity() {
     private fun openGeckoSession() {
         val settingsBuilder = GeckoSessionSettings.Builder()
             .allowJavascript(true)
-            .useTrackingProtection(true)
+            .useTrackingProtection(!DEBUG_DISABLE_TRACKING_PROTECTION)
         if (isTv) {
             // Desktop/TV Chrome UA for a proper 16:9 widescreen layout instead of a mobile one.
             settingsBuilder.userAgentOverride(
