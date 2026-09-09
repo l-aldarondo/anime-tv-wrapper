@@ -327,6 +327,48 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+
+        // Unlike WebView, GeckoView shows nothing at all for a plain HTML <select> unless the
+        // embedder implements this - onChoicePrompt is a `default` (no-op) method on the
+        // interface, so the app compiled fine without it but every dropdown (e.g. this site's
+        // season/"temporada" picker) silently did nothing when tapped.
+        session.promptDelegate = object : GeckoSession.PromptDelegate {
+            override fun onChoicePrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.ChoicePrompt
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+                val choices = prompt.choices
+                val labels = choices.map { it.label }.toTypedArray()
+                val isMultiple = prompt.type == GeckoSession.PromptDelegate.ChoicePrompt.Type.MULTIPLE
+
+                val builder = android.app.AlertDialog.Builder(this@MainActivity)
+                    .setTitle(prompt.title)
+                    .setOnCancelListener { result.complete(prompt.dismiss()) }
+
+                if (isMultiple) {
+                    val checked = choices.map { it.selected }.toBooleanArray()
+                    builder.setMultiChoiceItems(labels, checked) { _, which, isChecked -> checked[which] = isChecked }
+                        .setPositiveButton(android.R.string.ok) { d, _ ->
+                            result.complete(prompt.confirm(choices.filterIndexed { i, _ -> checked[i] }.toTypedArray()))
+                            d.dismiss()
+                        }
+                } else {
+                    builder.setItems(labels) { d, which ->
+                        result.complete(prompt.confirm(choices[which]))
+                        d.dismiss()
+                    }
+                }
+
+                val dialog = builder.create()
+                // A standard AlertDialog's item list is a focusable, D-pad-navigable ListView by
+                // default, but nothing is pre-focused on show - seed focus onto the first row so
+                // a TV remote can immediately navigate it instead of appearing inert.
+                dialog.setOnShowListener { dialog.listView?.requestFocus() }
+                dialog.show()
+                return result
+            }
+        }
     }
 
     // ── Native <-> page WebExtension bridge ──────────────────────────────────
