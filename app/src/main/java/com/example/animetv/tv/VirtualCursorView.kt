@@ -178,6 +178,19 @@ class VirtualCursorView @JvmOverloads constructor(
         updateTargetVelocity()
     }
 
+    // Force-clears any in-progress directional hold. onDpadKey(..., false) is the ONLY other
+    // place that resets upHeld/downHeld/leftHeld/rightHeld, but a hold-triggered focus jump away
+    // from the page (e.g. into the top bar) can swallow that same physical key's eventual release
+    // before it ever reaches onDpadKey again, leaving the flag - and the scroll/glide it drives -
+    // stuck on indefinitely. Call this at the moment focus leaves the page.
+    fun clearHeldKeys() {
+        upHeld = false
+        downHeld = false
+        leftHeld = false
+        rightHeld = false
+        updateTargetVelocity()
+    }
+
     private fun updateTargetVelocity() {
         val anyHeld = upHeld || downHeld || leftHeld || rightHeld
         if (!anyHeld) {

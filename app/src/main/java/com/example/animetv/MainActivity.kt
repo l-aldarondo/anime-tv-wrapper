@@ -8,9 +8,9 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.KeyEvent
-import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -54,6 +54,13 @@ class MainActivity : AppCompatActivity() {
         const val MODE_SCROLL = 1
         private const val BACK_PRESS_INTERVAL = 2000L
         private const val DOUBLE_OK_INTERVAL_MS = 400L
+        // How long a just-pressed top-bar tab stays focused (glowing) after switchSource() fires,
+        // before focus hands off to the page. Without this, moveFocusToPage() ran in the same
+        // frame as the OK press, so a source switch that visibly worked on the first press looked
+        // like it needed a second one - the first press's own visual confirmation had already
+        // vanished before the user could see it, and a hasty second OK landed on the page instead
+        // of the bar (see dispatchKeyEvent's topBar.hasFocus() branch).
+        private const val SOURCE_SWITCH_FOCUS_DELAY_MS = 200L
 
         // Reverse-engineering kill switches used to isolate a playback-breaking layer (see
         // bootGeckoViewEngine/openGeckoSession) - both OFF here confirmed neither uBlock Origin
@@ -134,15 +141,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var geckoSession: GeckoSession
     private lateinit var pageLoadingBar: ProgressBar
     private lateinit var virtualCursorView: VirtualCursorView
-    private lateinit var osdTopBar: View
     private lateinit var osdControlsGuide: View
-    private lateinit var txtNavModeBadge: TextView
-    private lateinit var btnFullscreen: TextView
 
-    // Hidden Sidebar UI elements
-    private lateinit var sidebarDrawer: LinearLayout
-    private lateinit var btnSidebarFullscreen: TextView
-    private lateinit var btnSidebarMode: TextView
+    // Top Bar (sources + settings gear) - a PERSISTENT fixed header, always visible during
+    // normal browsing (see the activity_main.xml LinearLayout wrapper: the bar takes its own
+    // fixed row, GeckoView fills the rest). It has no open/close state of its own - the old
+    // slide-down-overlay design got replaced after real testing showed the same "can't get back
+    // out" problem the original left sidebar had. Only the settings gear's own popup
+    // (settingsPanel) is still a real modal with open/close semantics.
+    private lateinit var topBar: LinearLayout
     private lateinit var btnSource9Anime: TextView
     private lateinit var btnSourceGogoAnime: TextView
     private lateinit var btnSourceSoloLatino: TextView
@@ -150,11 +157,19 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnSourceAnimeFlix: TextView
     private lateinit var btnSourceAnimeYT: TextView
     private lateinit var btnSourceJKAnime: TextView
-    private lateinit var btnSidebarHome: TextView
-    private lateinit var btnSidebarReload: TextView
-    private lateinit var btnSidebarClose: TextView
+    private lateinit var btnTopBarSettings: TextView
+    private lateinit var settingsPanel: LinearLayout
+    private lateinit var btnSettingsFullscreen: TextView
+    private lateinit var btnSettingsMode: TextView
+    private lateinit var btnSettingsHome: TextView
+    private lateinit var btnSettingsReload: TextView
 
-    private var isSidebarOpen = false
+    private var isSettingsPanelOpen = false
+    // Real GeckoView scroll position (GeckoSession.ScrollDelegate, see attachGeckoSessionDelegates)
+    // - not a JS/content-script round trip. Used to decide whether pressing UP at the top of the
+    // page should move focus into the top bar instead of trying to scroll further.
+    private var pageScrollY = 0
+    private val pageIsAtTop: Boolean get() = pageScrollY <= 4
     private var currentSource = SOURCE_9ANIME
     private var currentNavMode = MODE_SCROLL
     private var isPlayerFullscreen = false
@@ -206,7 +221,6 @@ class MainActivity : AppCompatActivity() {
             // On phones with touch screens, hide the virtual D-Pad cursor and TV remote hints
             virtualCursorView.visibility = View.GONE
             osdControlsGuide.visibility = View.GONE
-            txtNavModeBadge.visibility = View.GONE
         }
 
         bootGeckoViewEngine()
@@ -235,15 +249,10 @@ class MainActivity : AppCompatActivity() {
         virtualCursorView = findViewById(R.id.virtualCursorView)
         virtualCursorView.targetView = geckoView
         virtualCursorView.isDirectScrollMode = (currentNavMode == MODE_SCROLL)
-        osdTopBar = findViewById(R.id.osdTopBar)
         osdControlsGuide = findViewById(R.id.osdControlsGuide)
-        txtNavModeBadge = findViewById(R.id.txtNavModeBadge)
-        btnFullscreen = findViewById(R.id.btnFullscreen)
 
-        // Sidebar references
-        sidebarDrawer = findViewById(R.id.sidebarDrawer)
-        btnSidebarFullscreen = findViewById(R.id.btnSidebarFullscreen)
-        btnSidebarMode = findViewById(R.id.btnSidebarMode)
+        // Top bar + settings panel references
+        topBar = findViewById(R.id.topBar)
         btnSource9Anime = findViewById(R.id.btnSource9Anime)
         btnSourceGogoAnime = findViewById(R.id.btnSourceGogoAnime)
         btnSourceSoloLatino = findViewById(R.id.btnSourceSoloLatino)
@@ -251,15 +260,26 @@ class MainActivity : AppCompatActivity() {
         btnSourceAnimeFlix = findViewById(R.id.btnSourceAnimeFlix)
         btnSourceAnimeYT = findViewById(R.id.btnSourceAnimeYT)
         btnSourceJKAnime = findViewById(R.id.btnSourceJKAnime)
-        btnSidebarHome = findViewById(R.id.btnSidebarHome)
-        btnSidebarReload = findViewById(R.id.btnSidebarReload)
-        btnSidebarClose = findViewById(R.id.btnSidebarClose)
+        btnTopBarSettings = findViewById(R.id.btnTopBarSettings)
+        settingsPanel = findViewById(R.id.settingsPanel)
+        btnSettingsFullscreen = findViewById(R.id.btnSettingsFullscreen)
+        btnSettingsMode = findViewById(R.id.btnSettingsMode)
+        btnSettingsHome = findViewById(R.id.btnSettingsHome)
+        btnSettingsReload = findViewById(R.id.btnSettingsReload)
 
-        btnFullscreen.setOnClickListener {
-            togglePlayerFullscreen()
+        // settingsPanel's XML marginTop is only a same-frame fallback (see layout comment) - keep
+        // it pinned to topBar's real measured height so a future topBar padding/text-size change
+        // (e.g. for TV legibility) can't leave a gap or overlap.
+        topBar.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
+            val newHeight = bottom - top
+            if (newHeight > 0 && newHeight != oldBottom - oldTop) {
+                val gapPx = (8 * resources.displayMetrics.density).toInt()
+                (settingsPanel.layoutParams as FrameLayout.LayoutParams).topMargin = newHeight + gapPx
+                settingsPanel.requestLayout()
+            }
         }
 
-        setupSidebar()
+        setupTopBar()
     }
 
     // ── GeckoView engine boot ────────────────────────────────────────────────
@@ -340,10 +360,15 @@ class MainActivity : AppCompatActivity() {
             .allowJavascript(true)
             .useTrackingProtection(!DEBUG_DISABLE_TRACKING_PROTECTION)
         if (isTv) {
-            // Desktop/TV Chrome UA for a proper 16:9 widescreen layout instead of a mobile one.
+            // Desktop/TV Chrome UA for a proper 16:9 widescreen layout instead of a mobile one -
+            // the UA string alone isn't enough, GeckoView still defaults to a mobile CSS viewport
+            // and "request desktop site"-style content adaptations unless these two are also set,
+            // which left sites seeing a "desktop Chrome" UA on a narrow mobile-width viewport.
             settingsBuilder.userAgentOverride(
                 "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 TV/GoogleTV"
             )
+            settingsBuilder.userAgentMode(GeckoSessionSettings.USER_AGENT_MODE_DESKTOP)
+            settingsBuilder.viewportMode(GeckoSessionSettings.VIEWPORT_MODE_DESKTOP)
         } else if (DEBUG_FORCE_DESKTOP_UA) {
             settingsBuilder.userAgentOverride(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0"
@@ -369,10 +394,21 @@ class MainActivity : AppCompatActivity() {
 
         session.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
-                runOnUiThread { pageLoadingBar.visibility = View.GONE }
+                runOnUiThread {
+                    pageLoadingBar.visibility = View.VISIBLE
+                    pageScrollY = 0
+                }
             }
             override fun onPageStop(session: GeckoSession, success: Boolean) {
                 runOnUiThread { pageLoadingBar.visibility = View.GONE }
+            }
+        }
+
+        // Real scroll position from the compositor - used to decide whether UP at the page's
+        // content should move focus into the persistent top bar (see pageIsAtTop, dispatchKeyEvent).
+        session.scrollDelegate = object : GeckoSession.ScrollDelegate {
+            override fun onScrollChanged(session: GeckoSession, scrollX: Int, scrollY: Int) {
+                runOnUiThread { pageScrollY = scrollY }
             }
         }
 
@@ -529,19 +565,23 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, "⏮️ Previous Episode...", Toast.LENGTH_SHORT).show()
     }
 
-    // ── Sidebar ──────────────────────────────────────────────────────────────
+    // ── Top Bar ──────────────────────────────────────────────────────────────
+    // A PERSISTENT fixed header (see activity_main.xml's LinearLayout wrapper: the bar has its
+    // own permanent row, GeckoView fills the rest) - it has no open/close state at all. The
+    // original design was a slide-down overlay toggled by MENU, but on-device use surfaced the
+    // exact same "focus gets in and can't get back out" problem the old left sidebar had, so it
+    // got replaced with something that behaves like an ordinary TV app header (YouTube TV/
+    // Netflix-style): always there, reached by moving focus UP out of the page content once it's
+    // scrolled to the top (see pageIsAtTop, dispatchKeyEvent), and left by moving DOWN back into
+    // the page. It's hidden only during actual fullscreen video playback (see
+    // handleFullscreenChange) to give the video the full screen.
+    //
+    // The one thing about the old sidebar that actually worked reliably - its D-pad focus-list
+    // idiom (indexOfFirst{it.isFocused} + requestFocus() + performClick(), see moveFocusList()
+    // below) - carries over unchanged, just parameterized over two different lists (the bar's
+    // tabs, and the settings popup's items) instead of one.
 
-    private fun setupSidebar() {
-        btnSidebarFullscreen.setOnClickListener {
-            togglePlayerFullscreen()
-            closeSidebar()
-        }
-
-        btnSidebarMode.setOnClickListener {
-            toggleNavigationMode()
-            updateSidebarUi()
-        }
-
+    private fun setupTopBar() {
         btnSource9Anime.setOnClickListener { switchSource(SOURCE_9ANIME) }
         btnSourceGogoAnime.setOnClickListener { switchSource(SOURCE_GOGOANIME) }
         btnSourceSoloLatino.setOnClickListener { switchSource(SOURCE_SOLOLATINO) }
@@ -550,52 +590,64 @@ class MainActivity : AppCompatActivity() {
         btnSourceAnimeYT.setOnClickListener { switchSource(SOURCE_ANIMEYT) }
         btnSourceJKAnime.setOnClickListener { switchSource(SOURCE_JKANIME) }
 
-        btnSidebarHome.setOnClickListener {
+        btnTopBarSettings.setOnClickListener { openSettingsPanel() }
+
+        btnSettingsFullscreen.setOnClickListener {
+            togglePlayerFullscreen()
+            closeSettingsPanel()
+        }
+
+        btnSettingsMode.setOnClickListener {
+            toggleNavigationMode()
+            updateSettingsPanelUi()
+        }
+
+        btnSettingsHome.setOnClickListener {
             geckoSession.loadUri(urlForSource(currentSource))
-            closeSidebar()
+            closeSettingsPanel()
+            moveFocusToPage()
         }
 
-        btnSidebarReload.setOnClickListener {
+        btnSettingsReload.setOnClickListener {
             geckoSession.reload()
-            closeSidebar()
+            closeSettingsPanel()
+            moveFocusToPage()
         }
 
-        btnSidebarClose.setOnClickListener {
-            closeSidebar()
-        }
-
-        // Virtual Cursor edge triggers - works identically in Pointer and Scroll mode (the
-        // reticle moves in both, see VirtualCursorView).
-        virtualCursorView.onLeftEdgeTrigger = {
-            runOnUiThread {
-                if (!isSidebarOpen && !isPlayerFullscreen) {
-                    openSidebar()
-                }
-            }
-        }
-
-        virtualCursorView.onCursorMoved = { x, _ ->
-            if (isSidebarOpen && x > 330f * resources.displayMetrics.density) {
-                runOnUiThread {
-                    closeSidebar()
-                }
-            }
-        }
-
-        updateSidebarUi()
+        updateTopBarUi()
+        updateSettingsPanelUi()
     }
 
-    // Sources first (this is what a user actually wants quick access to), settings/shortcuts
-    // last - see activity_main.xml. Also the D-pad UP/DOWN focus-navigation order.
-    private val sidebarFocusOrder: List<View> by lazy {
+    // Sources in traversal order, left to right, then the settings gear - the D-pad LEFT/RIGHT
+    // focus-navigation order while focus is in the bar (see moveFocusList()).
+    private val topBarFocusOrder: List<View> by lazy {
         listOf(
-            btnSource9Anime, btnSourceGogoAnime, btnSourceSoloLatino, btnSourceSoloLatinoHome, btnSourceAnimeFlix, btnSourceAnimeYT, btnSourceJKAnime,
-            btnSidebarFullscreen, btnSidebarMode, btnSidebarHome, btnSidebarReload, btnSidebarClose
+            btnSource9Anime, btnSourceGogoAnime, btnSourceSoloLatino, btnSourceSoloLatinoHome,
+            btnSourceAnimeFlix, btnSourceAnimeYT, btnSourceJKAnime, btnTopBarSettings
         )
     }
 
-    private fun moveSidebarFocus(forward: Boolean) {
-        val order = sidebarFocusOrder
+    // The settings popup's own D-pad UP/DOWN focus-navigation order.
+    private val settingsPanelFocusOrder: List<View> by lazy {
+        listOf(btnSettingsFullscreen, btnSettingsMode, btnSettingsHome, btnSettingsReload)
+    }
+
+    // Used by moveFocusToTopBar()'s fallback so landing in the bar with nothing already focused
+    // (the common case - UP-at-top or MENU from the page) lands on the CURRENT source's tab
+    // (matching the ● highlight updateTopBarUi() already renders) instead of always the first tab.
+    private val sourceButtonMap: Map<String, View> by lazy {
+        mapOf(
+            SOURCE_9ANIME to btnSource9Anime,
+            SOURCE_GOGOANIME to btnSourceGogoAnime,
+            SOURCE_SOLOLATINO to btnSourceSoloLatino,
+            SOURCE_SOLOLATINO_HOME to btnSourceSoloLatinoHome,
+            SOURCE_ANIMEFLIX to btnSourceAnimeFlix,
+            SOURCE_ANIMEYT to btnSourceAnimeYT,
+            SOURCE_JKANIME to btnSourceJKAnime
+        )
+    }
+
+    private fun moveFocusList(order: List<View>, forward: Boolean) {
         val currentIndex = order.indexOfFirst { it.isFocused }
         val nextIndex = when {
             currentIndex == -1 -> 0
@@ -605,62 +657,54 @@ class MainActivity : AppCompatActivity() {
         order[nextIndex].requestFocus()
     }
 
-    private fun openSidebar() {
-        if (isSidebarOpen || isPlayerFullscreen) return
-        isSidebarOpen = true
-        val density = resources.displayMetrics.density
-        val startX = -sidebarDrawer.width.toFloat().let { if (it <= 0f) -330f * density else -it }
-        sidebarDrawer.translationX = startX
-        sidebarDrawer.visibility = View.VISIBLE
-        sidebarDrawer.animate()
-            .translationX(0f)
-            .setDuration(220)
-            .setInterpolator(android.view.animation.DecelerateInterpolator())
-            .start()
-
-        updateSidebarUi()
-
+    // Moves real Android focus into the persistent bar - from the page (UP at the top of scroll,
+    // or MENU as a direct shortcut from anywhere) or back from the settings popup.
+    private fun moveFocusToTopBar() {
+        if (isPlayerFullscreen) return
+        // A stale timestamp left over from before this transition must never let an unrelated
+        // later OK press in the bar coincidentally read as a "double OK" and toggle fullscreen.
+        lastOkUpTime = 0L
         virtualCursorView.isCursorVisible = false
-        sidebarFocusOrder.firstOrNull()?.requestFocus()
+        // A direction key held down at the moment focus jumps to the bar (e.g. UP, right as
+        // pageIsAtTop trips) can have its eventual key-up swallowed by this same transition -
+        // onDpadKey(..., false) is the only other place that clears held state, so force it here
+        // too, or the page could keep silently auto-scrolling/gliding after focus has moved on.
+        virtualCursorView.clearHeldKeys()
+        val target = topBarFocusOrder.firstOrNull { it.isFocused }
+            ?: sourceButtonMap[currentSource]
+            ?: topBarFocusOrder.firstOrNull()
+        target?.requestFocus()
     }
 
-    private fun closeSidebar() {
-        if (!isSidebarOpen) return
-        isSidebarOpen = false
-        val density = resources.displayMetrics.density
-        val targetX = -sidebarDrawer.width.toFloat().let { if (it <= 0f) -330f * density else -it }
-        sidebarDrawer.animate()
-            .translationX(targetX)
-            .setDuration(200)
-            .setInterpolator(android.view.animation.AccelerateInterpolator())
-            .withEndAction {
-                if (!isSidebarOpen) {
-                    sidebarDrawer.visibility = View.GONE
-                }
-            }
-            .start()
-
+    // Moves real Android focus back to the page content - the bar itself is never hidden by this,
+    // it just stops holding focus (see the class-level comment above).
+    private fun moveFocusToPage() {
+        lastOkUpTime = 0L
+        closeSettingsPanel()
         geckoView.requestFocus()
-        if (isTv && currentNavMode == MODE_POINTER) {
+        if (isTv) {
             virtualCursorView.isCursorVisible = true
         }
     }
 
-    private fun toggleSidebar() {
-        if (isSidebarOpen) closeSidebar() else openSidebar()
+    // Opened only from the bar's gear, and only ever closes back to the gear (never straight to
+    // the page) - a single unambiguous nesting order, so dispatchKeyEvent never has to guess which
+    // layer a BACK/DOWN/LEFT press should unwind first.
+    private fun openSettingsPanel() {
+        if (isSettingsPanelOpen) return
+        isSettingsPanelOpen = true
+        settingsPanel.visibility = View.VISIBLE
+        settingsPanelFocusOrder.firstOrNull()?.requestFocus()
     }
 
-    private fun updateSidebarUi() {
-        btnSidebarFullscreen.text = if (isPlayerFullscreen) "⛶  Exit Fullscreen" else "⛶  Enter Fullscreen"
-        btnSidebarFullscreen.setTextColor(
-            if (isPlayerFullscreen) Color.parseColor("#FF5252") else Color.parseColor("#FFD600")
-        )
+    private fun closeSettingsPanel() {
+        if (!isSettingsPanelOpen) return
+        isSettingsPanelOpen = false
+        settingsPanel.visibility = View.GONE
+        btnTopBarSettings.requestFocus()
+    }
 
-        btnSidebarMode.text = if (currentNavMode == MODE_POINTER) "🖱️  Mode: Pointer" else "📜  Mode: Scroll"
-        btnSidebarMode.setTextColor(
-            if (currentNavMode == MODE_POINTER) Color.parseColor("#E0AAFF") else Color.parseColor("#00E676")
-        )
-
+    private fun updateTopBarUi() {
         val sources = listOf(
             Triple(btnSource9Anime, SOURCE_9ANIME, "9Anime"),
             Triple(btnSourceGogoAnime, SOURCE_GOGOANIME, "GogoAnime"),
@@ -673,22 +717,35 @@ class MainActivity : AppCompatActivity() {
 
         for ((btn, src, name) in sources) {
             if (currentSource == src) {
-                btn.text = "●  $name (Active)"
-                btn.setBackgroundResource(R.drawable.bg_sidebar_active_source)
+                btn.text = "●  $name"
+                btn.setBackgroundResource(R.drawable.bg_topbar_active_source)
                 btn.setTextColor(Color.WHITE)
             } else {
                 btn.text = "○  $name"
-                btn.setBackgroundResource(R.drawable.bg_sidebar_item)
+                btn.setBackgroundResource(R.drawable.bg_topbar_item)
                 btn.setTextColor(Color.parseColor("#F0F0FF"))
             }
         }
     }
 
+    private fun updateSettingsPanelUi() {
+        btnSettingsFullscreen.text = if (isPlayerFullscreen) "⛶  Exit Fullscreen" else "⛶  Enter Fullscreen"
+        btnSettingsFullscreen.setTextColor(
+            if (isPlayerFullscreen) Color.parseColor("#FF5252") else Color.parseColor("#FFD600")
+        )
+
+        btnSettingsMode.text = if (currentNavMode == MODE_POINTER) "🖱️  Mode: Pointer" else "📜  Mode: Scroll"
+        btnSettingsMode.setTextColor(
+            if (currentNavMode == MODE_POINTER) Color.parseColor("#E0AAFF") else Color.parseColor("#00E676")
+        )
+    }
+
     private fun switchSource(source: String) {
+        if (source == currentSource) return
         currentSource = source
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         prefs.edit().putString(KEY_ACTIVE_SOURCE, source).apply()
-        updateSidebarUi()
+        updateTopBarUi()
 
         val label = when (source) {
             SOURCE_GOGOANIME -> "GogoAnime"
@@ -700,15 +757,22 @@ class MainActivity : AppCompatActivity() {
             else -> "9Anime"
         }
         Toast.makeText(this, "🎌 Loading $label...", Toast.LENGTH_SHORT).show()
+        pageLoadingBar.visibility = View.VISIBLE
         geckoSession.loadUri(urlForSource(source))
-        closeSidebar()
+        // Keep the just-pressed tab focused (glowing) for a beat so the press has visible
+        // confirmation before focus - and the reticle - jump away to the page; onPageStart/
+        // onPageStop (attachGeckoSessionDelegates) flip pageLoadingBar back off once the new page
+        // actually starts/finishes loading, independent of this timer.
+        topBar.postDelayed({ moveFocusToPage() }, SOURCE_SWITCH_FOCUS_DELAY_MS)
     }
 
     private fun setupBackPressedHandler() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (isSidebarOpen) {
-                    closeSidebar()
+                if (isSettingsPanelOpen) {
+                    closeSettingsPanel()
+                } else if (topBar.hasFocus()) {
+                    moveFocusToPage()
                 } else if (isPlayerFullscreen) {
                     geckoSession.exitFullScreen()
                 } else if (canGoBackFlag) {
@@ -738,17 +802,16 @@ class MainActivity : AppCompatActivity() {
             }
         }
         if (fullScreen) {
-            closeSidebar()
+            moveFocusToPage()
+            // The bar is a persistent header during normal browsing, but fullscreen video should
+            // get the whole screen - this is the one case it actually gets hidden.
+            topBar.visibility = View.GONE
             virtualCursorView.visibility = View.GONE
-            osdTopBar.visibility = View.GONE
             osdControlsGuide.visibility = View.GONE
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            btnFullscreen.text = "✖ Exit Fullscreen"
-            btnFullscreen.setTextColor(Color.parseColor("#FF5252"))
         } else {
+            topBar.visibility = View.VISIBLE
             virtualCursorView.visibility = if (currentNavMode == MODE_POINTER && isTv) View.VISIBLE else View.GONE
-            btnFullscreen.text = "⛶ Fullscreen"
-            btnFullscreen.setTextColor(Color.parseColor("#FFD600"))
         }
         enableImmersiveMode()
     }
@@ -761,6 +824,17 @@ class MainActivity : AppCompatActivity() {
             put("type", "anime-set-fullscreen")
             put("enabled", enabled)
         })
+        // Apply our own chrome (topBar/cursor visibility, orientation) immediately rather than
+        // waiting for ContentDelegate.onFullScreen to confirm the page's real Fullscreen API
+        // request succeeded. That confirmation depends on the browser granting "transient user
+        // activation" to a call that only reaches the page asynchronously (native key event ->
+        // bridgePort -> content script), which some sources' cross-origin player iframes don't
+        // reliably get - on those, the message still arrives and CAN toggle the CSS-based
+        // expansion, but the native Fullscreen API call can silently fail, and our own UI was
+        // gated on that same confirmation, so double-OK looked like it did nothing at all.
+        // handleFullscreenChange is idempotent, so a later onFullScreen callback re-confirming
+        // (or correcting) this is harmless.
+        handleFullscreenChange(enabled)
         if (enabled) {
             Toast.makeText(this, "⛶ Fullscreen Active (Press BACK to exit)", Toast.LENGTH_SHORT).show()
             handler.postDelayed({ playVideo() }, 300L)
@@ -793,12 +867,8 @@ class MainActivity : AppCompatActivity() {
         // (LEFT/RIGHT glide it sideways, OK clicks), UP/DOWN just also scrolls the page.
         virtualCursorView.isCursorVisible = true
         if (currentNavMode == MODE_POINTER) {
-            txtNavModeBadge.text = "🖱️ Pointer Mode"
-            txtNavModeBadge.setTextColor(Color.parseColor("#E0AAFF"))
             Toast.makeText(this, "Pointer Mode: D-Pad glides cursor, OK clicks", Toast.LENGTH_SHORT).show()
         } else {
-            txtNavModeBadge.text = "📜 Scroll Mode"
-            txtNavModeBadge.setTextColor(Color.parseColor("#80D8FF"))
             Toast.makeText(this, "Scroll Mode: UP/DOWN scrolls, LEFT/RIGHT moves the click reticle, OK clicks", Toast.LENGTH_SHORT).show()
         }
         scheduleGuideDismiss()
@@ -898,12 +968,17 @@ class MainActivity : AppCompatActivity() {
 
         // ── BROWSING MODE REMOTE CONTROLS ──────────────────────────────────
         when (event.keyCode) {
+            // The bar has no open/close state (see the class comment above setupTopBar()) - MENU
+            // is just a direct shortcut into/out of it from anywhere, on top of the UP-at-top-of-
+            // page route below.
             KeyEvent.KEYCODE_MENU,
             KeyEvent.KEYCODE_INFO,
             KeyEvent.KEYCODE_GUIDE,
             KeyEvent.KEYCODE_SETTINGS,
             KeyEvent.KEYCODE_BUTTON_Y -> {
-                if (isUp) toggleSidebar()
+                if (isUp) {
+                    if (topBar.hasFocus()) moveFocusToPage() else moveFocusToTopBar()
+                }
                 return true
             }
 
@@ -924,19 +999,41 @@ class MainActivity : AppCompatActivity() {
             KeyEvent.KEYCODE_DPAD_DOWN,
             KeyEvent.KEYCODE_DPAD_LEFT,
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                // While the sidebar is open, UP/DOWN move real logical focus between its items
-                // instead of gliding the cursor - see openSidebar(). Since the cursor never moves
-                // in here, RIGHT directly closes the drawer, standing in for the "push it past
-                // the right edge" gesture that closes it everywhere else.
-                if (isSidebarOpen) {
+                // Settings popup open: UP/DOWN move focus within it, LEFT backs out to the gear -
+                // this inner layer never routes straight to the page (see openSettingsPanel()).
+                if (isSettingsPanelOpen) {
                     if (isDown) {
                         when (event.keyCode) {
                             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN ->
-                                moveSidebarFocus(forward = event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN)
-                            KeyEvent.KEYCODE_DPAD_RIGHT -> closeSidebar()
+                                moveFocusList(settingsPanelFocusOrder, forward = event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN)
+                            KeyEvent.KEYCODE_DPAD_LEFT -> closeSettingsPanel()
                             else -> {}
                         }
                     }
+                    return true
+                }
+                // Focus is in the persistent bar (no popup): LEFT/RIGHT move focus across
+                // tabs+gear, DOWN moves focus back into the page - the bar itself is never hidden
+                // by this, it just stops holding focus (see the class comment above setupTopBar()).
+                if (topBar.hasFocus()) {
+                    if (isDown) {
+                        when (event.keyCode) {
+                            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT ->
+                                moveFocusList(topBarFocusOrder, forward = event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)
+                            KeyEvent.KEYCODE_DPAD_DOWN -> moveFocusToPage()
+                            else -> {}
+                        }
+                    }
+                    return true
+                }
+                // Focus is on the page: UP normally scrolls/glides the reticle like any other
+                // direction, EXCEPT once the page is already scrolled to the top (pageIsAtTop,
+                // tracked via GeckoSession.ScrollDelegate - a real scroll position, not a guess) -
+                // at that point there's nowhere further up to scroll, so UP instead moves focus
+                // into the bar sitting right above the content, the same way it would on any
+                // ordinary TV app header.
+                if (event.keyCode == KeyEvent.KEYCODE_DPAD_UP && isDown && pageIsAtTop) {
+                    moveFocusToTopBar()
                     return true
                 }
                 if (isDown) {
@@ -955,9 +1052,15 @@ class MainActivity : AppCompatActivity() {
             KeyEvent.KEYCODE_ENTER,
             KeyEvent.KEYCODE_NUMPAD_ENTER,
             KeyEvent.KEYCODE_BUTTON_A -> {
-                if (isSidebarOpen) {
+                if (isSettingsPanelOpen) {
                     if (isUp) {
-                        currentFocus?.takeIf { sidebarFocusOrder.contains(it) }?.performClick()
+                        currentFocus?.takeIf { settingsPanelFocusOrder.contains(it) }?.performClick()
+                    }
+                    return true
+                }
+                if (topBar.hasFocus()) {
+                    if (isUp) {
+                        currentFocus?.takeIf { topBarFocusOrder.contains(it) }?.performClick()
                     }
                     return true
                 }
@@ -977,8 +1080,11 @@ class MainActivity : AppCompatActivity() {
 
             KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_BUTTON_B -> {
                 if (isUp) {
-                    if (isSidebarOpen) {
-                        closeSidebar()
+                    if (isSettingsPanelOpen) {
+                        closeSettingsPanel()
+                        return true
+                    } else if (topBar.hasFocus()) {
+                        moveFocusToPage()
                         return true
                     } else if (canGoBackFlag) {
                         geckoSession.goBack()
@@ -999,52 +1105,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         return super.dispatchKeyEvent(event)
-    }
-
-    private var touchStartX = 0f
-    private var touchStartY = 0f
-    private var isSwipeConsumed = false
-
-    override fun dispatchTouchEvent(ev: MotionEvent?): Boolean {
-        if (ev != null) {
-            val density = resources.displayMetrics.density
-            when (ev.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    touchStartX = ev.rawX
-                    touchStartY = ev.rawY
-                    isSwipeConsumed = false
-
-                    if (isSidebarOpen && ev.rawX > 310f * density) {
-                        closeSidebar()
-                        return true
-                    }
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    // Trigger sidebar open on a rightward swipe starting right at the screen's
-                    // left edge - this is the ONLY way to open it on touch; there is no
-                    // persistent button.
-                    if (!isSwipeConsumed && !isSidebarOpen && !isPlayerFullscreen) {
-                        val deltaX = ev.rawX - touchStartX
-                        val deltaY = Math.abs(ev.rawY - touchStartY)
-                        if (touchStartX < 24f * density && deltaX > 20f * density && deltaY < 80f * density) {
-                            isSwipeConsumed = true
-                            openSidebar()
-                            return true
-                        }
-                    }
-                    // Close as soon as the finger drags off the panel, rather than requiring a
-                    // separate tap outside afterwards.
-                    if (isSidebarOpen && ev.rawX > 310f * density) {
-                        closeSidebar()
-                        return true
-                    }
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    isSwipeConsumed = false
-                }
-            }
-        }
-        return super.dispatchTouchEvent(ev)
     }
 
     override fun onResume() {

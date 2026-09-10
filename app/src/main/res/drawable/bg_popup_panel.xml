@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Used by the settings panel - unlike the top bar / old sidebar, this floats below the gear
+     rather than sitting flush against a screen edge, so all four corners round evenly. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#F40E0B1A" />
+    <stroke
+        android:width="2dp"
+        android:color="#4D2A78" />
+    <corners android:radius="16dp" />
+</shape>

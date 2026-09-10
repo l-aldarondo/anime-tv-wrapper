@@ -17,6 +17,15 @@ html, body {
     scrollbar-width: none !important;
     -ms-overflow-style: none !important;
     touch-action: manipulation !important;
+    /* VirtualCursorView already does 100% of the intended scroll easing/physics on the Kotlin
+       side (see doFrame()'s velocity ramp) via panZoomController.scrollBy(..., SCROLL_BEHAVIOR_AUTO)
+       roughly every 33ms while a direction key is held. AUTO defers to the page's own CSS
+       scroll-behavior - on sites that set `html{scroll-behavior:smooth}` (confirmed on
+       sololatino.net's production CSS bundle), each new scrollBy call restarts the page's own
+       easing animation before the previous one finishes, netting almost no visible movement
+       despite continuous D-pad input. Forcing "auto" here makes our scrollBy calls apply
+       instantly, matching what the Kotlin-side physics already assume. */
+    scroll-behavior: auto !important;
 }
 
 /* Hide the 'Watch Now' featured carousel/slider on the main page (9anime and gogoanime) */
@@ -136,4 +145,50 @@ div[id*="ad_layer"], div[class*="ad_layer"], div[id*="fake_player"] {
     display: none !important;
     visibility: hidden !important;
     pointer-events: none !important;
+}
+
+/* Per-site footers, commercial placements, and promotional/notification banners - each selector
+   below was confirmed against a live fetch of the real site (not guessed) before being added.
+   uBlock Origin's own filter lists already handle most real ad networks; this block targets
+   things uBlock has no reason to know are unwanted (a site's own footer, its own first-party
+   "sorry for delays"-style promo popups, etc). */
+
+/* gogoanime.by / sololatino.net / animeflix.team / animeyt.cc all currently serve the same
+   WordPress "aniyt" theme/network (confirmed live - sololatino.net and animeyt.cc are already in
+   isInternalLink()'s allowlist as the same site family). Footer + the theme's own periodic
+   "Un pequeño aviso" delay-apology modal (id and class both #abismo-aviso-temporal /
+   .abismo-aviso-temporal, injected client-side ~700ms after load, throttled ~12h). */
+footer.aniyt-footer, .aniyt-footer,
+#abismo-aviso-temporal, .abismo-aviso-temporal {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+/* 9anime.or.at's native "9animetv" theme footer (its content/episode pages - not the anomalous
+   AnimeYT-rebranded root "/" page, which is already covered by footer.aniyt-footer above). */
+#footer {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+/* jkanime.net: real page footer, plus three baked-into-the-HTML ad-network <ins> placements
+   (data-cp-host="...|Jkanime.net", present before any ad script even runs) and a third-party ad
+   iframe container the site itself has to fight the layout of inside its real comments widget. */
+footer.footer,
+ins[data-cp-host], ins.604c7625,
+#adangle-pop-iframe-container {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
 }

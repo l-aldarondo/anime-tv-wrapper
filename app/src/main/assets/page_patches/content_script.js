@@ -9,6 +9,26 @@
     try {
         var isTop = (window === window.top);
 
+        // SoloLatino serves its ad payload as a <script id="__sl_ads" type="application/json">
+        // element the page reads by id and JSON.parses directly - clearing window.__sl_ads does
+        // nothing, the element's own content has to be cleared, and re-cleared since a server
+        // switch re-renders it with a fresh payload. Defined and called FIRST, before anything
+        // else in this file, and outside of purgeOverlays()'s later passes: the page's own inline
+        // script reads this element and synchronously injects real <script> tags from its payload
+        // exactly once (guarded by a one-shot flag on the page's side), so this only has one
+        // chance to win the race - run_at: document_start (manifest.json) gives it the earliest
+        // possible shot. purgeOverlays() still calls this again on its own schedule below in case
+        // the element is re-rendered later (e.g. on a server-tab switch).
+        function neutralizeSlAdsElement() {
+            try {
+                var slAdsEl = document.getElementById('__sl_ads');
+                if (slAdsEl && slAdsEl.textContent !== '{"h":"","b":""}') {
+                    slAdsEl.textContent = '{"h":"","b":""}';
+                }
+            } catch (e) {}
+        }
+        neutralizeSlAdsElement();
+
         // 1. Completely neutralize window.open (every frame)
         try {
             Object.defineProperty(window, 'open', {
@@ -84,19 +104,6 @@
                 el = el.parentElement;
             }
         }, true);
-
-        // SoloLatino serves its ad payload as a <script id="__sl_ads" type="application/json">
-        // element the page reads by id and JSON.parses directly - clearing window.__sl_ads does
-        // nothing, the element's own content has to be cleared, and re-cleared since a server
-        // switch re-renders it with a fresh payload.
-        function neutralizeSlAdsElement() {
-            try {
-                var slAdsEl = document.getElementById('__sl_ads');
-                if (slAdsEl && slAdsEl.textContent !== '{"h":"","b":""}') {
-                    slAdsEl.textContent = '{"h":"","b":""}';
-                }
-            } catch (e) {}
-        }
 
         // Any <img> whose source was blocked at the network level (uBlock Origin) still leaves
         // the browser's broken-image placeholder behind - hide any image that fails to load.
@@ -270,6 +277,16 @@
                         try { allServerBtns[s].style.setProperty('opacity', '0.45', 'important'); } catch (e) {}
                     }
                 }
+            }
+
+            // jkanime.net: the fixes.css rule for #adangle-pop-iframe-container hides it, but it
+            // sits nested inside the real comments widget (#jk_thread) and the page's own CSS has
+            // to fight its layout impact there (confirmed via the site's own inline style rule
+            // targeting it) - remove it outright rather than relying on display:none alone, in
+            // case it still reserves space inside that widget.
+            if (window.location.hostname.indexOf('jkanime.net') !== -1) {
+                var adangle = document.getElementById('adangle-pop-iframe-container');
+                if (adangle) { try { adangle.remove(); } catch (e) {} }
             }
 
             // NOTE: this used to auto-click .play-button-overlay / force-call
@@ -583,19 +600,27 @@
                    document.querySelector('.player_conte');
         }
         function findPlayerIframe() {
+            // #player-frame is a CONTAINER div in SoloLatino's real markup (the server-selection
+            // JS injects the actual <iframe> inside it), not the iframe itself - it used to sit
+            // in the middle of this OR-chain, which meant getElementById('player-frame') matched
+            // and returned that bare div before several of the more specific iframe[src*=...]
+            // checks below it ever got a chance to run. Prefer any real iframe nested inside it
+            // first, and only fall back to the bare div (e.g. a <video>/mp4 server with no iframe
+            // at all) as an absolute last resort.
             return document.getElementById('iframe-embed') ||
                    document.querySelector('.player-embed iframe') ||
                    document.querySelector('iframe.player-iframe') ||
                    document.querySelector('iframe[src*="player"]') ||
                    document.querySelector('iframe[src*="embed"]') ||
                    document.querySelector('iframe[src*="megaplay"]') ||
-                   document.getElementById('player-frame') ||
                    document.querySelector('iframe[src*="mytsumi"]') ||
                    document.querySelector('iframe[src*="embed69"]') ||
                    document.querySelector('iframe[src*="xupalace"]') ||
                    document.querySelector('iframe#iframePlayer') ||
                    document.querySelector('iframe.player_conte') ||
-                   document.querySelector('iframe[src*="jkplayer"]');
+                   document.querySelector('iframe[src*="jkplayer"]') ||
+                   document.querySelector('#player-frame iframe') ||
+                   document.getElementById('player-frame');
         }
 
         // Double-tap toggles fullscreen. In the top document this is scoped to the player-wrap
@@ -642,8 +667,19 @@
                     if (wrap) wrap.classList.add('animetv-fullscreen-wrap');
                     if (ifr) {
                         try {
-                            if (ifr.requestFullscreen) ifr.requestFullscreen().catch(function () {});
-                            else if (ifr.webkitRequestFullscreen) ifr.webkitRequestFullscreen();
+                            // This call reaches the page asynchronously (native key event ->
+                            // bridgePort -> content script), outside the original key-press's own
+                            // call stack, so the browser can reject it for lacking "transient user
+                            // activation" even though a real remote press caused it. That's fine -
+                            // the CSS-based animetv-fullscreen-wrap expansion above is the actual
+                            // visual mechanism and doesn't depend on this succeeding - but log the
+                            // rejection instead of silently swallowing it, so it's visible in
+                            // about:debugging instead of just looking like nothing happened.
+                            if (ifr.requestFullscreen) {
+                                ifr.requestFullscreen().catch(function (err) {
+                                    try { console.warn('Anime TV: player requestFullscreen() rejected:', err && err.message); } catch (ignore) {}
+                                });
+                            } else if (ifr.webkitRequestFullscreen) ifr.webkitRequestFullscreen();
                         } catch (e) {}
                     }
                 } else {
