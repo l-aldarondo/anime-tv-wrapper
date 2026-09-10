@@ -582,6 +582,22 @@ class MainActivity : AppCompatActivity() {
     // tabs, and the settings popup's items) instead of one.
 
     private fun setupTopBar() {
+        // Confirmed via on-device logging (touch/focus/click event trace) that a phone tap on a
+        // not-yet-focused, focusableInTouchMode view needed two taps: Android's own
+        // View.onTouchEvent() grants focus on the first tap but deliberately skips performClick()
+        // for that same tap when focus was just taken, requiring a second tap (on the
+        // now-already-focused view) to actually click - this is documented platform behavior, not
+        // a bug in this app's own logic. Real Android focus is only needed here for TV D-pad
+        // navigation (moveFocusList/pageIsAtTop/topBar.hasFocus() routing in dispatchKeyEvent) -
+        // a phone has no D-pad, so disabling focusability there sidesteps the platform quirk
+        // entirely with no effect on TV behavior.
+        if (!isTv) {
+            for (v in topBarFocusOrder + settingsPanelFocusOrder) {
+                v.isFocusable = false
+                v.isFocusableInTouchMode = false
+            }
+        }
+
         btnSource9Anime.setOnClickListener { switchSource(SOURCE_9ANIME) }
         btnSourceGogoAnime.setOnClickListener { switchSource(SOURCE_GOGOANIME) }
         btnSourceSoloLatino.setOnClickListener { switchSource(SOURCE_SOLOLATINO) }
