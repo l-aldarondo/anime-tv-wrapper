@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One "My List" grid card. Sized by its GridLayoutManager cell (match_parent width), so the
+     poster uses a fixed height + centerCrop rather than a strict aspect ratio - avoids pulling in
+     ConstraintLayout as a new dependency just for one screen; centerCrop keeps posters looking
+     correct (cropped, not stretched) across whatever cell width a given span count produces. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:clickable="true"
+    android:padding="8dp"
+    android:background="@drawable/bg_topbar_item">
+
+    <ImageView
+        android:id="@+id/imgFavoritePoster"
+        android:layout_width="match_parent"
+        android:layout_height="220dp"
+        android:scaleType="centerCrop"
+        android:background="#211832"
+        android:contentDescription="@null" />
+
+    <TextView
+        android:id="@+id/txtFavoriteTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:maxLines="2"
+        android:ellipsize="end"
+        android:textColor="#F0F0FF"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+</LinearLayout>

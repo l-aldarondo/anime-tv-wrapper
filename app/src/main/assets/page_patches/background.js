@@ -32,7 +32,7 @@
 
     browser.runtime.onMessage.addListener(function (message) {
         if (!message || !nativePort) return;
-        if (message.type === "anime-video-play" || message.type === "anime-doubletap") {
+        if (message.type === "anime-video-play" || message.type === "anime-doubletap" || message.type === "favorite_candidate") {
             nativePort.postMessage(message);
         }
     });

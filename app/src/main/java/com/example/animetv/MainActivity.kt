@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
@@ -41,6 +42,10 @@ class MainActivity : AppCompatActivity() {
         const val SOURCE_ANIMEFLIX = "animeflix"
         const val SOURCE_ANIMEYT = "animeyt"
         const val SOURCE_JKANIME = "jkanime"
+        // Not a real site - selects the native "My List" grid instead of loading a URL (see
+        // switchSource()). Deliberately never persisted as KEY_ACTIVE_SOURCE (see switchSource()),
+        // so the app can never cold-boot directly into it.
+        const val SOURCE_FAVORITES = "favorites"
 
         const val URL_9ANIME = "https://9anime.or.at/"
         const val URL_GOGOANIME = "https://gogoanime.by/"
@@ -54,6 +59,10 @@ class MainActivity : AppCompatActivity() {
         const val MODE_SCROLL = 1
         private const val BACK_PRESS_INTERVAL = 2000L
         private const val DOUBLE_OK_INTERVAL_MS = 400L
+        // How long OK must be held on the page (not the top bar/settings/My List grid, which get
+        // long-press for free from Android's own View key handling) before it's treated as
+        // "save/remove this show" instead of a normal click - see handleLongPressFavorite().
+        private const val LONG_PRESS_FAVORITE_MS = 500L
         // How long a just-pressed top-bar tab stays focused (glowing) after switchSource() fires,
         // before focus hands off to the page. Without this, moveFocusToPage() ran in the same
         // frame as the OK press, so a source switch that visibly worked on the first press looked
@@ -157,12 +166,21 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnSourceAnimeFlix: TextView
     private lateinit var btnSourceAnimeYT: TextView
     private lateinit var btnSourceJKAnime: TextView
+    private lateinit var btnSourceFavorites: TextView
     private lateinit var btnTopBarSettings: TextView
     private lateinit var settingsPanel: LinearLayout
     private lateinit var btnSettingsFullscreen: TextView
     private lateinit var btnSettingsMode: TextView
     private lateinit var btnSettingsHome: TextView
     private lateinit var btnSettingsReload: TextView
+
+    // "My List" native screen - a saved-shows grid occupying the same content-area slot as
+    // GeckoView (see activity_main.xml), toggled by switchSource(SOURCE_FAVORITES). Not backed
+    // by any URL/GeckoSession load at all - it's a plain local favorites store (FavoritesStore).
+    private lateinit var favoritesScreen: FrameLayout
+    private lateinit var favoritesRecyclerView: androidx.recyclerview.widget.RecyclerView
+    private lateinit var favoritesEmptyText: TextView
+    private lateinit var favoritesAdapter: FavoritesAdapter
 
     private var isSettingsPanelOpen = false
     // Real GeckoView scroll position (GeckoSession.ScrollDelegate, see attachGeckoSessionDelegates)
@@ -176,6 +194,17 @@ class MainActivity : AppCompatActivity() {
     private var canGoBackFlag = false
     private var lastBackPressTime = 0L
     private var lastOkUpTime = 0L
+    // Which ALLOWED_MAIN_HOSTS entry the top-level document currently matches - used by
+    // onLoadRequest to tell a real cross-source jump from a same-site redirect (see its comment).
+    private var currentAllowedHostFamily: String? = null
+    // Guards the D-pad hint guide's one-shot launch trigger (onPageStop) so it only auto-shows
+    // once per app session, not on every subsequent page load/source switch.
+    private var initialGuideShown = false
+    // True once the current OK hold has already crossed LONG_PRESS_FAVORITE_MS and been acted on
+    // - the matching key-up must then be swallowed instead of also firing a normal click/double-
+    // click, the same "one press, one outcome" rule already used for double-OK/fullscreen.
+    private var longPressFavoriteArmed = false
+    private val longPressFavoriteRunnable = Runnable { handleLongPressFavorite() }
 
     // Native <-> page bridge (video-play-detected, double-tap, player commands, fullscreen
     // toggle) - see app/src/main/assets/page_patches/. GeckoView has no evaluateJavascript()
@@ -215,13 +244,14 @@ class MainActivity : AppCompatActivity() {
         initViews()
         setupBackPressedHandler()
 
-        if (isTv) {
-            scheduleGuideDismiss()
-        } else {
+        if (!isTv) {
             // On phones with touch screens, hide the virtual D-Pad cursor and TV remote hints
             virtualCursorView.visibility = View.GONE
             osdControlsGuide.visibility = View.GONE
         }
+        // On TV, osdControlsGuide starts invisible (activity_main.xml) - scheduleGuideDismiss()
+        // is deferred to the first onPageStop instead of firing here, so its 5-second countdown
+        // starts once real content is on screen rather than racing the initial page load.
 
         bootGeckoViewEngine()
     }
@@ -260,12 +290,26 @@ class MainActivity : AppCompatActivity() {
         btnSourceAnimeFlix = findViewById(R.id.btnSourceAnimeFlix)
         btnSourceAnimeYT = findViewById(R.id.btnSourceAnimeYT)
         btnSourceJKAnime = findViewById(R.id.btnSourceJKAnime)
+        btnSourceFavorites = findViewById(R.id.btnSourceFavorites)
         btnTopBarSettings = findViewById(R.id.btnTopBarSettings)
         settingsPanel = findViewById(R.id.settingsPanel)
         btnSettingsFullscreen = findViewById(R.id.btnSettingsFullscreen)
         btnSettingsMode = findViewById(R.id.btnSettingsMode)
         btnSettingsHome = findViewById(R.id.btnSettingsHome)
         btnSettingsReload = findViewById(R.id.btnSettingsReload)
+
+        favoritesScreen = findViewById(R.id.favoritesScreen)
+        favoritesRecyclerView = findViewById(R.id.favoritesRecyclerView)
+        favoritesEmptyText = findViewById(R.id.favoritesEmptyText)
+        favoritesAdapter = FavoritesAdapter(
+            mutableListOf(),
+            onOpen = { openFavoriteItem(it) },
+            onRemove = { toggleFavoriteAndRefresh(it) }
+        )
+        // 6 columns fits a 75in TV's usual logical width comfortably; phones get fewer so cards
+        // stay a sensible poster size instead of shrinking to near-illegible thumbnails.
+        favoritesRecyclerView.layoutManager = androidx.recyclerview.widget.GridLayoutManager(this, if (isTv) 6 else 3)
+        favoritesRecyclerView.adapter = favoritesAdapter
 
         // settingsPanel's XML marginTop is only a same-frame fallback (see layout comment) - keep
         // it pinned to topBar's real measured height so a future topBar padding/text-size change
@@ -400,7 +444,13 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             override fun onPageStop(session: GeckoSession, success: Boolean) {
-                runOnUiThread { pageLoadingBar.visibility = View.GONE }
+                runOnUiThread {
+                    pageLoadingBar.visibility = View.GONE
+                    if (isTv && !initialGuideShown) {
+                        initialGuideShown = true
+                        scheduleGuideDismiss()
+                    }
+                }
             }
         }
 
@@ -435,8 +485,27 @@ class MainActivity : AppCompatActivity() {
                     return GeckoResult.fromValue(AllowOrDeny.DENY)
                 }
                 val host = uri?.host?.lowercase() ?: ""
-                val isAllowed = ALLOWED_MAIN_HOSTS.any { host == it || host.endsWith(".$it") }
-                return GeckoResult.fromValue(if (isAllowed) AllowOrDeny.ALLOW else AllowOrDeny.DENY)
+                val matchedFamily = ALLOWED_MAIN_HOSTS.find { host == it || host.endsWith(".$it") }
+                if (matchedFamily == null) {
+                    return GeckoResult.fromValue(AllowOrDeny.DENY)
+                }
+                // A source's own ad network occasionally tries a silent top-level redirect to a
+                // DIFFERENT source's real site (seen live: animeyt.cc's ad scripts redirecting to
+                // jkanime.net) - since jkanime.net is itself a legitimate allowed host (needed for
+                // its own tab), the plain host-allowlist check above lets it straight through. Any
+                // GENUINE reason to cross from one source's site to a different one always has
+                // either a real user gesture (the user tapped a link) or comes from our own native
+                // switchSource()/loadUri() call (isDirectNavigation) - a script-triggered jump
+                // between two unrelated allowed families with neither signal is never legitimate,
+                // so it's the one case denied here instead of just allowlist-checked.
+                val currentFamily = currentAllowedHostFamily
+                val isCrossFamilyJump = currentFamily != null && currentFamily != matchedFamily
+                if (isCrossFamilyJump && !request.hasUserGesture && !request.isDirectNavigation) {
+                    Log.w("AnimeTV", "Blocked cross-family redirect: $currentFamily -> $matchedFamily ($host)")
+                    return GeckoResult.fromValue(AllowOrDeny.DENY)
+                }
+                currentAllowedHostFamily = matchedFamily
+                return GeckoResult.fromValue(AllowOrDeny.ALLOW)
             }
 
             // Not overriding this returns null, which GeckoView treats as "deny the popup" -
@@ -532,6 +601,25 @@ class MainActivity : AppCompatActivity() {
                 "anime-doubletap" -> runOnUiThread {
                     togglePlayerFullscreen()
                 }
+                "favorite_candidate" -> runOnUiThread {
+                    val payload = json.optJSONObject("payload")
+                    val title = payload?.optString("title")?.trim().orEmpty()
+                    val url = payload?.optString("url")?.trim().orEmpty()
+                    val poster = payload?.optString("poster")?.trim().orEmpty()
+                    if (title.isEmpty() || url.isEmpty()) {
+                        Toast.makeText(this@MainActivity, "Couldn't identify a show here", Toast.LENGTH_SHORT).show()
+                    } else {
+                        val added = FavoritesStore.toggle(
+                            this@MainActivity,
+                            FavoriteItem(url = url, title = title, poster = poster, source = currentSource, addedAt = System.currentTimeMillis())
+                        )
+                        Toast.makeText(
+                            this@MainActivity,
+                            if (added) "★ Added to My List: $title" else "Removed from My List: $title",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
             }
         }
         override fun onDisconnect(port: WebExtension.Port) {
@@ -598,6 +686,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        btnSourceFavorites.setOnClickListener { switchSource(SOURCE_FAVORITES) }
         btnSource9Anime.setOnClickListener { switchSource(SOURCE_9ANIME) }
         btnSourceGogoAnime.setOnClickListener { switchSource(SOURCE_GOGOANIME) }
         btnSourceSoloLatino.setOnClickListener { switchSource(SOURCE_SOLOLATINO) }
@@ -638,8 +727,9 @@ class MainActivity : AppCompatActivity() {
     // focus-navigation order while focus is in the bar (see moveFocusList()).
     private val topBarFocusOrder: List<View> by lazy {
         listOf(
-            btnSource9Anime, btnSourceGogoAnime, btnSourceSoloLatino, btnSourceSoloLatinoHome,
-            btnSourceAnimeFlix, btnSourceAnimeYT, btnSourceJKAnime, btnTopBarSettings
+            btnSourceFavorites, btnSource9Anime, btnSourceGogoAnime, btnSourceSoloLatino,
+            btnSourceSoloLatinoHome, btnSourceAnimeFlix, btnSourceAnimeYT, btnSourceJKAnime,
+            btnTopBarSettings
         )
     }
 
@@ -692,11 +782,17 @@ class MainActivity : AppCompatActivity() {
         target?.requestFocus()
     }
 
-    // Moves real Android focus back to the page content - the bar itself is never hidden by this,
-    // it just stops holding focus (see the class-level comment above).
+    // Moves real Android focus back to whatever content is currently showing - the bar itself is
+    // never hidden by this, it just stops holding focus (see the class-level comment above).
+    // "The page" means the My List grid when that's the active tab, GeckoView otherwise - both
+    // occupy the same content-area slot (see activity_main.xml), never both at once.
     private fun moveFocusToPage() {
         lastOkUpTime = 0L
         closeSettingsPanel()
+        if (currentSource == SOURCE_FAVORITES) {
+            favoritesRecyclerView.requestFocus()
+            return
+        }
         geckoView.requestFocus()
         if (isTv) {
             virtualCursorView.isCursorVisible = true
@@ -742,6 +838,14 @@ class MainActivity : AppCompatActivity() {
                 btn.setTextColor(Color.parseColor("#F0F0FF"))
             }
         }
+
+        if (currentSource == SOURCE_FAVORITES) {
+            btnSourceFavorites.setBackgroundResource(R.drawable.bg_topbar_active_source)
+            btnSourceFavorites.setTextColor(Color.WHITE)
+        } else {
+            btnSourceFavorites.setBackgroundResource(R.drawable.bg_topbar_item)
+            btnSourceFavorites.setTextColor(Color.parseColor("#FFD600"))
+        }
     }
 
     private fun updateSettingsPanelUi() {
@@ -758,10 +862,29 @@ class MainActivity : AppCompatActivity() {
 
     private fun switchSource(source: String) {
         if (source == currentSource) return
+        val previousSource = currentSource
         currentSource = source
-        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-        prefs.edit().putString(KEY_ACTIVE_SOURCE, source).apply()
+        // SOURCE_FAVORITES is deliberately never persisted as the boot-into source (see its
+        // declaration) - it's a transient UI tab, not a real site to cold-start into.
+        if (source != SOURCE_FAVORITES) {
+            val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            prefs.edit().putString(KEY_ACTIVE_SOURCE, source).apply()
+        }
         updateTopBarUi()
+
+        if (source == SOURCE_FAVORITES) {
+            geckoView.visibility = View.GONE
+            virtualCursorView.visibility = View.GONE
+            favoritesScreen.visibility = View.VISIBLE
+            refreshFavoritesGrid()
+            topBar.postDelayed({ moveFocusToPage() }, SOURCE_SWITCH_FOCUS_DELAY_MS)
+            return
+        }
+        if (previousSource == SOURCE_FAVORITES) {
+            favoritesScreen.visibility = View.GONE
+            geckoView.visibility = View.VISIBLE
+            virtualCursorView.visibility = if (currentNavMode == MODE_POINTER && isTv) View.VISIBLE else View.GONE
+        }
 
         val label = when (source) {
             SOURCE_GOGOANIME -> "GogoAnime"
@@ -782,6 +905,68 @@ class MainActivity : AppCompatActivity() {
         topBar.postDelayed({ moveFocusToPage() }, SOURCE_SWITCH_FOCUS_DELAY_MS)
     }
 
+    // Opens a specific saved show: switches the active source/tab (so the top bar highlight and
+    // ALLOWED_MAIN_HOSTS/onLoadRequest family-tracking stay correct) and loads its exact detail-
+    // page URL directly, bypassing switchSource()'s "same source -> no-op" guard and its
+    // urlForSource() root-URL lookup, since neither applies when opening one specific saved page.
+    private fun openFavoriteItem(item: FavoriteItem) {
+        val wasOnFavorites = (currentSource == SOURCE_FAVORITES)
+        currentSource = item.source
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        prefs.edit().putString(KEY_ACTIVE_SOURCE, item.source).apply()
+        updateTopBarUi()
+        if (wasOnFavorites) {
+            favoritesScreen.visibility = View.GONE
+            geckoView.visibility = View.VISIBLE
+            virtualCursorView.visibility = if (currentNavMode == MODE_POINTER && isTv) View.VISIBLE else View.GONE
+        }
+        Toast.makeText(this, "🎌 Loading ${item.title}...", Toast.LENGTH_SHORT).show()
+        pageLoadingBar.visibility = View.VISIBLE
+        geckoSession.loadUri(item.url)
+        topBar.postDelayed({ moveFocusToPage() }, SOURCE_SWITCH_FOCUS_DELAY_MS)
+    }
+
+    private fun refreshFavoritesGrid() {
+        val items = FavoritesStore.loadAll(this)
+        favoritesAdapter.submit(items)
+        favoritesEmptyText.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
+    }
+
+    // Long-press-to-remove from within My List itself - same gesture as long-press-to-add
+    // elsewhere (see handleLongPressFavorite()), so "hold OK on a show" always means "toggle its
+    // saved status" everywhere in the app, including here.
+    private fun toggleFavoriteAndRefresh(item: FavoriteItem) {
+        FavoritesStore.remove(this, item.url)
+        Toast.makeText(this, "Removed from My List: ${item.title}", Toast.LENGTH_SHORT).show()
+        refreshFavoritesGrid()
+    }
+
+    // Whether the currently-focused My List card is in the grid's first row - if so, UP should
+    // escape to the top bar (mirrors pageIsAtTop's same role for the page/GeckoView) instead of
+    // Android's normal focus-search finding nothing above it and silently doing nothing.
+    private fun isFocusInFavoritesTopRow(): Boolean {
+        val layoutManager = favoritesRecyclerView.layoutManager as? androidx.recyclerview.widget.GridLayoutManager
+            ?: return true
+        val focused = currentFocus ?: return true
+        val position = favoritesRecyclerView.getChildAdapterPosition(focused)
+        return position == androidx.recyclerview.widget.RecyclerView.NO_POSITION || position < layoutManager.spanCount
+    }
+
+    // Holding OK on the page (not the top bar/settings/My List grid - those get long-press for
+    // free from Android's own View key handling, see FavoritesAdapter) arms a synthetic click via
+    // the SAME dispatchClick() a normal single-OK-press already uses, so Gecko's own real hit-
+    // testing - not a hand-rolled coordinate/DOM lookup - decides what's under the reticle. The
+    // content script intercepts that one synthetic click (see content_script.js's
+    // favoriteCaptureArmed flag), cancels its normal effect (no navigation), extracts whatever
+    // show card is there (or falls back to the current page's own Open Graph tags if the reticle
+    // isn't over a card - e.g. already sitting on the show's own detail/player page), and reports
+    // back via the native bridge - see bridgePortDelegate's "favorite_candidate" case.
+    private fun handleLongPressFavorite() {
+        longPressFavoriteArmed = true
+        bridgePort?.postMessage(JSONObject().apply { put("type", "prepare_favorite_capture") })
+        virtualCursorView.dispatchClick(geckoView)
+    }
+
     private fun setupBackPressedHandler() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -791,6 +976,10 @@ class MainActivity : AppCompatActivity() {
                     moveFocusToPage()
                 } else if (isPlayerFullscreen) {
                     geckoSession.exitFullScreen()
+                } else if (currentSource == SOURCE_FAVORITES) {
+                    // No browser history to unwind here - BACK just escapes to the bar, same as
+                    // the page's own UP-at-top gesture.
+                    moveFocusToTopBar()
                 } else if (canGoBackFlag) {
                     geckoSession.goBack()
                 } else {
@@ -1042,6 +1231,19 @@ class MainActivity : AppCompatActivity() {
                     }
                     return true
                 }
+                // My List is a real focusable Android RecyclerView grid, not the page's custom
+                // reticle model - let Android's own 2D focus-search move between cards instead of
+                // routing through virtualCursorView, which only makes sense for GeckoView. UP from
+                // the grid's own top row still needs to escape to the bar, same as pageIsAtTop
+                // does for the page, since the grid has no equivalent "nowhere further up" signal
+                // for the focus-search itself to know about.
+                if (currentSource == SOURCE_FAVORITES) {
+                    if (event.keyCode == KeyEvent.KEYCODE_DPAD_UP && isDown && isFocusInFavoritesTopRow()) {
+                        moveFocusToTopBar()
+                        return true
+                    }
+                    return super.dispatchKeyEvent(event)
+                }
                 // Focus is on the page: UP normally scrolls/glides the reticle like any other
                 // direction, EXCEPT once the page is already scrolled to the top (pageIsAtTop,
                 // tracked via GeckoSession.ScrollDelegate - a real scroll position, not a guess) -
@@ -1080,7 +1282,29 @@ class MainActivity : AppCompatActivity() {
                     }
                     return true
                 }
+                // My List's cards are real focusable Views - let Android's own key handling
+                // process OK, which gives long-press-to-remove for free via the adapter's
+                // OnLongClickListener (see FavoritesAdapter) with no custom timer needed here.
+                if (currentSource == SOURCE_FAVORITES) {
+                    return super.dispatchKeyEvent(event)
+                }
+                // Holding OK past LONG_PRESS_FAVORITE_MS saves/removes whatever's at the reticle
+                // instead of clicking it - started on the first DOWN of a press (repeatCount == 0,
+                // so a platform auto-repeat while held doesn't reschedule it many times over), and
+                // always cleared on UP so a short press's own timer never fires late after focus
+                // has moved elsewhere.
+                if (isDown && event.repeatCount == 0) {
+                    handler.postDelayed(longPressFavoriteRunnable, LONG_PRESS_FAVORITE_MS)
+                }
                 if (isUp) {
+                    handler.removeCallbacks(longPressFavoriteRunnable)
+                    if (longPressFavoriteArmed) {
+                        // The long-press already fully handled this press (captured+toggled a
+                        // favorite) - don't also fire the normal single/double-click handling for
+                        // the same physical press.
+                        longPressFavoriteArmed = false
+                        return true
+                    }
                     val now = System.currentTimeMillis()
                     val isDoubleOk = now - lastOkUpTime < DOUBLE_OK_INTERVAL_MS
                     lastOkUpTime = now
@@ -1101,6 +1325,9 @@ class MainActivity : AppCompatActivity() {
                         return true
                     } else if (topBar.hasFocus()) {
                         moveFocusToPage()
+                        return true
+                    } else if (currentSource == SOURCE_FAVORITES) {
+                        moveFocusToTopBar()
                         return true
                     } else if (canGoBackFlag) {
                         geckoSession.goBack()

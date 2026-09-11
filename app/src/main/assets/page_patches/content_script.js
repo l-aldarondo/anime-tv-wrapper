@@ -9,6 +9,14 @@
     try {
         var isTop = (window === window.top);
 
+        function hostHas(list) {
+            var h = window.location.hostname;
+            for (var hi = 0; hi < list.length; hi++) {
+                if (h.indexOf(list[hi]) !== -1) return true;
+            }
+            return false;
+        }
+
         // SoloLatino serves its ad payload as a <script id="__sl_ads" type="application/json">
         // element the page reads by id and JSON.parses directly - clearing window.__sl_ads does
         // nothing, the element's own content has to be cleared, and re-cleared since a server
@@ -45,6 +53,31 @@
                 return null;
             };
         }
+
+        // 1b. Neutralize Disqus embed-script injection (9anime.or.at episode/watch pages). The
+        // page's own inline script does d.head.appendChild(s) synchronously as the HTML parser
+        // reaches it - that dispatches the network request to disqus.com immediately, before any
+        // MutationObserver callback (including purgeOverlays() below) gets a chance to react, so
+        // CSS display:none on the comment container alone can't stop it. Overriding appendChild/
+        // insertBefore here (document_start, before the page's own scripts run) wins the race.
+        try {
+            var origAppendChild = Node.prototype.appendChild;
+            Node.prototype.appendChild = function (node) {
+                if (node && node.tagName === 'SCRIPT' && typeof node.src === 'string' && node.src.indexOf('disqus.com/embed.js') !== -1) {
+                    console.log('AnimeTV: Suppressed Disqus embed.js injection -> ' + node.src);
+                    return node;
+                }
+                return origAppendChild.call(this, node);
+            };
+            var origInsertBefore = Node.prototype.insertBefore;
+            Node.prototype.insertBefore = function (node, ref) {
+                if (node && node.tagName === 'SCRIPT' && typeof node.src === 'string' && node.src.indexOf('disqus.com/embed.js') !== -1) {
+                    console.log('AnimeTV: Suppressed Disqus embed.js injection -> ' + node.src);
+                    return node;
+                }
+                return origInsertBefore.call(this, node, ref);
+            };
+        } catch (e) {}
 
         function isInternalLink(u) {
             if (!u || u === '#' || u.indexOf('/') === 0 || u.indexOf('#') === 0 || u.indexOf('javascript:') === 0) return true;
@@ -87,8 +120,228 @@
             };
         } catch (e) {}
 
+        // "My List" long-press-to-favorite: MainActivity arms this flag (prepare_favorite_capture,
+        // see the onMessage listener below) then immediately dispatches a REAL synthetic touch at
+        // the D-pad reticle's own position (VirtualCursorView.dispatchClick - the exact same
+        // mechanism a normal single-OK-press click already uses). Letting Gecko's own hit-testing
+        // resolve that touch, rather than reimplementing coordinate math / elementFromPoint(x,y)
+        // natively, means whatever's "under the cursor" is determined by the same real
+        // layout/z-index/pointer-events rules a genuine tap would use. The click interceptor below
+        // checks this flag FIRST, before its normal anchor-interception job: if armed, it cancels
+        // the click's normal effect (so long-pressing never navigates anywhere) and reports back
+        // what it found instead of letting the click proceed.
+        var favoriteCaptureArmed = false;
+        var favoriteCaptureTimeout = null;
+
+        // Touch-and-hold equivalent for phones/touchscreens, which have no OK button to hold at
+        // all - without this, nothing on a touch-only device could ever trigger the capture above.
+        // Extracts and sends directly from the hold timer itself rather than arming the flag and
+        // waiting for a click - confirmed live that a genuine long hold (500ms+) does NOT get a
+        // synthesized 'click' afterward the way a quick tap does, so the original design (arm on
+        // hold, let the click interceptor do the work) silently never fired for a real hold.
+        // favoriteCaptureArmed is still set defensively afterward, purely so the capture-phase
+        // click interceptor below swallows whatever click the browser DOES end up firing for this
+        // same touch sequence, so it can't also navigate.
+        (function () {
+            var holdTimer = null;
+            var startX = 0;
+            var startY = 0;
+            var MOVE_CANCEL_PX = 15;
+            var HOLD_MS = 550;
+            document.addEventListener('touchstart', function (e) {
+                if (!e.touches || e.touches.length !== 1) return;
+                startX = e.touches[0].clientX;
+                startY = e.touches[0].clientY;
+                holdTimer = setTimeout(function () {
+                    holdTimer = null;
+                    var target = document.elementFromPoint(startX, startY);
+                    var candidate = extractFavoriteCandidate(target, startX, startY);
+                    try { browser.runtime.sendMessage({ type: 'favorite_candidate', payload: candidate }); } catch (err) {}
+                    favoriteCaptureArmed = true;
+                    if (favoriteCaptureTimeout) clearTimeout(favoriteCaptureTimeout);
+                    favoriteCaptureTimeout = setTimeout(function () { favoriteCaptureArmed = false; }, 600);
+                }, HOLD_MS);
+            }, { passive: true });
+            document.addEventListener('touchmove', function (e) {
+                if (!holdTimer || !e.touches || !e.touches.length) return;
+                var dx = e.touches[0].clientX - startX;
+                var dy = e.touches[0].clientY - startY;
+                if ((dx * dx + dy * dy) > (MOVE_CANCEL_PX * MOVE_CANCEL_PX)) {
+                    clearTimeout(holdTimer);
+                    holdTimer = null;
+                }
+            }, { passive: true });
+            document.addEventListener('touchend', function () {
+                if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+            }, { passive: true });
+            document.addEventListener('touchcancel', function () {
+                if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+            }, { passive: true });
+        })();
+
+        // Per-site card shape: itemSelector finds every card on the page, extract() pulls
+        // title/poster/url out of one. Table-driven so the "exact hit, else nearest card" search
+        // below (extractFavoriteCandidate) is written once instead of once per site.
+        var FAVORITE_CARD_TYPES = [
+            {
+                hosts: ['9anime.or.at'],
+                itemSelector: '.flw-item',
+                extract: function (card) {
+                    var a = card.querySelector('.film-name a');
+                    var img = card.querySelector('.film-poster img.film-poster-img');
+                    return {
+                        title: a ? a.textContent.trim() : '',
+                        poster: img ? (img.getAttribute('data-src') || img.getAttribute('src')) : '',
+                        url: a ? a.href : ''
+                    };
+                }
+            },
+            {
+                hosts: ['gogoanime.by', 'animeflix.team', '9animes.me.uk'],
+                itemSelector: 'article.bs',
+                extract: function (card) {
+                    var h2 = card.querySelector('h2[itemprop="headline"]');
+                    var img = card.querySelector('img.ts-post-image');
+                    var a = card.querySelector('a[itemprop="url"]');
+                    return {
+                        title: h2 ? h2.textContent.trim() : '',
+                        poster: img ? img.getAttribute('src') : '',
+                        url: a ? a.href : ''
+                    };
+                }
+            },
+            {
+                hosts: ['sololatino.net'],
+                itemSelector: 'div.card',
+                extract: function (card) {
+                    var titleEl = card.querySelector('.card__title');
+                    var img = card.querySelector('img.card__poster');
+                    var a = card.querySelector('a[href]');
+                    return {
+                        title: titleEl ? titleEl.textContent.trim() : '',
+                        poster: img ? img.getAttribute('src') : '',
+                        url: a ? a.href : ''
+                    };
+                }
+            },
+            {
+                hosts: ['animeyt.cc'],
+                itemSelector: 'article.aniyt-anime-card',
+                extract: function (card) {
+                    var a = card.querySelector('.aniyt-anime-body h3 a');
+                    var img = card.querySelector('a.aniyt-anime-poster img');
+                    return {
+                        title: a ? a.textContent.trim() : '',
+                        poster: img ? (img.getAttribute('data-src') || img.getAttribute('src')) : '',
+                        url: a ? a.href : ''
+                    };
+                }
+            },
+            {
+                hosts: ['jkanime.net'],
+                itemSelector: '.page_directorio > div',
+                extract: function (card) {
+                    var titleEl = card.querySelector('.card-title');
+                    var img = card.querySelector('img');
+                    var a = card.querySelector('a[href]');
+                    return {
+                        title: titleEl ? titleEl.textContent.trim() : '',
+                        poster: img ? img.getAttribute('src') : '',
+                        url: a ? a.href : ''
+                    };
+                }
+            }
+        ];
+
+        function extractFavoriteCandidate(clickTarget, clientX, clientY) {
+            function abs(url) {
+                try { return url ? new URL(url, window.location.href).href : ''; } catch (e) { return url || ''; }
+            }
+
+            var cardType = null;
+            for (var ct = 0; ct < FAVORITE_CARD_TYPES.length; ct++) {
+                if (hostHas(FAVORITE_CARD_TYPES[ct].hosts)) { cardType = FAVORITE_CARD_TYPES[ct]; break; }
+            }
+
+            var card = null;
+            if (cardType) {
+                // Exact hit first (cheap, and correct even when cards overlap/nest oddly).
+                if (clickTarget && clickTarget.closest) {
+                    card = clickTarget.closest(cardType.itemSelector);
+                }
+                // The reticle rarely lands pixel-perfect inside a card's own DOM bounds (it can
+                // land on inter-card padding, a section heading, or wherever it happened to be
+                // sitting - e.g. VirtualCursorView starts centered on screen until the user
+                // actually moves it) - confirmed live: a long-press near but not exactly on a card
+                // fell all the way through to the whole-page Open Graph fallback below, saving the
+                // page instead of the show the user was actually looking at. Snap to whichever
+                // real card on the page is geometrically closest to the click point instead of
+                // requiring an exact DOM-ancestor hit.
+                if (!card && typeof clientX === 'number' && typeof clientY === 'number') {
+                    var candidates = document.querySelectorAll(cardType.itemSelector);
+                    var bestDist = Infinity;
+                    for (var ci = 0; ci < candidates.length; ci++) {
+                        var rect = candidates[ci].getBoundingClientRect();
+                        if (rect.width <= 0 || rect.height <= 0) continue;
+                        var dx = Math.max(rect.left - clientX, 0, clientX - rect.right);
+                        var dy = Math.max(rect.top - clientY, 0, clientY - rect.bottom);
+                        var dist = dx * dx + dy * dy;
+                        if (dist < bestDist) { bestDist = dist; card = candidates[ci]; }
+                    }
+                }
+            }
+
+            var data = null;
+            if (card && cardType) {
+                var extracted = cardType.extract(card);
+                data = {
+                    title: extracted.title,
+                    poster: abs(extracted.poster),
+                    url: extracted.url
+                };
+            }
+
+            if (data && data.title && data.url) return data;
+
+            // Fallback: the reticle wasn't over a recognized card - use the CURRENT page's own
+            // Open Graph tags instead. This is the expected path when the user long-presses while
+            // already sitting on the show's own detail/player page ("I'm watching this, save it"),
+            // arguably the more common real gesture.
+            var ogTitleEl = document.querySelector('meta[property="og:title"]');
+            var ogImageEl = document.querySelector('meta[property="og:image"]');
+            var ogSiteNameEl = document.querySelector('meta[property="og:site_name"]');
+            var rawTitle = (ogTitleEl && ogTitleEl.getAttribute('content')) || document.title || '';
+            var siteName = (ogSiteNameEl && ogSiteNameEl.getAttribute('content')) || window.location.hostname.split('.')[0];
+            var cleanTitle = rawTitle.replace(/^watch\s+/i, '');
+            if (siteName) {
+                try {
+                    var esc = siteName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    var suffixRe = new RegExp('\\s*[-|\u2013]\\s*(all episodes at\\s+)?' + esc + '\\s*$', 'i');
+                    cleanTitle = cleanTitle.replace(suffixRe, '');
+                } catch (e) {}
+            }
+            cleanTitle = cleanTitle.trim() || rawTitle.trim();
+            // Never trust og:url - a mirror domain (animeflix.team, confirmed live) can point it
+            // at a DIFFERENT underlying domain than the one actually being browsed.
+            // window.location.href is always correct since that's exactly where this happened.
+            return {
+                title: cleanTitle,
+                poster: abs((ogImageEl && ogImageEl.getAttribute('content')) || ''),
+                url: window.location.href
+            };
+        }
+
         // 3. Capture-phase click interceptor (blocks external popup tabs & redirects)
         document.addEventListener('click', function (e) {
+            if (favoriteCaptureArmed) {
+                favoriteCaptureArmed = false;
+                if (favoriteCaptureTimeout) { clearTimeout(favoriteCaptureTimeout); favoriteCaptureTimeout = null; }
+                e.preventDefault();
+                e.stopPropagation();
+                var candidate = extractFavoriteCandidate(e.target, e.clientX, e.clientY);
+                try { browser.runtime.sendMessage({ type: 'favorite_candidate', payload: candidate }); } catch (err) {}
+                return false;
+            }
             var el = e.target;
             while (el && el !== document.body) {
                 if (el.tagName === 'A') {
@@ -138,10 +391,23 @@
         // the top document, one injected per sanitized iframe); now there's exactly one.
         function purgeOverlays() {
             neutralizeSlAdsElement();
-            // Remove fake robot verification / notification / loading / APK download prompts
+            // Remove fake robot verification / notification / loading / APK download prompts.
+            // This had no size/length bound at all - since it checks EVERY div/section/dialog at
+            // every nesting level (not just small leaf popups) via .innerText (which aggregates
+            // ALL descendant text), a large, completely legitimate ancestor section could satisfy
+            // both halves of the condition purely by coincidence: a real Cloudflare Turnstile
+            // widget rendering the word "robot" ANYWHERE on the page, combined with a large parent
+            // that also happens to contain one of the very common action words ("download", "ok",
+            // "continue", "allow" - virtually guaranteed to appear somewhere on a real streaming
+            // page with per-episode download buttons) ANYWHERE within it, e.g. an episode list's
+            // whole wrapping section. Capping the text length keeps this scoped to small,
+            // popup-sized content the way it was actually meant to be, matching the same 400-char
+            // bound already used below for the ad-wall text detector.
             var botCards = document.querySelectorAll('div, section, dialog');
             for (var bc = 0; bc < botCards.length; bc++) {
-                var bcTxt = (botCards[bc].innerText || '').toLowerCase();
+                var bcRawTxt = botCards[bc].innerText || '';
+                if (bcRawTxt.length > 400) continue;
+                var bcTxt = bcRawTxt.toLowerCase();
                 if ((bcTxt.indexOf('not a robot') !== -1 || bcTxt.indexOf('kindly verify') !== -1 || bcTxt.indexOf('robot') !== -1 || bcTxt.indexOf('need to "allow"') !== -1 || bcTxt.indexOf('need to allow') !== -1 || (bcTxt.indexOf('loading...') !== -1 && bcTxt.indexOf('allow') !== -1) || bcTxt.indexOf("we're ready") !== -1 || bcTxt.indexOf('file_download.apk') !== -1 || (bcTxt.indexOf('.apk') !== -1 && bcTxt.indexOf('download') !== -1)) && (bcTxt.indexOf('attention') !== -1 || bcTxt.indexOf('cancel') !== -1 || bcTxt.indexOf('allow') !== -1 || bcTxt.indexOf('continue') !== -1 || bcTxt.indexOf('ok') !== -1 || bcTxt.indexOf('download') !== -1)) {
                     try { botCards[bc].remove(); } catch (e) {}
                 }
@@ -171,7 +437,16 @@
                     if (!tTxt || tTxt.length > 400 || !adWallTextRe.test(tTxt)) continue;
                     var tCs = window.getComputedStyle(tEl);
                     var tZ = parseInt(tCs.zIndex || '0', 10) || 0;
-                    if (tCs.position === 'fixed' || tCs.position === 'absolute' || tZ > 100 || tEl.offsetWidth > window.innerWidth * 0.5) {
+                    // A real ad wall is virtually always taken out of normal document flow via
+                    // fixed/absolute positioning to sit on top of content - require that as a
+                    // baseline, then use z-index/width only as a secondary signal on TOP of that.
+                    // Previously any one of these four alone was enough, which meant a plain
+                    // in-flow page section (a season's episode-list wrapper, a synopsis paragraph,
+                    // anything comfortably over half the viewport wide - which describes most main
+                    // content on a phone/TV layout) could get removed outright just for
+                    // coincidentally containing one of this regex's fairly generic words/phrases.
+                    var isPositionedOverlay = tCs.position === 'fixed' || tCs.position === 'absolute';
+                    if (isPositionedOverlay && (tZ > 100 || tEl.offsetWidth > window.innerWidth * 0.5)) {
                         try { tEl.remove(); } catch (e) {}
                     }
                 }
@@ -249,8 +524,17 @@
                     try { skipBtns[sk].click(); } catch (e) {}
                 }
             }
+            // sololatino.net's own trailer-close and auth-modal-close buttons both happen to
+            // carry aria-label="Cerrar" (Spanish "Close") - the same generic label this sweep
+            // targets for OTHER sites' cookie/tutorial dialogs. Opening the trailer sets a class
+            // on #trailer-modal, which is inside this observer's own attributeFilter, so the very
+            // next purgeOverlays() pass (next animation frame) found #trailer-close via this
+            // selector and clicked it - auto-closing the trailer the instant it opened. Excluding
+            // both modals' own controls here, same idea as the id checks already used elsewhere
+            // in this file for these two ids.
             var dismissBtns = document.querySelectorAll('button[data-aniyt-cookie-dismiss], [data-abismo-login-dialog] .close, [aria-label="Cerrar"]');
             for (var d = 0; d < dismissBtns.length; d++) {
+                if (dismissBtns[d].closest && dismissBtns[d].closest('#trailer-modal, #auth-modal')) continue;
                 try { dismissBtns[d].click(); } catch (e) {}
             }
             var allBtns = document.querySelectorAll('button');
@@ -260,14 +544,27 @@
                 }
             }
 
-            // SoloLatino: dismiss the auth modal and visually de-emphasize paid-tier server buttons
-            // (Premium/VIP) - no auto-clicking (see git history: every attempt at that caused a
-            // reload loop or interrupted an already-playing free server). The user picks their own
-            // server from the visible buttons, same as always; this only makes the paid ones look
-            // less like the right choice.
+            // SoloLatino: visually de-emphasize paid-tier server buttons (Premium/VIP) - no
+            // auto-clicking (see git history: every attempt at that caused a reload loop or
+            // interrupted an already-playing free server). The user picks their own server from
+            // the visible buttons, same as always; this only makes the paid ones look less like
+            // the right choice.
+            // NOTE: this used to also force-remove #auth-modal here (plus a matching fixes.css
+            // display:none rule). That's the site's real login dialog - already `hidden` by
+            // default in its own markup, only unhidden by the site's own JS when an account
+            // action needs it (e.g. clicking Favorito/Mi Lista/Vista while logged out gets a 401,
+            // and the response handler calls window.showAuthModal()). Removing it meant those
+            // clicks still fired their request but the resulting login prompt never appeared -
+            // "if I click on them nothing happens." Left alone now; it stays invisible on its own
+            // whenever the site itself has no reason to show it.
             if (window.location.hostname.indexOf('sololatino.net') !== -1) {
-                var authM = document.getElementById('auth-modal') || document.querySelector('.auth-modal');
-                if (authM) { try { authM.remove(); } catch (e) {} }
+                // sololatino.net's real <footer> has no unique class/id (plain Tailwind utility
+                // classes, confirmed live) - a bare `footer` CSS selector in fixes.css would be
+                // unsafe there since that file applies to every third-party player iframe this
+                // app loads too (all_frames + <all_urls>), so it's removed via JS instead,
+                // hostname-scoped like everything else in this block.
+                var slFooter = document.querySelector('footer');
+                if (slFooter) { try { slFooter.remove(); } catch (e) {} }
 
                 var paidTierRe = /premium|\bvip\b/i;
                 var allServerBtns = document.querySelectorAll('button[data-server-btn], .server-btn');
@@ -699,6 +996,18 @@
                         handleCommand(message.payload || {});
                     } else if (message.type === 'anime-set-fullscreen') {
                         window.expandPlayerFullscreen(!!message.enabled);
+                    } else if (message.type === 'prepare_favorite_capture') {
+                        favoriteCaptureArmed = true;
+                        if (favoriteCaptureTimeout) clearTimeout(favoriteCaptureTimeout);
+                        // Safety auto-clear in case the expected synthetic click never arrives for
+                        // any reason - avoids silently eating a LATER, real click/tap by leaving
+                        // this armed. The native side dispatches its synthetic click essentially
+                        // back-to-back with this same message (same call, no user-paced delay in
+                        // between), so this only needs to cover that dispatch's own latency, not
+                        // genuine seconds - kept short specifically so a stray armed flag (e.g. if
+                        // the synthetic click is ever dropped) can't sit around long enough to
+                        // hijack a real, unrelated tap/click later.
+                        favoriteCaptureTimeout = setTimeout(function () { favoriteCaptureArmed = false; }, 600);
                     }
                 });
             }
@@ -717,16 +1026,10 @@
             // detail/player pages; if a site ever redesigns and a selector stops matching, the
             // observer just finds nothing and the site's own normal pagination link keeps working.
             function setupInfiniteScroll() {
-                var host = window.location.hostname;
                 var path = window.location.pathname;
                 var activated = false;
-
-                function hostHas(list) {
-                    for (var i = 0; i < list.length; i++) {
-                        if (host.indexOf(list[i]) !== -1) return true;
-                    }
-                    return false;
-                }
+                // hostHas() is now a top-level helper (see top of file) shared with
+                // extractFavoriteCandidate() - previously duplicated here as a local copy.
 
                 // Generic engine for sites whose "next page" is a plain HTML document containing
                 // the same card markup as the current page - covers every source except JKAnime

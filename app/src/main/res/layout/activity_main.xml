@@ -48,6 +48,26 @@
                     android:layout_height="wrap_content"
                     android:orientation="horizontal">
 
+                    <!-- My List: shows saved via long-press-OK anywhere in the app (see
+                         MainActivity.handleLongPressFavorite()). Not a real source/URL - selecting
+                         it swaps GeckoView out for a native favoritesScreen grid below, see
+                         switchSource()'s SOURCE_FAVORITES branch. -->
+                    <TextView
+                        android:id="@+id/btnSourceFavorites"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/bg_topbar_item"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:paddingHorizontal="14dp"
+                        android:paddingVertical="14dp"
+                        android:text="★  My List"
+                        android:textColor="#FFD600"
+                        android:textSize="20sp"
+                        android:textStyle="bold" />
+
                     <!-- Source 1: 9Anime -->
                     <TextView
                         android:id="@+id/btnSource9Anime"
@@ -205,6 +225,39 @@
                 android:focusable="true"
                 android:focusableInTouchMode="true" />
 
+            <!-- My List grid - occupies the exact same slot as GeckoView, shown/hidden opposite
+                 it (see switchSource()'s SOURCE_FAVORITES branch). D-pad UP/DOWN/LEFT/RIGHT/OK
+                 here are NOT routed through virtualCursorView - MainActivity.dispatchKeyEvent lets
+                 them fall through to Android's normal focus-search/click handling instead, since
+                 this is a real focusable Android view grid, not the page's custom reticle model. -->
+            <FrameLayout
+                android:id="@+id/favoritesScreen"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="#000000"
+                android:visibility="gone">
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/favoritesRecyclerView"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipToPadding="false"
+                    android:padding="16dp"
+                    android:scrollbars="none" />
+
+                <TextView
+                    android:id="@+id/favoritesEmptyText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:text="No shows saved yet.\nHold OK (remote) or press and hold a show (touch) to add it here."
+                    android:textAlignment="center"
+                    android:textColor="#A090C0"
+                    android:textSize="20sp"
+                    android:visibility="gone" />
+
+            </FrameLayout>
+
             <!-- Top page-loading progress bar - shown while a source switch or reload is in
                  flight (see MainActivity.switchSource()/attachGeckoSessionDelegates()'s
                  onPageStart/onPageStop), so a top-bar tab press has immediate visible feedback
@@ -322,7 +375,10 @@
 
     </LinearLayout>
 
-    <!-- Bottom Remote Controls Guide (Auto-fades out after 5 seconds) -->
+    <!-- Bottom Remote Controls Guide (Auto-fades out after 5 seconds). Starts invisible - shown
+         via scheduleGuideDismiss() only once the first page actually finishes loading (see
+         onPageStop, MainActivity.kt), not at app launch, so its 5-second timer doesn't race the
+         initial page load and burn down against a blank/loading screen. -->
     <LinearLayout
         android:id="@+id/osdControlsGuide"
         android:layout_width="wrap_content"
@@ -332,6 +388,7 @@
         android:background="@drawable/bg_osd_panel"
         android:orientation="horizontal"
         android:elevation="40dp"
+        android:visibility="invisible"
         android:focusable="false"
         android:clickable="false">
 

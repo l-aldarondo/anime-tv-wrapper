@@ -74,6 +74,8 @@ kotlin {
 dependencies {
   implementation(libs.androidx.core.ktx)
   implementation(libs.androidx.appcompat)
+  implementation(libs.androidx.recyclerview)
+  implementation(libs.glide)
 
   // The GeckoView Engine
   implementation("org.mozilla.geckoview:geckoview:153.0.20260715202819")
