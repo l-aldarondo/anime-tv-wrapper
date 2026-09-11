@@ -12,10 +12,6 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.animation.DecelerateInterpolator
-import org.mozilla.geckoview.GeckoSession
-import org.mozilla.geckoview.PanZoomController
-import org.mozilla.geckoview.ScreenLength
-
 /**
  * High-performance virtual pointer overlay for Google TV & Android TV remotes.
  * Features 60/120 FPS continuous velocity physics, smooth acceleration,
@@ -39,25 +35,12 @@ class VirtualCursorView @JvmOverloads constructor(
             invalidate()
         }
 
-    // The View synthetic clicks are dispatched to (see dispatchClick) - a plain View works fine
-    // for this, GeckoView needs no special entry point (dispatchTouchEvent isn't overridden by
-    // it, confirmed against the pinned engine version).
+    // The View synthetic clicks and scrolls are dispatched to (e.g. WebView)
     var targetView: View? = null
 
-    // GeckoView doesn't scroll via the standard View.scrollBy() offset mechanism the way WebView
-    // did (it renders/scrolls through its own compositor) - programmatic scroll goes through this
-    // instead. Set once the session is opened (see MainActivity).
-    var geckoSession: GeckoSession? = null
-
-    // Each scrollBy() call is a Binder IPC round-trip into the Gecko process - calling it every
-    // Choreographer frame (60-120Hz) was confirmed on-device to accumulate enough outstanding
-    // Binder objects to trip Android's "sent too many Binders" protection and have the whole app
-    // killed by the system after a few seconds of held-key scrolling. Coalesce frames' worth of
-    // delta into one flush at a capped rate instead - well below what's needed for scrolling to
-    // still look and feel continuous.
     private var pendingScrollPx = 0
     private var lastScrollFlushNanos = 0L
-    private val minScrollFlushIntervalNanos = 33_000_000L // ~30Hz cap on scroll IPC calls
+    private val minScrollFlushIntervalNanos = 16_000_000L // 60Hz smooth scroll
 
     private fun scrollTargetBy(px: Int, frameTimeNanos: Long) {
         pendingScrollPx += px
@@ -66,11 +49,7 @@ class VirtualCursorView @JvmOverloads constructor(
         val flush = pendingScrollPx
         pendingScrollPx = 0
         if (flush == 0) return
-        geckoSession?.panZoomController?.scrollBy(
-            ScreenLength.zero(),
-            ScreenLength.fromPixels(flush.toDouble()),
-            PanZoomController.SCROLL_BEHAVIOR_AUTO
-        )
+        targetView?.scrollBy(0, flush)
     }
 
     private val density = resources.displayMetrics.density

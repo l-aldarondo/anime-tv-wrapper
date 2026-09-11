@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Anime TV Page Patches",
-  "version": "1.0",
+  "version": "1.1",
   "browser_specific_settings": {
     "gecko": {
       "id": "patches@animetv.app"

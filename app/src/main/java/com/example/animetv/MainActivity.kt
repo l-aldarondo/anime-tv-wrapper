@@ -1,16 +1,29 @@
 package com.example.animetv
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.pm.ActivityInfo
+import android.content.res.Configuration
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.Message
 import android.util.Log
 import android.view.KeyEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
+import android.webkit.ConsoleMessage
+import android.webkit.JavascriptInterface
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -18,23 +31,19 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import com.example.animetv.adblock.AdBlockEngine
 import com.example.animetv.tv.VirtualCursorView
-import org.json.JSONObject
-import org.mozilla.geckoview.AllowOrDeny
-import org.mozilla.geckoview.ContentBlocking
-import org.mozilla.geckoview.GeckoResult
-import org.mozilla.geckoview.GeckoRuntime
-import org.mozilla.geckoview.GeckoRuntimeSettings
-import org.mozilla.geckoview.GeckoSession
-import org.mozilla.geckoview.GeckoSessionSettings
-import org.mozilla.geckoview.GeckoView
-import org.mozilla.geckoview.WebExtension
 
 class MainActivity : AppCompatActivity() {
 
     companion object {
+        const val TAG = "AnimeTVLite"
+
         const val PREFS_NAME = "anime_tv_prefs"
         const val KEY_ACTIVE_SOURCE = "active_source"
+        const val KEY_CINEMA_MODE = "cinema_mode"
+        const val KEY_NAV_MODE = "nav_mode"
+
         const val SOURCE_9ANIME = "9anime"
         const val SOURCE_GOGOANIME = "gogoanime"
         const val SOURCE_SOLOLATINO = "sololatino"
@@ -53,52 +62,11 @@ class MainActivity : AppCompatActivity() {
 
         const val MODE_POINTER = 0
         const val MODE_SCROLL = 1
+
         private const val BACK_PRESS_INTERVAL = 2000L
-        private const val DOUBLE_OK_INTERVAL_MS = 400L
-        // How long a just-pressed top-bar tab stays focused (glowing) after switchSource() fires,
-        // before focus hands off to the page. Without this, moveFocusToPage() ran in the same
-        // frame as the OK press, so a source switch that visibly worked on the first press looked
-        // like it needed a second one - the first press's own visual confirmation had already
-        // vanished before the user could see it, and a hasty second OK landed on the page instead
-        // of the bar (see dispatchKeyEvent's topBar.hasFocus() branch).
-        private const val SOURCE_SWITCH_FOCUS_DELAY_MS = 200L
+        private const val HUD_AUTO_HIDE_DELAY_MS = 6000L
 
-        // Reverse-engineering kill switches used to isolate a playback-breaking layer (see
-        // bootGeckoViewEngine/openGeckoSession) - both OFF here confirmed neither uBlock Origin
-        // nor useTrackingProtection was the cause. The real culprit was GeckoView's cookie
-        // partitioning (Total Cookie Protection), fixed separately below via cookieBehavior.
-        // Left in place, defaulted to false, in case another site needs the same isolation test.
-        private const val DEBUG_DISABLE_UBLOCK = false
-        private const val DEBUG_DISABLE_TRACKING_PROTECTION = false
-        // Also tested and ruled out: disabling our OWN page_patches content script entirely (the
-        // "Prueba con Servidor 1" symptom on SoloLatino's Premium tab persisted identically with
-        // it off) - see commit history for the fuller isolation-test writeup.
-        private const val DEBUG_DISABLE_PAGE_PATCHES = false
-        // Isolation test: with both extensions above ruled out (identical failure with neither
-        // active), the next candidate is GeckoView's default UA - it reports as a mobile Android
-        // Gecko browser (isTv's desktop-Chrome override doesn't apply on a phone), which some
-        // embed providers may serve a different/less-tested code path for versus the desktop
-        // Firefox UA the user's working comparison browsers all sent.
-        private const val DEBUG_FORCE_DESKTOP_UA = false
-
-        private const val UBLOCK_EXTENSION_ID = "uBlock0@raymondhill.net"
-        private const val UBLOCK_ASSET_PATH = "resource://android/assets/ublock_origin/"
-        private const val PATCHES_EXTENSION_ID = "patches@animetv.app"
-        private const val PATCHES_ASSET_PATH = "resource://android/assets/page_patches/"
-        private const val BRIDGE_NATIVE_APP_ID = "anime_tv_bridge"
-
-        // GeckoRuntime.getDefault() can't take a GeckoRuntimeSettings (it always builds one with
-        // no options), and GeckoRuntime.create(context, settings) throws "Failed to initialize
-        // GeckoRuntime" if called a second time in the same process (there's only ever one real
-        // native Gecko runtime per process) - so this process-wide cache lets bootGeckoViewEngine()
-        // call create() exactly once (with remoteDebuggingEnabled, for `about:debugging` USB
-        // inspection of the live session) and safely reuse that same instance across any Activity
-        // recreation, the same way getDefault()'s own internal null-check does.
-        @Volatile private var cachedRuntime: GeckoRuntime? = null
-
-        // Main-frame navigation lock: the viewport must stay on a recognized anime provider.
-        // uBlock Origin + the page-patches content script handle ad/overlay suppression inside
-        // iframes now, so this list only needs to police the TOP-LEVEL document.
+        // Primary anime domains and trusted media embed providers
         private val ALLOWED_MAIN_HOSTS = setOf(
             "9anime.or.at",
             "gogoanime.by",
@@ -112,12 +80,7 @@ class MainActivity : AppCompatActivity() {
             "jkanime.net",
             "pelisserieshoy.com",
             "mediafire.com",
-            "morencius.com",
-            "audinifer.com",
             "cloudwindow-route.com",
-            "minochinos.com",
-            "ghbrisk.com",
-            "bysedikamoum.com",
             "voe.sx",
             "gofile.io",
             "embed69.org",
@@ -126,31 +89,26 @@ class MainActivity : AppCompatActivity() {
             "mega.co.nz",
             "mega.io",
             "ok.ru",
-            "vk.com",
-            "snapcdn.top",
-            "f7hyg4q.org",
-            "desu.sh",
-            "mytsumi.com",
-            "bysesukior.com"
+            "vk.com"
         )
     }
 
     private var isTv = false
+    private var isCinemaMode = false
+    private var currentNavMode = MODE_SCROLL
+    private var currentSource = SOURCE_9ANIME
+    private var lastBackPressTime = 0L
 
-    private lateinit var geckoView: GeckoView
-    private lateinit var runtime: GeckoRuntime
-    private lateinit var geckoSession: GeckoSession
+    // Core Views
+    private lateinit var rootContainer: FrameLayout
+    private lateinit var topBar: LinearLayout
+    private lateinit var webView: WebView
     private lateinit var pageLoadingBar: ProgressBar
     private lateinit var virtualCursorView: VirtualCursorView
-    private lateinit var osdControlsGuide: View
+    private lateinit var hudPlayerBar: LinearLayout
+    private lateinit var osdControlsGuide: LinearLayout
 
-    // Top Bar (sources + settings gear) - a PERSISTENT fixed header, always visible during
-    // normal browsing (see the activity_main.xml LinearLayout wrapper: the bar takes its own
-    // fixed row, GeckoView fills the rest). It has no open/close state of its own - the old
-    // slide-down-overlay design got replaced after real testing showed the same "can't get back
-    // out" problem the original left sidebar had. Only the settings gear's own popup
-    // (settingsPanel) is still a real modal with open/close semantics.
-    private lateinit var topBar: LinearLayout
+    // Top Bar Tab Views
     private lateinit var btnSource9Anime: TextView
     private lateinit var btnSourceGogoAnime: TextView
     private lateinit var btnSourceSoloLatino: TextView
@@ -158,38 +116,26 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnSourceAnimeFlix: TextView
     private lateinit var btnSourceAnimeYT: TextView
     private lateinit var btnSourceJKAnime: TextView
-    private lateinit var btnTopBarSettings: TextView
-    private lateinit var settingsPanel: LinearLayout
-    private lateinit var btnSettingsFullscreen: TextView
-    private lateinit var btnSettingsMode: TextView
-    private lateinit var btnSettingsHome: TextView
-    private lateinit var btnSettingsReload: TextView
 
-    private var isSettingsPanelOpen = false
-    // Real GeckoView scroll position (GeckoSession.ScrollDelegate, see attachGeckoSessionDelegates)
-    // - not a JS/content-script round trip. Used to decide whether pressing UP at the top of the
-    // page should move focus into the top bar instead of trying to scroll further.
-    private var pageScrollY = 0
-    private val pageIsAtTop: Boolean get() = pageScrollY <= 4
-    private var currentSource = SOURCE_9ANIME
-    private var currentNavMode = MODE_SCROLL
-    private var isPlayerFullscreen = false
-    private var canGoBackFlag = false
-    private var lastBackPressTime = 0L
-    private var lastOkUpTime = 0L
-    // Which ALLOWED_MAIN_HOSTS entry the top-level document currently matches - used by
-    // onLoadRequest to tell a real cross-source jump from a same-site redirect (see its comment).
-    private var currentAllowedHostFamily: String? = null
-    // Guards the D-pad hint guide's one-shot launch trigger (onPageStop) so it only auto-shows
-    // once per app session, not on every subsequent page load/source switch.
-    private var initialGuideShown = false
+    // Top Bar Actions
+    private lateinit var btnTopBarCinema: TextView
+    private lateinit var btnTopBarMode: TextView
+    private lateinit var btnTopBarReload: TextView
 
-    // Native <-> page bridge (video-play-detected, double-tap, player commands, fullscreen
-    // toggle) - see app/src/main/assets/page_patches/. GeckoView has no evaluateJavascript()
-    // equivalent; this WebExtension native-messaging port replaces it entirely.
-    private var bridgePort: WebExtension.Port? = null
+    // HUD Player Controls
+    private lateinit var btnHudRewind: TextView
+    private lateinit var btnHudPlayPause: TextView
+    private lateinit var btnHudForward: TextView
+    private lateinit var btnHudSkipIntro: TextView
+    private lateinit var btnHudNextEp: TextView
+    private lateinit var btnHudFullscreen: TextView
+
+    // Fullscreen Custom View Container (for HTML5 video tag fullscreen expansion)
+    private var customView: View? = null
+    private var customViewCallback: WebChromeClient.CustomViewCallback? = null
 
     private val handler = Handler(Looper.getMainLooper())
+    private val hideHudRunnable = Runnable { hideHudPlayerBar() }
     private val hideGuideRunnable = Runnable {
         osdControlsGuide.animate()
             .alpha(0f)
@@ -198,14 +144,21 @@ class MainActivity : AppCompatActivity() {
             .start()
     }
 
+    // Cached asset scripts
+    private var cachedAdblockGuardJs = ""
+    private var cachedNetflixCinemaCss = ""
+    private var cachedFixesCss = ""
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         currentSource = prefs.getString(KEY_ACTIVE_SOURCE, SOURCE_9ANIME) ?: SOURCE_9ANIME
+        isCinemaMode = prefs.getBoolean(KEY_CINEMA_MODE, false)
+        currentNavMode = prefs.getInt(KEY_NAV_MODE, MODE_SCROLL)
 
-        val uiModeManager = getSystemService(android.content.Context.UI_MODE_SERVICE) as? android.app.UiModeManager
-        isTv = (uiModeManager?.currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION)
+        val uiModeManager = getSystemService(Context.UI_MODE_SERVICE) as? android.app.UiModeManager
+        isTv = (uiModeManager?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION)
             || !packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TOUCHSCREEN)
 
         requestedOrientation = if (isTv) {
@@ -219,25 +172,39 @@ class MainActivity : AppCompatActivity() {
 
         setContentView(R.layout.activity_main)
 
+        // Preload AdBlockEngine & assets
+        AdBlockEngine.initialize(this)
+        loadCachedAssets()
+
         initViews()
+        setupTopBar()
+        setupHudPlayerBar()
+        setupWebView()
         setupBackPressedHandler()
 
-        if (!isTv) {
-            // On phones with touch screens, hide the virtual D-Pad cursor and TV remote hints
-            virtualCursorView.visibility = View.GONE
-            osdControlsGuide.visibility = View.GONE
-        }
-        // On TV, osdControlsGuide starts invisible (activity_main.xml) - scheduleGuideDismiss()
-        // is deferred to the first onPageStop instead of firing here, so its 5-second countdown
-        // starts once real content is on screen rather than racing the initial page load.
+        val startUrl = intent?.dataString ?: urlForSource(currentSource)
+        webView.loadUrl(startUrl)
 
-        bootGeckoViewEngine()
+        if (isTv) {
+            scheduleGuideDismiss()
+        }
     }
 
-    override fun onNewIntent(intent: android.content.Intent) {
-        super.onNewIntent(intent)
-        intent.dataString?.let { newUrl ->
-            if (::geckoSession.isInitialized) geckoSession.loadUri(newUrl)
+    private fun loadCachedAssets() {
+        try {
+            cachedAdblockGuardJs = assets.open("adblock_guard.js").bufferedReader().use { it.readText() }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error reading adblock_guard.js", e)
+        }
+        try {
+            cachedNetflixCinemaCss = assets.open("netflix_cinema.css").bufferedReader().use { it.readText() }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error reading netflix_cinema.css", e)
+        }
+        try {
+            cachedFixesCss = assets.open("page_patches/fixes.css").bufferedReader().use { it.readText() }
+        } catch (e: Exception) {
+            Log.d(TAG, "No page_patches/fixes.css found, using netflix_cinema.css")
         }
     }
 
@@ -252,15 +219,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun initViews() {
-        geckoView = findViewById(R.id.webView)
+        rootContainer = findViewById(R.id.rootContainer)
+        topBar = findViewById(R.id.topBar)
+        webView = findViewById(R.id.webView)
         pageLoadingBar = findViewById(R.id.pageLoadingBar)
         virtualCursorView = findViewById(R.id.virtualCursorView)
-        virtualCursorView.targetView = geckoView
-        virtualCursorView.isDirectScrollMode = (currentNavMode == MODE_SCROLL)
+        hudPlayerBar = findViewById(R.id.hudPlayerBar)
         osdControlsGuide = findViewById(R.id.osdControlsGuide)
 
-        // Top bar + settings panel references
-        topBar = findViewById(R.id.topBar)
+        virtualCursorView.targetView = webView
+        virtualCursorView.isDirectScrollMode = (currentNavMode == MODE_SCROLL)
+
+        // Top Bar Tabs
         btnSource9Anime = findViewById(R.id.btnSource9Anime)
         btnSourceGogoAnime = findViewById(R.id.btnSourceGogoAnime)
         btnSourceSoloLatino = findViewById(R.id.btnSourceSoloLatino)
@@ -268,369 +238,206 @@ class MainActivity : AppCompatActivity() {
         btnSourceAnimeFlix = findViewById(R.id.btnSourceAnimeFlix)
         btnSourceAnimeYT = findViewById(R.id.btnSourceAnimeYT)
         btnSourceJKAnime = findViewById(R.id.btnSourceJKAnime)
-        btnTopBarSettings = findViewById(R.id.btnTopBarSettings)
-        settingsPanel = findViewById(R.id.settingsPanel)
-        btnSettingsFullscreen = findViewById(R.id.btnSettingsFullscreen)
-        btnSettingsMode = findViewById(R.id.btnSettingsMode)
-        btnSettingsHome = findViewById(R.id.btnSettingsHome)
-        btnSettingsReload = findViewById(R.id.btnSettingsReload)
 
-        // settingsPanel's XML marginTop is only a same-frame fallback (see layout comment) - keep
-        // it pinned to topBar's real measured height so a future topBar padding/text-size change
-        // (e.g. for TV legibility) can't leave a gap or overlap.
-        topBar.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
-            val newHeight = bottom - top
-            if (newHeight > 0 && newHeight != oldBottom - oldTop) {
-                val gapPx = (8 * resources.displayMetrics.density).toInt()
-                (settingsPanel.layoutParams as FrameLayout.LayoutParams).topMargin = newHeight + gapPx
-                settingsPanel.requestLayout()
-            }
-        }
+        // Top Bar Actions
+        btnTopBarCinema = findViewById(R.id.btnTopBarCinema)
+        btnTopBarMode = findViewById(R.id.btnTopBarMode)
+        btnTopBarReload = findViewById(R.id.btnTopBarReload)
 
-        setupTopBar()
-    }
+        // HUD Buttons
+        btnHudRewind = findViewById(R.id.btnHudRewind)
+        btnHudPlayPause = findViewById(R.id.btnHudPlayPause)
+        btnHudForward = findViewById(R.id.btnHudForward)
+        btnHudSkipIntro = findViewById(R.id.btnHudSkipIntro)
+        btnHudNextEp = findViewById(R.id.btnHudNextEp)
+        btnHudFullscreen = findViewById(R.id.btnHudFullscreen)
 
-    // ── GeckoView engine boot ────────────────────────────────────────────────
-
-    @SuppressLint("SetTextI18n")
-    private fun bootGeckoViewEngine() {
-        // See cachedRuntime's own comment: create() (not getDefault(), which can't accept custom
-        // settings) exactly once per process, cached for any later Activity recreation.
-        runtime = cachedRuntime ?: GeckoRuntime.create(
-            this,
-            GeckoRuntimeSettings.Builder()
-                .remoteDebuggingEnabled(true)
-                .build()
-        ).also { cachedRuntime = it }
-
-        // GeckoView defaults to cookieBehavior ACCEPT_FIRST_PARTY_AND_ISOLATE_OTHERS ("Total
-        // Cookie Protection" / dynamic First-Party Isolation) - it gives every third-party origin
-        // a separate cookie/storage jar PER top-level site it's embedded in, instead of one
-        // shared jar. Confirmed on-device (via a controlled test with uBlock Origin AND
-        // useTrackingProtection both fully disabled, which made no difference) that this - not
-        // either adblock layer - is what breaks playback on providers whose embed depends on a
-        // normal, unpartitioned third-party session (logcat showed the exact
-        // "Partitioned cookie or storage access was provided to ... third-party context" line for
-        // player.pelisserieshoy.com right where it fails). This is a single-purpose media wrapper
-        // around a small, fixed set of anime-site embeds, not a general browser, so there's no
-        // privacy upside to isolating them from themselves - ACCEPT_ALL matches how a real
-        // desktop browser with no special third-party cookie restrictions behaves for these sites.
-        runtime.settings.contentBlocking.cookieBehavior = ContentBlocking.CookieBehavior.ACCEPT_ALL
-
-        // Don't open the session/load the start URL until both extensions below have settled
-        // (installed/uninstalled or failed) - otherwise the very first page load could race ahead
-        // of uBlock Origin and land completely unprotected.
-        var pendingInstalls = 2
-        val onInstallSettled = {
-            pendingInstalls--
-            if (pendingInstalls == 0) openGeckoSession()
-        }
-
-        // ensureBuiltIn() installs into the profile's *persistent* extension storage - once
-        // installed, it stays installed (and active) across app restarts, since adb install -r
-        // preserves app data. Simply not calling ensureBuiltIn() on a later run when a DEBUG_*
-        // flag flips to true does NOT disable an extension installed by an earlier run - this was
-        // discovered when live network traces kept showing "Blocked By uBlock Origin" with
-        // DEBUG_DISABLE_UBLOCK = true. An isolation test needs an ACTUAL uninstall.
-        fun settleExtension(
-            disabled: Boolean,
-            assetPath: String,
-            extensionId: String,
-            onReady: ((WebExtension) -> Unit)? = null
-        ) {
-            if (disabled) {
-                runtime.webExtensionController.list().accept({ extensions ->
-                    val existing = extensions?.find { it.id == extensionId }
-                    if (existing != null) {
-                        runtime.webExtensionController.uninstall(existing)
-                            .accept({ onInstallSettled() }, { onInstallSettled() })
-                    } else {
-                        onInstallSettled()
-                    }
-                }, { onInstallSettled() })
-            } else {
-                runtime.webExtensionController.ensureBuiltIn(assetPath, extensionId)
-                    .accept(
-                        { extension -> extension?.let(onReady ?: {}); onInstallSettled() },
-                        { onInstallSettled() }
-                    )
-            }
-        }
-
-        settleExtension(DEBUG_DISABLE_UBLOCK, UBLOCK_ASSET_PATH, UBLOCK_EXTENSION_ID)
-        settleExtension(DEBUG_DISABLE_PAGE_PATCHES, PATCHES_ASSET_PATH, PATCHES_EXTENSION_ID) { extension ->
-            extension.setMessageDelegate(bridgeMessageDelegate, BRIDGE_NATIVE_APP_ID)
+        if (!isTv) {
+            virtualCursorView.visibility = View.GONE
+            osdControlsGuide.visibility = View.GONE
         }
     }
 
-    private fun openGeckoSession() {
-        val settingsBuilder = GeckoSessionSettings.Builder()
-            .allowJavascript(true)
-            .useTrackingProtection(!DEBUG_DISABLE_TRACKING_PROTECTION)
-        if (isTv) {
-            // Desktop/TV Chrome UA for a proper 16:9 widescreen layout instead of a mobile one -
-            // the UA string alone isn't enough, GeckoView still defaults to a mobile CSS viewport
-            // and "request desktop site"-style content adaptations unless these two are also set,
-            // which left sites seeing a "desktop Chrome" UA on a narrow mobile-width viewport.
-            settingsBuilder.userAgentOverride(
-                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 TV/GoogleTV"
-            )
-            settingsBuilder.userAgentMode(GeckoSessionSettings.USER_AGENT_MODE_DESKTOP)
-            settingsBuilder.viewportMode(GeckoSessionSettings.VIEWPORT_MODE_DESKTOP)
-        } else if (DEBUG_FORCE_DESKTOP_UA) {
-            settingsBuilder.userAgentOverride(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0"
-            )
-        }
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun setupWebView() {
+        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
 
-        geckoSession = GeckoSession(settingsBuilder.build())
-        attachGeckoSessionDelegates(geckoSession)
-        geckoSession.open(runtime)
-        geckoView.setSession(geckoSession)
-        virtualCursorView.geckoSession = geckoSession
+        val settings = webView.settings
+        settings.javaScriptEnabled = true
+        settings.domStorageEnabled = true
+        settings.databaseEnabled = true
+        settings.mediaPlaybackRequiresUserGesture = false
+        settings.allowFileAccess = true
+        settings.allowContentAccess = true
+        settings.loadsImagesAutomatically = true
+        settings.useWideViewPort = true
+        settings.loadWithOverviewMode = true
 
-        val startUrl = intent?.dataString ?: urlForSource(currentSource)
-        geckoSession.loadUri(startUrl)
-    }
+        // Suppress popups via multi-window intercept
+        settings.setSupportMultipleWindows(true)
+        settings.javaScriptCanOpenWindowsAutomatically = false
 
-    private fun attachGeckoSessionDelegates(session: GeckoSession) {
-        session.contentDelegate = object : GeckoSession.ContentDelegate {
-            override fun onFullScreen(session: GeckoSession, fullScreen: Boolean) {
-                handleFullscreenChange(fullScreen)
+        // Desktop / TV Chrome User-Agent for standard 16:9 HTML5 playback
+        settings.userAgentString = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 TV/GoogleTV"
+
+        // Cache policy
+        settings.cacheMode = WebSettings.LOAD_DEFAULT
+
+        webView.addJavascriptInterface(AnimeTvBridge(), "AndroidBridge")
+
+        webView.webViewClient = object : WebViewClient() {
+
+            override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
+                val url = request?.url?.toString()
+                if (AdBlockEngine.shouldBlock(url)) {
+                    return AdBlockEngine.EMPTY_RESPONSE
+                }
+                return super.shouldInterceptRequest(view, request)
             }
-        }
 
-        session.progressDelegate = object : GeckoSession.ProgressDelegate {
-            override fun onPageStart(session: GeckoSession, url: String) {
-                runOnUiThread {
-                    pageLoadingBar.visibility = View.VISIBLE
-                    pageScrollY = 0
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                val uri = request?.url ?: return false
+                val scheme = uri.scheme?.lowercase() ?: ""
+
+                if (scheme == "about" || scheme == "data" || scheme == "blob") return false
+                if (scheme != "http" && scheme != "https") return true // block external protocols
+
+                val host = uri.host?.lowercase() ?: ""
+
+                // Check if host matches any allowed streaming or embed provider
+                val isAllowed = ALLOWED_MAIN_HOSTS.any { host == it || host.endsWith(".$it") }
+                if (!isAllowed) {
+                    Log.w(TAG, "Blocked external navigation to: $host")
+                    return true // block popup/redirect
+                }
+
+                return false
+            }
+
+            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                pageLoadingBar.visibility = View.VISIBLE
+                // Inject early guard
+                injectScript(
+                    """
+                    (function() {
+                        try {
+                            window.open = function() { return null; };
+                            var sl = document.getElementById('__sl_ads');
+                            if (sl) sl.textContent = '{"h":"","b":""}';
+                        } catch(e) {}
+                    })();
+                    """.trimIndent()
+                )
+            }
+
+            override fun onPageFinished(view: WebView?, url: String?) {
+                pageLoadingBar.visibility = View.GONE
+
+                // Inject full guard script and styles
+                if (cachedAdblockGuardJs.isNotEmpty()) {
+                    injectScript(cachedAdblockGuardJs)
+                }
+                if (cachedNetflixCinemaCss.isNotEmpty()) {
+                    injectCss(cachedNetflixCinemaCss)
+                }
+                if (cachedFixesCss.isNotEmpty()) {
+                    injectCss(cachedFixesCss)
+                }
+
+                // Apply Cinema Mode state if active
+                if (isCinemaMode) {
+                    injectScript("document.body.classList.add('animetv-cinema-mode');")
                 }
             }
-            override fun onPageStop(session: GeckoSession, success: Boolean) {
-                runOnUiThread {
+        }
+
+        webView.webChromeClient = object : WebChromeClient() {
+
+            override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean {
+                // Completely suppress new windows/popups
+                Log.d(TAG, "Blocked popup attempt in onCreateWindow")
+                return false
+            }
+
+            override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                pageLoadingBar.progress = newProgress
+                if (newProgress >= 90) {
                     pageLoadingBar.visibility = View.GONE
-                    if (isTv && !initialGuideShown) {
-                        initialGuideShown = true
-                        scheduleGuideDismiss()
-                    }
                 }
             }
-        }
 
-        // Real scroll position from the compositor - used to decide whether UP at the page's
-        // content should move focus into the persistent top bar (see pageIsAtTop, dispatchKeyEvent).
-        session.scrollDelegate = object : GeckoSession.ScrollDelegate {
-            override fun onScrollChanged(session: GeckoSession, scrollX: Int, scrollY: Int) {
-                runOnUiThread { pageScrollY = scrollY }
-            }
-        }
-
-        session.navigationDelegate = object : GeckoSession.NavigationDelegate {
-            override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) {
-                canGoBackFlag = canGoBack
+            override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                Log.d(TAG, "WebConsole: ${consoleMessage?.message()} (line ${consoleMessage?.lineNumber()})")
+                return true
             }
 
-            // Fires for top-level/main-frame navigations only (subframe/iframe navigation -
-            // e.g. an embed provider's own internal redirects - goes through
-            // onSubframeLoadRequest instead, which is deliberately left unhandled here: uBlock
-            // Origin's own network-level filtering now polices unwanted iframe loads, so the
-            // old WebView-era "allowed video host" allowlist gate for subframes is redundant).
-            override fun onLoadRequest(
-                session: GeckoSession,
-                request: GeckoSession.NavigationDelegate.LoadRequest
-            ): GeckoResult<AllowOrDeny> {
-                val uri = try { Uri.parse(request.uri) } catch (e: Exception) { null }
-                val scheme = uri?.scheme?.lowercase() ?: ""
-                if (scheme == "about" || scheme == "data" || scheme == "blob" || scheme == "resource" || scheme == "moz-extension") {
-                    return GeckoResult.fromValue(AllowOrDeny.ALLOW)
+            override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
+                if (customView != null) {
+                    callback?.onCustomViewHidden()
+                    return
                 }
-                if (scheme != "http" && scheme != "https") {
-                    return GeckoResult.fromValue(AllowOrDeny.DENY)
-                }
-                val host = uri?.host?.lowercase() ?: ""
-                val matchedFamily = ALLOWED_MAIN_HOSTS.find { host == it || host.endsWith(".$it") }
-                if (matchedFamily == null) {
-                    return GeckoResult.fromValue(AllowOrDeny.DENY)
-                }
-                // A source's own ad network occasionally tries a silent top-level redirect to a
-                // DIFFERENT source's real site (seen live: animeyt.cc's ad scripts redirecting to
-                // jkanime.net) - since jkanime.net is itself a legitimate allowed host (needed for
-                // its own tab), the plain host-allowlist check above lets it straight through. Any
-                // GENUINE reason to cross from one source's site to a different one always has
-                // either a real user gesture (the user tapped a link) or comes from our own native
-                // switchSource()/loadUri() call (isDirectNavigation) - a script-triggered jump
-                // between two unrelated allowed families with neither signal is never legitimate,
-                // so it's the one case denied here instead of just allowlist-checked.
-                val currentFamily = currentAllowedHostFamily
-                val isCrossFamilyJump = currentFamily != null && currentFamily != matchedFamily
-                if (isCrossFamilyJump && !request.hasUserGesture && !request.isDirectNavigation) {
-                    Log.w("AnimeTV", "Blocked cross-family redirect: $currentFamily -> $matchedFamily ($host)")
-                    return GeckoResult.fromValue(AllowOrDeny.DENY)
-                }
-                currentAllowedHostFamily = matchedFamily
-                return GeckoResult.fromValue(AllowOrDeny.ALLOW)
+                customView = view
+                customViewCallback = callback
+                topBar.visibility = View.GONE
+                hudPlayerBar.visibility = View.GONE
+                webView.visibility = View.GONE
+
+                val decor = window.decorView as ViewGroup
+                decor.addView(view, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                enableImmersiveMode()
             }
 
-            // Not overriding this returns null, which GeckoView treats as "deny the popup" -
-            // window.open()/target="_blank" requests just fail silently. The page-patches
-            // content script's own window.open() override (belt and suspenders) covers any
-            // popup attempt that fires before this would even be consulted.
-            override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession>? = null
-        }
+            override fun onHideCustomView() {
+                if (customView == null) return
+                val decor = window.decorView as ViewGroup
+                decor.removeView(customView)
+                customView = null
+                customViewCallback?.onCustomViewHidden()
+                customViewCallback = null
 
-        // GeckoView blocks audible autoplay by default unless the load had a genuine user
-        // gesture. Safe to grant unconditionally here since this app only ever loads a small,
-        // fixed set of first-party anime sites, never arbitrary third-party content.
-        session.permissionDelegate = object : GeckoSession.PermissionDelegate {
-            override fun onContentPermissionRequest(
-                session: GeckoSession,
-                perm: GeckoSession.PermissionDelegate.ContentPermission
-            ): GeckoResult<Int> {
-                return if (perm.permission == GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_AUDIBLE ||
-                    perm.permission == GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_INAUDIBLE
-                ) {
-                    GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
-                } else {
-                    GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT)
-                }
-            }
-        }
-
-        // Unlike WebView, GeckoView shows nothing at all for a plain HTML <select> unless the
-        // embedder implements this - onChoicePrompt is a `default` (no-op) method on the
-        // interface, so the app compiled fine without it but every dropdown (e.g. this site's
-        // season/"temporada" picker) silently did nothing when tapped.
-        session.promptDelegate = object : GeckoSession.PromptDelegate {
-            override fun onChoicePrompt(
-                session: GeckoSession,
-                prompt: GeckoSession.PromptDelegate.ChoicePrompt
-            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
-                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
-                val choices = prompt.choices
-                val labels = choices.map { it.label }.toTypedArray()
-                val isMultiple = prompt.type == GeckoSession.PromptDelegate.ChoicePrompt.Type.MULTIPLE
-
-                val builder = android.app.AlertDialog.Builder(this@MainActivity)
-                    .setTitle(prompt.title)
-                    .setOnCancelListener { result.complete(prompt.dismiss()) }
-
-                if (isMultiple) {
-                    val checked = choices.map { it.selected }.toBooleanArray()
-                    builder.setMultiChoiceItems(labels, checked) { _, which, isChecked -> checked[which] = isChecked }
-                        .setPositiveButton(android.R.string.ok) { d, _ ->
-                            result.complete(prompt.confirm(choices.filterIndexed { i, _ -> checked[i] }.toTypedArray()))
-                            d.dismiss()
-                        }
-                } else {
-                    builder.setItems(labels) { d, which ->
-                        result.complete(prompt.confirm(choices[which]))
-                        d.dismiss()
-                    }
-                }
-
-                val dialog = builder.create()
-                // A standard AlertDialog's item list is a focusable, D-pad-navigable ListView by
-                // default, but nothing is pre-focused on show - seed focus onto the first row so
-                // a TV remote can immediately navigate it instead of appearing inert.
-                dialog.setOnShowListener { dialog.listView?.requestFocus() }
-                dialog.show()
-                return result
+                webView.visibility = View.VISIBLE
+                topBar.visibility = View.VISIBLE
+                enableImmersiveMode()
             }
         }
     }
 
-    // ── Native <-> page WebExtension bridge ──────────────────────────────────
-
-    private val bridgeMessageDelegate = object : WebExtension.MessageDelegate {
-        override fun onConnect(port: WebExtension.Port) {
-            bridgePort = port
-            port.setDelegate(bridgePortDelegate)
-        }
+    private fun injectScript(js: String) {
+        webView.evaluateJavascript(js, null)
     }
 
-    private val bridgePortDelegate = object : WebExtension.PortDelegate {
-        override fun onPortMessage(message: Any, port: WebExtension.Port) {
-            val json = when (message) {
-                is JSONObject -> message
-                is String -> try { JSONObject(message) } catch (e: Exception) { null }
-                else -> null
-            } ?: return
-            when (json.optString("type")) {
-                "anime-video-play" -> runOnUiThread {
-                    if (!isPlayerFullscreen && currentSource != SOURCE_SOLOLATINO && currentSource != SOURCE_SOLOLATINO_HOME) {
-                        setPlayerFullscreen(true)
-                    }
-                }
-                "anime-doubletap" -> runOnUiThread {
-                    togglePlayerFullscreen()
-                }
+    private fun injectCss(css: String) {
+        val cleanCss = css.replace("'", "\\'").replace("\n", "\\n").replace("\r", "")
+        val script = """
+            (function() {
+                var parent = document.head || document.documentElement;
+                var style = document.createElement('style');
+                style.type = 'text/css';
+                style.textContent = '$cleanCss';
+                parent.appendChild(style);
+            })();
+        """.trimIndent()
+        webView.evaluateJavascript(script, null)
+    }
+
+    inner class AnimeTvBridge {
+        @JavascriptInterface
+        fun onVideoPlay() {
+            runOnUiThread {
+                showHudPlayerBarBriefly()
             }
         }
-        override fun onDisconnect(port: WebExtension.Port) {
-            if (bridgePort === port) bridgePort = null
+
+        @JavascriptInterface
+        fun onVideoPause() {
+            runOnUiThread {
+            }
         }
     }
 
-    private fun sendPlayerCommand(action: String, seconds: Int = 0) {
-        bridgePort?.postMessage(JSONObject().apply {
-            put("type", "anime-player-command")
-            put("payload", JSONObject().apply {
-                put("action", action)
-                put("seconds", seconds)
-            })
-        })
-    }
-
-    private fun toggleVideoPlayback() = sendPlayerCommand("toggle")
-    private fun playVideo() = sendPlayerCommand("play")
-    private fun pauseVideo() {
-        sendPlayerCommand("pause")
-        Toast.makeText(this, "⏸️ Paused", Toast.LENGTH_SHORT).show()
-    }
-    private fun seekVideo(seconds: Int) = sendPlayerCommand("seek", seconds)
-    private fun triggerNextEpisode() {
-        sendPlayerCommand("next-episode")
-        Toast.makeText(this, "⏭️ Next Episode...", Toast.LENGTH_SHORT).show()
-    }
-    private fun triggerPreviousEpisode() {
-        sendPlayerCommand("prev-episode")
-        Toast.makeText(this, "⏮️ Previous Episode...", Toast.LENGTH_SHORT).show()
-    }
-
-    // ── Top Bar ──────────────────────────────────────────────────────────────
-    // A PERSISTENT fixed header (see activity_main.xml's LinearLayout wrapper: the bar has its
-    // own permanent row, GeckoView fills the rest) - it has no open/close state at all. The
-    // original design was a slide-down overlay toggled by MENU, but on-device use surfaced the
-    // exact same "focus gets in and can't get back out" problem the old left sidebar had, so it
-    // got replaced with something that behaves like an ordinary TV app header (YouTube TV/
-    // Netflix-style): always there, reached by moving focus UP out of the page content once it's
-    // scrolled to the top (see pageIsAtTop, dispatchKeyEvent), and left by moving DOWN back into
-    // the page. It's hidden only during actual fullscreen video playback (see
-    // handleFullscreenChange) to give the video the full screen.
-    //
-    // The one thing about the old sidebar that actually worked reliably - its D-pad focus-list
-    // idiom (indexOfFirst{it.isFocused} + requestFocus() + performClick(), see moveFocusList()
-    // below) - carries over unchanged, just parameterized over two different lists (the bar's
-    // tabs, and the settings popup's items) instead of one.
+    // ── Netflix / Prime Style Top Bar Setup ──────────────────────────────────
 
     private fun setupTopBar() {
-        // Confirmed via on-device logging (touch/focus/click event trace) that a phone tap on a
-        // not-yet-focused, focusableInTouchMode view needed two taps: Android's own
-        // View.onTouchEvent() grants focus on the first tap but deliberately skips performClick()
-        // for that same tap when focus was just taken, requiring a second tap (on the
-        // now-already-focused view) to actually click - this is documented platform behavior, not
-        // a bug in this app's own logic. Real Android focus is only needed here for TV D-pad
-        // navigation (moveFocusList/pageIsAtTop/topBar.hasFocus() routing in dispatchKeyEvent) -
-        // a phone has no D-pad, so disabling focusability there sidesteps the platform quirk
-        // entirely with no effect on TV behavior.
-        if (!isTv) {
-            for (v in topBarFocusOrder + settingsPanelFocusOrder) {
-                v.isFocusable = false
-                v.isFocusableInTouchMode = false
-            }
-        }
-
         btnSource9Anime.setOnClickListener { switchSource(SOURCE_9ANIME) }
         btnSourceGogoAnime.setOnClickListener { switchSource(SOURCE_GOGOANIME) }
         btnSourceSoloLatino.setOnClickListener { switchSource(SOURCE_SOLOLATINO) }
@@ -639,154 +446,49 @@ class MainActivity : AppCompatActivity() {
         btnSourceAnimeYT.setOnClickListener { switchSource(SOURCE_ANIMEYT) }
         btnSourceJKAnime.setOnClickListener { switchSource(SOURCE_JKANIME) }
 
-        btnTopBarSettings.setOnClickListener { openSettingsPanel() }
-
-        btnSettingsFullscreen.setOnClickListener {
-            togglePlayerFullscreen()
-            closeSettingsPanel()
-        }
-
-        btnSettingsMode.setOnClickListener {
-            toggleNavigationMode()
-            updateSettingsPanelUi()
-        }
-
-        btnSettingsHome.setOnClickListener {
-            geckoSession.loadUri(urlForSource(currentSource))
-            closeSettingsPanel()
-            moveFocusToPage()
-        }
-
-        btnSettingsReload.setOnClickListener {
-            geckoSession.reload()
-            closeSettingsPanel()
-            moveFocusToPage()
-        }
+        btnTopBarCinema.setOnClickListener { toggleCinemaMode() }
+        btnTopBarMode.setOnClickListener { toggleNavMode() }
+        btnTopBarReload.setOnClickListener { webView.reload() }
 
         updateTopBarUi()
-        updateSettingsPanelUi()
     }
 
-    // Sources in traversal order, left to right, then the settings gear - the D-pad LEFT/RIGHT
-    // focus-navigation order while focus is in the bar (see moveFocusList()).
     private val topBarFocusOrder: List<View> by lazy {
         listOf(
             btnSource9Anime, btnSourceGogoAnime, btnSourceSoloLatino, btnSourceSoloLatinoHome,
-            btnSourceAnimeFlix, btnSourceAnimeYT, btnSourceJKAnime, btnTopBarSettings
+            btnSourceAnimeFlix, btnSourceAnimeYT, btnSourceJKAnime,
+            btnTopBarCinema, btnTopBarMode, btnTopBarReload
         )
-    }
-
-    // The settings popup's own D-pad UP/DOWN focus-navigation order.
-    private val settingsPanelFocusOrder: List<View> by lazy {
-        listOf(btnSettingsFullscreen, btnSettingsMode, btnSettingsHome, btnSettingsReload)
-    }
-
-    // Used by moveFocusToTopBar()'s fallback so landing in the bar with nothing already focused
-    // (the common case - UP-at-top or MENU from the page) lands on the CURRENT source's tab
-    // (matching the ● highlight updateTopBarUi() already renders) instead of always the first tab.
-    private val sourceButtonMap: Map<String, View> by lazy {
-        mapOf(
-            SOURCE_9ANIME to btnSource9Anime,
-            SOURCE_GOGOANIME to btnSourceGogoAnime,
-            SOURCE_SOLOLATINO to btnSourceSoloLatino,
-            SOURCE_SOLOLATINO_HOME to btnSourceSoloLatinoHome,
-            SOURCE_ANIMEFLIX to btnSourceAnimeFlix,
-            SOURCE_ANIMEYT to btnSourceAnimeYT,
-            SOURCE_JKANIME to btnSourceJKAnime
-        )
-    }
-
-    private fun moveFocusList(order: List<View>, forward: Boolean) {
-        val currentIndex = order.indexOfFirst { it.isFocused }
-        val nextIndex = when {
-            currentIndex == -1 -> 0
-            forward -> (currentIndex + 1).coerceAtMost(order.size - 1)
-            else -> (currentIndex - 1).coerceAtLeast(0)
-        }
-        order[nextIndex].requestFocus()
-    }
-
-    // Moves real Android focus into the persistent bar - from the page (UP at the top of scroll,
-    // or MENU as a direct shortcut from anywhere) or back from the settings popup.
-    private fun moveFocusToTopBar() {
-        if (isPlayerFullscreen) return
-        // A stale timestamp left over from before this transition must never let an unrelated
-        // later OK press in the bar coincidentally read as a "double OK" and toggle fullscreen.
-        lastOkUpTime = 0L
-        virtualCursorView.isCursorVisible = false
-        // A direction key held down at the moment focus jumps to the bar (e.g. UP, right as
-        // pageIsAtTop trips) can have its eventual key-up swallowed by this same transition -
-        // onDpadKey(..., false) is the only other place that clears held state, so force it here
-        // too, or the page could keep silently auto-scrolling/gliding after focus has moved on.
-        virtualCursorView.clearHeldKeys()
-        val target = topBarFocusOrder.firstOrNull { it.isFocused }
-            ?: sourceButtonMap[currentSource]
-            ?: topBarFocusOrder.firstOrNull()
-        target?.requestFocus()
-    }
-
-    // Moves real Android focus back to the page content - the bar itself is never hidden by this,
-    // it just stops holding focus (see the class-level comment above).
-    private fun moveFocusToPage() {
-        lastOkUpTime = 0L
-        closeSettingsPanel()
-        geckoView.requestFocus()
-        if (isTv) {
-            virtualCursorView.isCursorVisible = true
-        }
-    }
-
-    // Opened only from the bar's gear, and only ever closes back to the gear (never straight to
-    // the page) - a single unambiguous nesting order, so dispatchKeyEvent never has to guess which
-    // layer a BACK/DOWN/LEFT press should unwind first.
-    private fun openSettingsPanel() {
-        if (isSettingsPanelOpen) return
-        isSettingsPanelOpen = true
-        settingsPanel.visibility = View.VISIBLE
-        settingsPanelFocusOrder.firstOrNull()?.requestFocus()
-    }
-
-    private fun closeSettingsPanel() {
-        if (!isSettingsPanelOpen) return
-        isSettingsPanelOpen = false
-        settingsPanel.visibility = View.GONE
-        btnTopBarSettings.requestFocus()
     }
 
     private fun updateTopBarUi() {
         val sources = listOf(
             Triple(btnSource9Anime, SOURCE_9ANIME, "9Anime"),
             Triple(btnSourceGogoAnime, SOURCE_GOGOANIME, "GogoAnime"),
-            Triple(btnSourceSoloLatino, SOURCE_SOLOLATINO, "SoloAnime ES"),
-            Triple(btnSourceSoloLatinoHome, SOURCE_SOLOLATINO_HOME, "SoloStream ES"),
+            Triple(btnSourceSoloLatino, SOURCE_SOLOLATINO, "SoloAnime"),
+            Triple(btnSourceSoloLatinoHome, SOURCE_SOLOLATINO_HOME, "SoloStream"),
             Triple(btnSourceAnimeFlix, SOURCE_ANIMEFLIX, "AnimeFlix"),
-            Triple(btnSourceAnimeYT, SOURCE_ANIMEYT, "AnimeYT (Español)"),
-            Triple(btnSourceJKAnime, SOURCE_JKANIME, "JKAnime (Español)")
+            Triple(btnSourceAnimeYT, SOURCE_ANIMEYT, "AnimeYT"),
+            Triple(btnSourceJKAnime, SOURCE_JKANIME, "JKAnime")
         )
 
         for ((btn, src, name) in sources) {
             if (currentSource == src) {
-                btn.text = "●  $name"
-                btn.setBackgroundResource(R.drawable.bg_topbar_active_source)
+                btn.text = "● $name"
+                btn.setBackgroundResource(R.drawable.bg_netflix_active_tab)
                 btn.setTextColor(Color.WHITE)
             } else {
-                btn.text = "○  $name"
-                btn.setBackgroundResource(R.drawable.bg_topbar_item)
-                btn.setTextColor(Color.parseColor("#F0F0FF"))
+                btn.text = "○ $name"
+                btn.setBackgroundResource(R.drawable.bg_netflix_tab)
+                btn.setTextColor(Color.parseColor("#E0E0FF"))
             }
         }
-    }
 
-    private fun updateSettingsPanelUi() {
-        btnSettingsFullscreen.text = if (isPlayerFullscreen) "⛶  Exit Fullscreen" else "⛶  Enter Fullscreen"
-        btnSettingsFullscreen.setTextColor(
-            if (isPlayerFullscreen) Color.parseColor("#FF5252") else Color.parseColor("#FFD600")
-        )
+        btnTopBarCinema.text = if (isCinemaMode) "🍿 Cinema: ON" else "🍿 Cinema"
+        btnTopBarCinema.setTextColor(if (isCinemaMode) Color.parseColor("#FF5252") else Color.parseColor("#FFD54F"))
 
-        btnSettingsMode.text = if (currentNavMode == MODE_POINTER) "🖱️  Mode: Pointer" else "📜  Mode: Scroll"
-        btnSettingsMode.setTextColor(
-            if (currentNavMode == MODE_POINTER) Color.parseColor("#E0AAFF") else Color.parseColor("#00E676")
-        )
+        btnTopBarMode.text = if (currentNavMode == MODE_SCROLL) "📜 Scroll" else "🖱️ Pointer"
+        btnTopBarMode.setTextColor(if (currentNavMode == MODE_SCROLL) Color.parseColor("#00E676") else Color.parseColor("#BB86FC"))
     }
 
     private fun switchSource(source: String) {
@@ -796,358 +498,277 @@ class MainActivity : AppCompatActivity() {
         prefs.edit().putString(KEY_ACTIVE_SOURCE, source).apply()
         updateTopBarUi()
 
-        val label = when (source) {
-            SOURCE_GOGOANIME -> "GogoAnime"
-            SOURCE_SOLOLATINO -> "SoloAnime ES"
-            SOURCE_SOLOLATINO_HOME -> "SoloStream ES"
-            SOURCE_ANIMEFLIX -> "AnimeFlix"
-            SOURCE_ANIMEYT -> "AnimeYT"
-            SOURCE_JKANIME -> "JKAnime"
-            else -> "9Anime"
-        }
-        Toast.makeText(this, "🎌 Loading $label...", Toast.LENGTH_SHORT).show()
-        pageLoadingBar.visibility = View.VISIBLE
-        geckoSession.loadUri(urlForSource(source))
-        // Keep the just-pressed tab focused (glowing) for a beat so the press has visible
-        // confirmation before focus - and the reticle - jump away to the page; onPageStart/
-        // onPageStop (attachGeckoSessionDelegates) flip pageLoadingBar back off once the new page
-        // actually starts/finishes loading, independent of this timer.
-        topBar.postDelayed({ moveFocusToPage() }, SOURCE_SWITCH_FOCUS_DELAY_MS)
+        webView.loadUrl(urlForSource(source))
+        handler.postDelayed({ moveFocusToPage() }, 200)
     }
 
-    private fun setupBackPressedHandler() {
-        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                if (isSettingsPanelOpen) {
-                    closeSettingsPanel()
-                } else if (topBar.hasFocus()) {
-                    moveFocusToPage()
-                } else if (isPlayerFullscreen) {
-                    geckoSession.exitFullScreen()
-                } else if (canGoBackFlag) {
-                    geckoSession.goBack()
-                } else {
-                    val now = System.currentTimeMillis()
-                    if (now - lastBackPressTime < BACK_PRESS_INTERVAL) {
-                        finish()
-                    } else {
-                        lastBackPressTime = now
-                        Toast.makeText(this@MainActivity, "Press BACK again to exit", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-        })
-    }
-
-    // ── Fullscreen ───────────────────────────────────────────────────────────
-
-    private fun handleFullscreenChange(fullScreen: Boolean) {
-        isPlayerFullscreen = fullScreen
-        if (!isTv) {
-            requestedOrientation = if (fullScreen) {
-                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-            } else {
-                ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-            }
-        }
-        if (fullScreen) {
-            moveFocusToPage()
-            // The bar is a persistent header during normal browsing, but fullscreen video should
-            // get the whole screen - this is the one case it actually gets hidden.
-            topBar.visibility = View.GONE
-            virtualCursorView.visibility = View.GONE
-            osdControlsGuide.visibility = View.GONE
-            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    private fun toggleCinemaMode() {
+        isCinemaMode = !isCinemaMode
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putBoolean(KEY_CINEMA_MODE, isCinemaMode).apply()
+        updateTopBarUi()
+        if (isCinemaMode) {
+            injectScript("document.body.classList.add('animetv-cinema-mode');")
+            Toast.makeText(this, "🍿 Cinema Mode Enabled", Toast.LENGTH_SHORT).show()
         } else {
-            topBar.visibility = View.VISIBLE
-            virtualCursorView.visibility = if (currentNavMode == MODE_POINTER && isTv) View.VISIBLE else View.GONE
-        }
-        enableImmersiveMode()
-    }
-
-    // Requests the page to enter/exit fullscreen via the bridge - the actual state change (and
-    // all UI/orientation updates above) only happens once ContentDelegate.onFullScreen confirms
-    // it really did, so this is a request, not an immediate state flip.
-    fun setPlayerFullscreen(enabled: Boolean) {
-        bridgePort?.postMessage(JSONObject().apply {
-            put("type", "anime-set-fullscreen")
-            put("enabled", enabled)
-        })
-        // Apply our own chrome (topBar/cursor visibility, orientation) immediately rather than
-        // waiting for ContentDelegate.onFullScreen to confirm the page's real Fullscreen API
-        // request succeeded. That confirmation depends on the browser granting "transient user
-        // activation" to a call that only reaches the page asynchronously (native key event ->
-        // bridgePort -> content script), which some sources' cross-origin player iframes don't
-        // reliably get - on those, the message still arrives and CAN toggle the CSS-based
-        // expansion, but the native Fullscreen API call can silently fail, and our own UI was
-        // gated on that same confirmation, so double-OK looked like it did nothing at all.
-        // handleFullscreenChange is idempotent, so a later onFullScreen callback re-confirming
-        // (or correcting) this is harmless.
-        handleFullscreenChange(enabled)
-        if (enabled) {
-            Toast.makeText(this, "⛶ Fullscreen Active (Press BACK to exit)", Toast.LENGTH_SHORT).show()
-            handler.postDelayed({ playVideo() }, 300L)
+            injectScript("document.body.classList.remove('animetv-cinema-mode');")
+            Toast.makeText(this, "Standard View", Toast.LENGTH_SHORT).show()
         }
     }
 
-    fun togglePlayerFullscreen() {
-        setPlayerFullscreen(!isPlayerFullscreen)
+    private fun toggleNavMode() {
+        currentNavMode = if (currentNavMode == MODE_SCROLL) MODE_POINTER else MODE_SCROLL
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putInt(KEY_NAV_MODE, currentNavMode).apply()
+        virtualCursorView.isDirectScrollMode = (currentNavMode == MODE_SCROLL)
+        updateTopBarUi()
     }
 
-    private fun enableImmersiveMode() {
-        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
-        androidx.core.view.WindowInsetsControllerCompat(window, window.decorView).let { controller ->
-            controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-            controller.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+    // ── Netflix / Prime Style HUD Player Controls ────────────────────────────
+
+    private fun setupHudPlayerBar() {
+        btnHudRewind.setOnClickListener {
+            sendPlayerCommand("seek", -10)
+            showHudPlayerBarBriefly()
+        }
+        btnHudPlayPause.setOnClickListener {
+            sendPlayerCommand("toggle")
+            showHudPlayerBarBriefly()
+        }
+        btnHudForward.setOnClickListener {
+            sendPlayerCommand("seek", 10)
+            showHudPlayerBarBriefly()
+        }
+        btnHudSkipIntro.setOnClickListener {
+            sendPlayerCommand("skipIntro")
+            Toast.makeText(this, "⏩ Skipping Intro (+85s)", Toast.LENGTH_SHORT).show()
+            showHudPlayerBarBriefly()
+        }
+        btnHudNextEp.setOnClickListener {
+            sendPlayerCommand("nextEpisode")
+            Toast.makeText(this, "⏭ Loading Next Episode...", Toast.LENGTH_SHORT).show()
+            showHudPlayerBarBriefly()
+        }
+        btnHudFullscreen.setOnClickListener {
+            toggleFullscreen()
+            hideHudPlayerBar()
+        }
+    }
+
+    private val hudFocusOrder: List<View> by lazy {
+        listOf(btnHudRewind, btnHudPlayPause, btnHudForward, btnHudSkipIntro, btnHudNextEp, btnHudFullscreen)
+    }
+
+    private fun sendPlayerCommand(action: String, seconds: Int = 0) {
+        val js = when (action) {
+            "toggle" -> "window.__animePlayerBridge && window.__animePlayerBridge.toggle();"
+            "play" -> "window.__animePlayerBridge && window.__animePlayerBridge.play();"
+            "pause" -> "window.__animePlayerBridge && window.__animePlayerBridge.pause();"
+            "seek" -> "window.__animePlayerBridge && window.__animePlayerBridge.seek($seconds);"
+            "skipIntro" -> "window.__animePlayerBridge && window.__animePlayerBridge.skipIntro();"
+            "nextEpisode" -> "window.__animePlayerBridge && window.__animePlayerBridge.nextEpisode();"
+            else -> ""
+        }
+        if (js.isNotEmpty()) {
+            webView.evaluateJavascript(js, null)
+        }
+    }
+
+    private fun showHudPlayerBar() {
+        handler.removeCallbacks(hideHudRunnable)
+        hudPlayerBar.visibility = View.VISIBLE
+        hudPlayerBar.alpha = 1f
+        btnHudPlayPause.requestFocus()
+        handler.postDelayed(hideHudRunnable, HUD_AUTO_HIDE_DELAY_MS)
+    }
+
+    private fun showHudPlayerBarBriefly() {
+        handler.removeCallbacks(hideHudRunnable)
+        hudPlayerBar.visibility = View.VISIBLE
+        hudPlayerBar.alpha = 1f
+        handler.postDelayed(hideHudRunnable, HUD_AUTO_HIDE_DELAY_MS)
+    }
+
+    private fun hideHudPlayerBar() {
+        hudPlayerBar.animate()
+            .alpha(0f)
+            .setDuration(300)
+            .withEndAction {
+                hudPlayerBar.visibility = View.GONE
+                webView.requestFocus()
+            }
+            .start()
+    }
+
+    private fun toggleFullscreen() {
+        if (customView != null) {
+            customViewCallback?.onCustomViewHidden()
+        } else {
+            injectScript(
+                """
+                (function() {
+                    var vid = document.querySelector('video');
+                    if (vid) {
+                        if (vid.requestFullscreen) vid.requestFullscreen();
+                        else if (vid.webkitRequestFullscreen) vid.webkitRequestFullscreen();
+                    }
+                })();
+                """.trimIndent()
+            )
+        }
+    }
+
+    // ── TV D-Pad Focus & Key Navigation ──────────────────────────────────────
+
+    private fun moveFocusToTopBar() {
+        virtualCursorView.isCursorVisible = false
+        val active = topBarFocusOrder.firstOrNull { it.id == btnSource9Anime.id }
+        active?.requestFocus()
+    }
+
+    private fun moveFocusToPage() {
+        webView.requestFocus()
+        if (isTv) {
+            virtualCursorView.isCursorVisible = true
         }
     }
 
     private fun scheduleGuideDismiss() {
-        handler.removeCallbacks(hideGuideRunnable)
-        osdControlsGuide.alpha = 1f
         osdControlsGuide.visibility = View.VISIBLE
-        handler.postDelayed(hideGuideRunnable, 5000L)
+        osdControlsGuide.alpha = 1f
+        handler.removeCallbacks(hideGuideRunnable)
+        handler.postDelayed(hideGuideRunnable, 5000)
     }
 
-    private fun toggleNavigationMode() {
-        currentNavMode = if (currentNavMode == MODE_POINTER) MODE_SCROLL else MODE_POINTER
-        virtualCursorView.isDirectScrollMode = (currentNavMode == MODE_SCROLL)
-        // The reticle stays visible in both modes - Scroll Mode still needs it as a click target
-        // (LEFT/RIGHT glide it sideways, OK clicks), UP/DOWN just also scrolls the page.
-        virtualCursorView.isCursorVisible = true
-        if (currentNavMode == MODE_POINTER) {
-            Toast.makeText(this, "Pointer Mode: D-Pad glides cursor, OK clicks", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(this, "Scroll Mode: UP/DOWN scrolls, LEFT/RIGHT moves the click reticle, OK clicks", Toast.LENGTH_SHORT).show()
-        }
-        scheduleGuideDismiss()
-    }
-
-    /**
-     * Intercept and handle TV Remote D-Pad, Trackpad, and Media Keys.
-     */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        val isDown = event.action == KeyEvent.ACTION_DOWN
-        val isUp = event.action == KeyEvent.ACTION_UP
+        val action = event.action
+        val keyCode = event.keyCode
 
-        // ── FULLSCREEN VIDEO REMOTE CONTROLS ────────────────────────────────
-        if (isPlayerFullscreen) {
-            when (event.keyCode) {
-                KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_BUTTON_B -> {
-                    if (isUp) geckoSession.exitFullScreen()
+        // Hardware Media Controls
+        if (action == KeyEvent.ACTION_DOWN) {
+            when (keyCode) {
+                KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_HEADSETHOOK -> {
+                    sendPlayerCommand("toggle")
+                    showHudPlayerBarBriefly()
                     return true
                 }
-
-                KeyEvent.KEYCODE_MEDIA_PAUSE -> {
-                    if (isUp) pauseVideo()
-                    return true
-                }
-
                 KeyEvent.KEYCODE_MEDIA_PLAY -> {
-                    if (isUp) playVideo()
+                    sendPlayerCommand("play")
+                    showHudPlayerBarBriefly()
                     return true
                 }
-
-                // Single OK toggles play/pause; a second OK within DOUBLE_OK_INTERVAL_MS instead
-                // exits fullscreen (suppressing the toggle, so it doesn't also flicker play/pause).
-                KeyEvent.KEYCODE_DPAD_CENTER,
-                KeyEvent.KEYCODE_ENTER,
-                KeyEvent.KEYCODE_NUMPAD_ENTER,
-                KeyEvent.KEYCODE_BUTTON_A,
-                KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
-                    if (isUp) {
-                        val now = System.currentTimeMillis()
-                        val isDoubleOk = now - lastOkUpTime < DOUBLE_OK_INTERVAL_MS
-                        lastOkUpTime = now
-                        if (isDoubleOk) geckoSession.exitFullScreen() else toggleVideoPlayback()
-                    }
+                KeyEvent.KEYCODE_MEDIA_PAUSE -> {
+                    sendPlayerCommand("pause")
+                    showHudPlayerBarBriefly()
                     return true
                 }
-
-                KeyEvent.KEYCODE_DPAD_RIGHT,
-                KeyEvent.KEYCODE_MEDIA_FAST_FORWARD,
-                KeyEvent.KEYCODE_MEDIA_STEP_FORWARD,
-                KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD -> {
-                    if (isUp) {
-                        seekVideo(10)
-                        Toast.makeText(this, "⏩ +10s", Toast.LENGTH_SHORT).show()
-                    }
+                KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
+                    sendPlayerCommand("seek", 10)
+                    showHudPlayerBarBriefly()
                     return true
                 }
-
-                KeyEvent.KEYCODE_DPAD_LEFT,
-                KeyEvent.KEYCODE_MEDIA_REWIND,
-                KeyEvent.KEYCODE_MEDIA_STEP_BACKWARD,
-                KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD -> {
-                    if (isUp) {
-                        seekVideo(-10)
-                        Toast.makeText(this, "⏪ -10s", Toast.LENGTH_SHORT).show()
-                    }
+                KeyEvent.KEYCODE_MEDIA_REWIND -> {
+                    sendPlayerCommand("seek", -10)
+                    showHudPlayerBarBriefly()
                     return true
                 }
-
-                KeyEvent.KEYCODE_DPAD_UP -> {
-                    if (isUp) {
-                        seekVideo(85)
-                        Toast.makeText(this, "⏩ Skipped Intro (+85s)", Toast.LENGTH_SHORT).show()
-                    }
-                    return true
-                }
-
-                KeyEvent.KEYCODE_DPAD_DOWN -> {
-                    if (isUp) {
-                        seekVideo(-30)
-                        Toast.makeText(this, "⏪ -30s", Toast.LENGTH_SHORT).show()
-                    }
-                    return true
-                }
-
                 KeyEvent.KEYCODE_MEDIA_NEXT -> {
-                    if (isUp) triggerNextEpisode()
+                    sendPlayerCommand("nextEpisode")
                     return true
                 }
-
-                KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
-                    if (isUp) triggerPreviousEpisode()
+                KeyEvent.KEYCODE_MENU -> {
+                    if (hudPlayerBar.visibility == View.VISIBLE) {
+                        hideHudPlayerBar()
+                    } else {
+                        showHudPlayerBar()
+                    }
                     return true
+                }
+            }
+        }
+
+        // When HUD bar is visible, allow D-pad to navigate HUD buttons
+        if (hudPlayerBar.visibility == View.VISIBLE) {
+            if (action == KeyEvent.ACTION_DOWN) {
+                when (keyCode) {
+                    KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        hideHudPlayerBar()
+                        return true
+                    }
+                    KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        moveFocusInList(hudFocusOrder, false)
+                        handler.removeCallbacks(hideHudRunnable)
+                        handler.postDelayed(hideHudRunnable, HUD_AUTO_HIDE_DELAY_MS)
+                        return true
+                    }
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        moveFocusInList(hudFocusOrder, true)
+                        handler.removeCallbacks(hideHudRunnable)
+                        handler.postDelayed(hideHudRunnable, HUD_AUTO_HIDE_DELAY_MS)
+                        return true
+                    }
+                    KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                        val focused = hudFocusOrder.find { it.isFocused }
+                        focused?.performClick()
+                        return true
+                    }
                 }
             }
             return super.dispatchKeyEvent(event)
         }
 
-        // ── BROWSING MODE REMOTE CONTROLS ──────────────────────────────────
-        when (event.keyCode) {
-            // The bar has no open/close state (see the class comment above setupTopBar()) - MENU
-            // is just a direct shortcut into/out of it from anywhere, on top of the UP-at-top-of-
-            // page route below.
-            KeyEvent.KEYCODE_MENU,
-            KeyEvent.KEYCODE_INFO,
-            KeyEvent.KEYCODE_GUIDE,
-            KeyEvent.KEYCODE_SETTINGS,
-            KeyEvent.KEYCODE_BUTTON_Y -> {
-                if (isUp) {
-                    if (topBar.hasFocus()) moveFocusToPage() else moveFocusToTopBar()
-                }
-                return true
-            }
-
-            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
-                if (isUp) toggleVideoPlayback()
-                return true
-            }
-            KeyEvent.KEYCODE_MEDIA_PLAY -> {
-                if (isUp) playVideo()
-                return true
-            }
-            KeyEvent.KEYCODE_MEDIA_PAUSE -> {
-                if (isUp) pauseVideo()
-                return true
-            }
-
-            KeyEvent.KEYCODE_DPAD_UP,
-            KeyEvent.KEYCODE_DPAD_DOWN,
-            KeyEvent.KEYCODE_DPAD_LEFT,
-            KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                // Settings popup open: UP/DOWN move focus within it, LEFT backs out to the gear -
-                // this inner layer never routes straight to the page (see openSettingsPanel()).
-                if (isSettingsPanelOpen) {
-                    if (isDown) {
-                        when (event.keyCode) {
-                            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN ->
-                                moveFocusList(settingsPanelFocusOrder, forward = event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN)
-                            KeyEvent.KEYCODE_DPAD_LEFT -> closeSettingsPanel()
-                            else -> {}
-                        }
+        // When Top Bar has focus, D-pad LEFT/RIGHT moves between tabs, DOWN moves into page
+        val isTopBarFocused = topBarFocusOrder.any { it.isFocused }
+        if (isTopBarFocused) {
+            if (action == KeyEvent.ACTION_DOWN) {
+                when (keyCode) {
+                    KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        moveFocusInList(topBarFocusOrder, false)
+                        return true
                     }
-                    return true
-                }
-                // Focus is in the persistent bar (no popup): LEFT/RIGHT move focus across
-                // tabs+gear, DOWN moves focus back into the page - the bar itself is never hidden
-                // by this, it just stops holding focus (see the class comment above setupTopBar()).
-                if (topBar.hasFocus()) {
-                    if (isDown) {
-                        when (event.keyCode) {
-                            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT ->
-                                moveFocusList(topBarFocusOrder, forward = event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)
-                            KeyEvent.KEYCODE_DPAD_DOWN -> moveFocusToPage()
-                            else -> {}
-                        }
+                    KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        moveFocusInList(topBarFocusOrder, true)
+                        return true
                     }
-                    return true
+                    KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        moveFocusToPage()
+                        return true
+                    }
+                    KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                        val focused = topBarFocusOrder.find { it.isFocused }
+                        focused?.performClick()
+                        return true
+                    }
                 }
-                // Focus is on the page: UP normally scrolls/glides the reticle like any other
-                // direction, EXCEPT once the page is already scrolled to the top (pageIsAtTop,
-                // tracked via GeckoSession.ScrollDelegate - a real scroll position, not a guess) -
-                // at that point there's nowhere further up to scroll, so UP instead moves focus
-                // into the bar sitting right above the content, the same way it would on any
-                // ordinary TV app header.
-                if (event.keyCode == KeyEvent.KEYCODE_DPAD_UP && isDown && pageIsAtTop) {
+            }
+            return super.dispatchKeyEvent(event)
+        }
+
+        // When Page/WebView has focus:
+        if (webView.hasFocus() || (!isTopBarFocused && hudPlayerBar.visibility != View.VISIBLE)) {
+            val isDpadDirection = keyCode in listOf(
+                KeyEvent.KEYCODE_DPAD_UP,
+                KeyEvent.KEYCODE_DPAD_DOWN,
+                KeyEvent.KEYCODE_DPAD_LEFT,
+                KeyEvent.KEYCODE_DPAD_RIGHT
+            )
+
+            if (isDpadDirection) {
+                // Check if UP at top of page should move focus into top bar
+                if (action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_UP && webView.scrollY <= 4) {
                     moveFocusToTopBar()
                     return true
                 }
-                if (isDown) {
-                    scheduleGuideDismiss()
+                val isDown = (action == KeyEvent.ACTION_DOWN)
+                if (isDown && isTv) {
                     virtualCursorView.visibility = View.VISIBLE
                     virtualCursorView.isCursorVisible = true
                 }
-                virtualCursorView.onDpadKey(event.keyCode, isDown)
+                virtualCursorView.onDpadKey(keyCode, isDown)
                 return true
             }
 
-            // D-Pad OK / Center Click - single press selects/clicks at the reticle position; a
-            // second press within DOUBLE_OK_INTERVAL_MS instead toggles fullscreen (suppressing
-            // the click, so it doesn't also fire on whatever's under the reticle).
-            KeyEvent.KEYCODE_DPAD_CENTER,
-            KeyEvent.KEYCODE_ENTER,
-            KeyEvent.KEYCODE_NUMPAD_ENTER,
-            KeyEvent.KEYCODE_BUTTON_A -> {
-                if (isSettingsPanelOpen) {
-                    if (isUp) {
-                        currentFocus?.takeIf { settingsPanelFocusOrder.contains(it) }?.performClick()
-                    }
-                    return true
-                }
-                if (topBar.hasFocus()) {
-                    if (isUp) {
-                        currentFocus?.takeIf { topBarFocusOrder.contains(it) }?.performClick()
-                    }
-                    return true
-                }
-                if (isUp) {
-                    val now = System.currentTimeMillis()
-                    val isDoubleOk = now - lastOkUpTime < DOUBLE_OK_INTERVAL_MS
-                    lastOkUpTime = now
-                    if (isDoubleOk) {
-                        togglePlayerFullscreen()
-                    } else {
-                        scheduleGuideDismiss()
-                        virtualCursorView.dispatchClick(geckoView)
-                    }
-                }
-                return true
-            }
-
-            KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_BUTTON_B -> {
-                if (isUp) {
-                    if (isSettingsPanelOpen) {
-                        closeSettingsPanel()
-                        return true
-                    } else if (topBar.hasFocus()) {
-                        moveFocusToPage()
-                        return true
-                    } else if (canGoBackFlag) {
-                        geckoSession.goBack()
-                        return true
-                    } else {
-                        val now = System.currentTimeMillis()
-                        if (now - lastBackPressTime < BACK_PRESS_INTERVAL) {
-                            finish()
-                        } else {
-                            lastBackPressTime = now
-                            Toast.makeText(this, "Press BACK again to exit", Toast.LENGTH_SHORT).show()
-                        }
-                        return true
-                    }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                if (action == KeyEvent.ACTION_UP) {
+                    virtualCursorView.dispatchClick(webView)
                 }
                 return true
             }
@@ -1156,19 +777,55 @@ class MainActivity : AppCompatActivity() {
         return super.dispatchKeyEvent(event)
     }
 
-    override fun onResume() {
-        super.onResume()
-        if (::geckoSession.isInitialized) geckoSession.setActive(true)
-        enableImmersiveMode()
+    private fun moveFocusInList(list: List<View>, forward: Boolean) {
+        val currentIndex = list.indexOfFirst { it.isFocused }
+        val nextIndex = when {
+            currentIndex == -1 -> 0
+            forward -> (currentIndex + 1).coerceAtMost(list.size - 1)
+            else -> (currentIndex - 1).coerceAtLeast(0)
+        }
+        list[nextIndex].requestFocus()
     }
 
-    override fun onPause() {
-        super.onPause()
-        if (::geckoSession.isInitialized) geckoSession.setActive(false)
+    private fun setupBackPressedHandler() {
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (customView != null) {
+                    customViewCallback?.onCustomViewHidden()
+                    return
+                }
+                if (hudPlayerBar.visibility == View.VISIBLE) {
+                    hideHudPlayerBar()
+                    return
+                }
+                if (webView.canGoBack()) {
+                    webView.goBack()
+                    return
+                }
+                val now = System.currentTimeMillis()
+                if (now - lastBackPressTime < BACK_PRESS_INTERVAL) {
+                    finish()
+                } else {
+                    lastBackPressTime = now
+                    Toast.makeText(this@MainActivity, "Press BACK again to exit", Toast.LENGTH_SHORT).show()
+                }
+            }
+        })
+    }
+
+    private fun enableImmersiveMode() {
+        window.decorView.systemUiVisibility = (
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                or View.SYSTEM_UI_FLAG_FULLSCREEN
+                or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        )
     }
 
     override fun onDestroy() {
+        webView.destroy()
         super.onDestroy()
-        if (::geckoSession.isInitialized) geckoSession.close()
     }
 }

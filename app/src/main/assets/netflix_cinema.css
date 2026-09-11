@@ -1,0 +1,121 @@
+/* ═══════════════════════════════════════════════════════════════
+   AnimeTV Cinema & Netflix-Style TV Presentation Styling
+   ═══════════════════════════════════════════════════════════════ */
+
+/* 1. Global TV Cleanups */
+::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+}
+* {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+    -webkit-tap-highlight-color: transparent !important;
+}
+html, body {
+    background-color: #0b0c10 !important;
+    color: #e0e0e0 !important;
+    touch-action: manipulation !important;
+    scroll-behavior: auto !important;
+}
+
+/* 2. Hide intrusive website noise & promotional banners */
+.ts-announcement, .notice-bar, .domain-alert, #notice,
+.deslide-wrap, #slider, .swiper-container#slider,
+#disqus_thread, #comments, .comments-wrap, .fb-comments,
+.footer, footer, #footer, .site-footer, .app-download-banner,
+.ads, .ad-box, .advertisement, div[id*="google_ads"],
+.social-share, .share-buttons, .report-box, #report-modal {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+/* 3. Universal Player Sizing & 16:9 Cinema Aspect Ratio */
+.wb_-playerarea, .player-embed, #player, #player-container,
+.player-wrap, .video-content, #main-player-wrap, #player-frame,
+#player-section, .mg-3mb3d, .mg3-player, #megaplay-player,
+.azaku-player-container, #iframe-embed, .player-iframe,
+iframe[src*="player"], iframe[src*="embed"], iframe[src*="megaplay"],
+iframe[src*="mytsumi"], iframe[src*="xupalace"], iframe#iframePlayer,
+iframe.player_conte, iframe[src*="jkplayer"] {
+    display: block !important;
+    visibility: visible !important;
+    background: #000000 !important;
+    border: none !important;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.8) !important;
+    aspect-ratio: 16 / 9 !important;
+    max-height: 92vh !important;
+    margin: 0 auto !important;
+    width: 100% !important;
+}
+
+/* 4. Netflix Cinema Mode (Full immersion on player) */
+body.animetv-cinema-mode #header,
+body.animetv-cinema-mode header,
+body.animetv-cinema-mode .site-header,
+body.animetv-cinema-mode .top-bar,
+body.animetv-cinema-mode .navbar,
+body.animetv-cinema-mode .sidebar {
+    display: none !important;
+}
+
+body.animetv-cinema-mode .wb_-playerarea,
+body.animetv-cinema-mode .player-wrap,
+body.animetv-cinema-mode #player,
+body.animetv-cinema-mode #player-container,
+body.animetv-cinema-mode .video-content {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    z-index: 999999 !important;
+    background: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+body.animetv-cinema-mode .wb_-playerarea iframe,
+body.animetv-cinema-mode .player-wrap iframe,
+body.animetv-cinema-mode #player iframe,
+body.animetv-cinema-mode #player-container iframe {
+    width: 100% !important;
+    height: 100% !important;
+    border: none !important;
+}
+
+/* 5. Episode List & Catalog TV Styling */
+.episodes-list, .listing, .server-list, .servers-tabs, .anime-servers {
+    background: #14161f !important;
+    border-radius: 8px !important;
+    padding: 12px !important;
+    margin: 12px auto !important;
+    max-width: 95% !important;
+}
+
+.episodes-list a, .listing a, .server-list a, .servers-tabs a {
+    color: #ffffff !important;
+    background: #1e2230 !important;
+    border-radius: 6px !important;
+    padding: 8px 14px !important;
+    display: inline-block !important;
+    margin: 4px !important;
+    font-size: 16px !important;
+    text-decoration: none !important;
+    transition: transform 0.15s ease, background 0.15s ease !important;
+}
+
+.episodes-list a:hover, .episodes-list a:focus,
+.listing a:hover, .listing a:focus,
+.servers-tabs a.active, .server-list a.active {
+    background: #e50914 !important;
+    color: #ffffff !important;
+    transform: scale(1.05) !important;
+    outline: 2px solid #ffffff !important;
+}

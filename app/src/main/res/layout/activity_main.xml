@@ -3,39 +3,66 @@
     android:id="@+id/rootContainer"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#000000"
+    android:background="#090A0E"
     android:focusable="false">
 
-    <!-- Structural stack: the top bar is a real fixed header with its own permanent row (not an
-         overlay) - GeckoView and its cursor overlay fill whatever space is left below it. Hidden
-         only during actual fullscreen video playback (see MainActivity.handleFullscreenChange),
-         which lets GeckoView expand to fill the whole screen automatically via layout_weight. -->
+    <!-- Structural Stack: Top Bar + Content Area -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical">
 
-        <!-- Top Bar: sources + settings gear. A PERSISTENT header, always visible during normal
-             browsing (see MainActivity's class comment above setupTopBar() for why this replaced
-             an earlier hide/show design). Reached by moving focus UP out of the page once it's
-             scrolled to the top, or via MENU as a direct shortcut; left via DOWN or BACK. Text
-             sizes/padding/focus-stroke widths here are tuned for legibility on a 10-foot, 75in+
-             Google TV screen, not phone-app scale - see bg_topbar_item.xml/bg_topbar_active_source.xml
-             for the matching focus-ring stroke widths. -->
+        <!-- Top Bar: Netflix / Prime Video Style Cinematic Header -->
         <LinearLayout
             android:id="@+id/topBar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_topbar"
+            android:background="#12141C"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:paddingHorizontal="12dp"
-            android:paddingVertical="10dp"
-            android:elevation="35dp"
-            android:focusable="true"
-            android:focusableInTouchMode="true"
-            android:clickable="true">
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="8dp"
+            android:elevation="20dp"
+            android:focusable="false">
 
+            <!-- Netflix style brand logo -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginEnd="14dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="ANIME"
+                    android:textColor="#E50914"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.05" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="TV"
+                    android:textColor="#FFFFFF"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:layout_marginStart="4dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_netflix_badge"
+                    android:text="LITE"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- Scrollable source selector tabs -->
             <HorizontalScrollView
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -46,23 +73,24 @@
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal">
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
 
                     <!-- Source 1: 9Anime -->
                     <TextView
                         android:id="@+id/btnSource9Anime"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginEnd="8dp"
-                        android:background="@drawable/bg_topbar_active_source"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_netflix_active_tab"
                         android:clickable="true"
                         android:focusable="true"
                         android:focusableInTouchMode="true"
                         android:paddingHorizontal="14dp"
-                        android:paddingVertical="14dp"
-                        android:text="●  9Anime"
+                        android:paddingVertical="10dp"
+                        android:text="● 9Anime"
                         android:textColor="#FFFFFF"
-                        android:textSize="20sp"
+                        android:textSize="16sp"
                         android:textStyle="bold" />
 
                     <!-- Source 2: GogoAnime -->
@@ -70,16 +98,16 @@
                         android:id="@+id/btnSourceGogoAnime"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginEnd="8dp"
-                        android:background="@drawable/bg_topbar_item"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_netflix_tab"
                         android:clickable="true"
                         android:focusable="true"
                         android:focusableInTouchMode="true"
                         android:paddingHorizontal="14dp"
-                        android:paddingVertical="14dp"
-                        android:text="○  GogoAnime"
-                        android:textColor="#F0F0FF"
-                        android:textSize="20sp"
+                        android:paddingVertical="10dp"
+                        android:text="○ GogoAnime"
+                        android:textColor="#E0E0FF"
+                        android:textSize="16sp"
                         android:textStyle="bold" />
 
                     <!-- Source 3: SoloLatino -->
@@ -87,115 +115,159 @@
                         android:id="@+id/btnSourceSoloLatino"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginEnd="8dp"
-                        android:background="@drawable/bg_topbar_item"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_netflix_tab"
                         android:clickable="true"
                         android:focusable="true"
                         android:focusableInTouchMode="true"
                         android:paddingHorizontal="14dp"
-                        android:paddingVertical="14dp"
-                        android:text="○  SoloAnime ES"
-                        android:textColor="#F0F0FF"
-                        android:textSize="20sp"
+                        android:paddingVertical="10dp"
+                        android:text="○ SoloAnime"
+                        android:textColor="#E0E0FF"
+                        android:textSize="16sp"
                         android:textStyle="bold" />
 
-                    <!-- Source: SoloLatino Home (movies/series/doramas catalog, not just anime) -->
+                    <!-- Source 4: SoloStream (Películas/Series) -->
                     <TextView
                         android:id="@+id/btnSourceSoloLatinoHome"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginEnd="8dp"
-                        android:background="@drawable/bg_topbar_item"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_netflix_tab"
                         android:clickable="true"
                         android:focusable="true"
                         android:focusableInTouchMode="true"
                         android:paddingHorizontal="14dp"
-                        android:paddingVertical="14dp"
-                        android:text="○  SoloStream ES"
-                        android:textColor="#F0F0FF"
-                        android:textSize="20sp"
+                        android:paddingVertical="10dp"
+                        android:text="○ SoloStream"
+                        android:textColor="#E0E0FF"
+                        android:textSize="16sp"
                         android:textStyle="bold" />
 
-                    <!-- Source 4: AnimeFlix -->
+                    <!-- Source 5: AnimeFlix -->
                     <TextView
                         android:id="@+id/btnSourceAnimeFlix"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginEnd="8dp"
-                        android:background="@drawable/bg_topbar_item"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_netflix_tab"
                         android:clickable="true"
                         android:focusable="true"
                         android:focusableInTouchMode="true"
                         android:paddingHorizontal="14dp"
-                        android:paddingVertical="14dp"
-                        android:text="○  AnimeFlix"
-                        android:textColor="#F0F0FF"
-                        android:textSize="20sp"
+                        android:paddingVertical="10dp"
+                        android:text="○ AnimeFlix"
+                        android:textColor="#E0E0FF"
+                        android:textSize="16sp"
                         android:textStyle="bold" />
 
-                    <!-- Source 5: AnimeYT -->
+                    <!-- Source 6: AnimeYT -->
                     <TextView
                         android:id="@+id/btnSourceAnimeYT"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginEnd="8dp"
-                        android:background="@drawable/bg_topbar_item"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_netflix_tab"
                         android:clickable="true"
                         android:focusable="true"
                         android:focusableInTouchMode="true"
                         android:paddingHorizontal="14dp"
-                        android:paddingVertical="14dp"
-                        android:text="○  AnimeYT (Español)"
-                        android:textColor="#F0F0FF"
-                        android:textSize="20sp"
+                        android:paddingVertical="10dp"
+                        android:text="○ AnimeYT"
+                        android:textColor="#E0E0FF"
+                        android:textSize="16sp"
                         android:textStyle="bold" />
 
-                    <!-- Source 6: JKAnime -->
+                    <!-- Source 7: JKAnime -->
                     <TextView
                         android:id="@+id/btnSourceJKAnime"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:background="@drawable/bg_topbar_item"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_netflix_tab"
                         android:clickable="true"
                         android:focusable="true"
                         android:focusableInTouchMode="true"
                         android:paddingHorizontal="14dp"
-                        android:paddingVertical="14dp"
-                        android:text="○  JKAnime (Español)"
-                        android:textColor="#F0F0FF"
-                        android:textSize="20sp"
+                        android:paddingVertical="10dp"
+                        android:text="○ JKAnime"
+                        android:textColor="#E0E0FF"
+                        android:textSize="16sp"
                         android:textStyle="bold" />
 
                 </LinearLayout>
             </HorizontalScrollView>
 
-            <!-- Settings gear - pinned at the far right, outside the scrollable tab area -->
-            <TextView
-                android:id="@+id/btnTopBarSettings"
+            <!-- Quick Action controls (Right side) -->
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="10dp"
-                android:background="@drawable/bg_topbar_item"
-                android:clickable="true"
-                android:focusable="true"
-                android:focusableInTouchMode="true"
-                android:paddingHorizontal="16dp"
-                android:paddingVertical="14dp"
-                android:text="⚙"
-                android:textColor="#FFD600"
-                android:textSize="22sp"
-                android:textStyle="bold" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginStart="8dp">
+
+                <!-- Cinema View toggle (removes site clutter) -->
+                <TextView
+                    android:id="@+id/btnTopBarCinema"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_netflix_tab"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="10dp"
+                    android:text="🍿 Cinema"
+                    android:textColor="#FFD54F"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <!-- Mode toggle (Scroll vs Pointer) -->
+                <TextView
+                    android:id="@+id/btnTopBarMode"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_netflix_tab"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="10dp"
+                    android:text="📜 Scroll"
+                    android:textColor="#00E676"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <!-- Reload Page -->
+                <TextView
+                    android:id="@+id/btnTopBarReload"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_netflix_tab"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="10dp"
+                    android:text="↻"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+            </LinearLayout>
 
         </LinearLayout>
 
-        <!-- Content area: primary TV browsing engine + its cursor overlay, filling whatever space
-             is left below the top bar. -->
+        <!-- Main Web & Video Content Area -->
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1">
 
-            <org.mozilla.geckoview.GeckoView
+            <!-- High-Performance Native Android WebView -->
+            <WebView
                 android:id="@+id/webView"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
@@ -205,10 +277,7 @@
                 android:focusable="true"
                 android:focusableInTouchMode="true" />
 
-            <!-- Top page-loading progress bar - shown while a source switch or reload is in
-                 flight (see MainActivity.switchSource()/attachGeckoSessionDelegates()'s
-                 onPageStart/onPageStop), so a top-bar tab press has immediate visible feedback
-                 instead of appearing to require a second press. -->
+            <!-- Netflix Red Loading Bar -->
             <ProgressBar
                 android:id="@+id/pageLoadingBar"
                 style="@android:style/Widget.ProgressBar.Horizontal"
@@ -216,18 +285,15 @@
                 android:layout_height="4dp"
                 android:layout_gravity="top"
                 android:indeterminate="true"
-                android:max="100"
-                android:progress="0"
-                android:progressTint="#9D4EDD"
+                android:progressTint="#E50914"
                 android:visibility="gone" />
 
-            <!-- Virtual Cursor View for TV Remote Navigation - confined to the content area, not
-                 the top bar, so its reticle bounds match the actual page viewport. -->
+            <!-- Virtual Cursor Overlay for D-Pad Remote Navigation -->
             <com.example.animetv.tv.VirtualCursorView
                 android:id="@+id/virtualCursorView"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:elevation="37dp"
+                android:elevation="30dp"
                 android:focusable="false"
                 android:clickable="false" />
 
@@ -235,97 +301,118 @@
 
     </LinearLayout>
 
-    <!-- Settings panel - small floating popup opened from the top bar's gear icon. Holds what
-         used to be the sidebar's SETTINGS/SHORTCUTS sections. The 66dp marginTop below is only a
-         same-frame fallback; MainActivity.initViews() overwrites it with topBar's real measured
-         height once topBar lays out, so it stays correct if topBar's padding/text size changes. -->
+    <!-- Netflix / Prime Video Style HUD Controls Bar (Auto-hides or toggled via remote) -->
     <LinearLayout
-        android:id="@+id/settingsPanel"
-        android:layout_width="230dp"
+        android:id="@+id/hudPlayerBar"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="top|end"
-        android:layout_marginTop="66dp"
-        android:layout_marginEnd="12dp"
-        android:background="@drawable/bg_popup_panel"
-        android:orientation="vertical"
-        android:padding="10dp"
-        android:elevation="36dp"
-        android:visibility="gone"
-        android:focusable="true"
-        android:focusableInTouchMode="true"
-        android:clickable="true">
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="24dp"
+        android:background="@drawable/bg_hud_panel"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:elevation="45dp"
+        android:visibility="gone">
 
-        <!-- Fullscreen Toggle -->
         <TextView
-            android:id="@+id/btnSettingsFullscreen"
-            android:layout_width="match_parent"
+            android:id="@+id/btnHudRewind"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_topbar_item"
-            android:clickable="true"
-            android:focusable="true"
-            android:focusableInTouchMode="true"
-            android:paddingHorizontal="14dp"
-            android:paddingVertical="12dp"
-            android:text="⛶  Toggle Fullscreen"
-            android:textColor="#FFD600"
-            android:textSize="18sp"
-            android:textStyle="bold" />
-
-        <!-- Pointer Mode / Scroll Mode Toggle -->
-        <TextView
-            android:id="@+id/btnSettingsMode"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:background="@drawable/bg_topbar_item"
-            android:clickable="true"
-            android:focusable="true"
-            android:focusableInTouchMode="true"
-            android:paddingHorizontal="14dp"
-            android:paddingVertical="12dp"
-            android:text="📜  Mode: Scroll"
-            android:textColor="#00E676"
-            android:textSize="18sp"
-            android:textStyle="bold" />
-
-        <!-- Home -->
-        <TextView
-            android:id="@+id/btnSettingsHome"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:background="@drawable/bg_topbar_item"
+            android:background="@drawable/bg_hud_button"
             android:clickable="true"
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:paddingHorizontal="14dp"
             android:paddingVertical="10dp"
-            android:text="⌂  Home"
-            android:textColor="#F0F0FF"
-            android:textSize="16sp" />
+            android:text="⏪ 10s"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold" />
 
-        <!-- Reload -->
         <TextView
-            android:id="@+id/btnSettingsReload"
-            android:layout_width="match_parent"
+            android:id="@+id/btnHudPlayPause"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:background="@drawable/bg_topbar_item"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_hud_button"
+            android:clickable="true"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:paddingHorizontal="18dp"
+            android:paddingVertical="10dp"
+            android:text="⏯ Play/Pause"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btnHudForward"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_hud_button"
             android:clickable="true"
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:paddingHorizontal="14dp"
             android:paddingVertical="10dp"
-            android:text="↻  Reload Page"
-            android:textColor="#F0F0FF"
-            android:textSize="16sp" />
+            android:text="⏩ 10s"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <!-- High-value anime feature: Skip Intro (+85s) -->
+        <TextView
+            android:id="@+id/btnHudSkipIntro"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_hud_button"
+            android:clickable="true"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="10dp"
+            android:text="⏩ Skip Intro (+85s)"
+            android:textColor="#FFD54F"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btnHudNextEp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_hud_button"
+            android:clickable="true"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="10dp"
+            android:text="⏭ Next Ep"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btnHudFullscreen"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_hud_button"
+            android:clickable="true"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="10dp"
+            android:text="⛶ Fullscreen"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold" />
 
     </LinearLayout>
 
-    <!-- Bottom Remote Controls Guide (Auto-fades out after 5 seconds). Starts invisible - shown
-         via scheduleGuideDismiss() only once the first page actually finishes loading (see
-         onPageStop, MainActivity.kt), not at app launch, so its 5-second timer doesn't race the
-         initial page load and burn down against a blank/loading screen. -->
+    <!-- TV Remote Controls Guide (Auto-fades out after 5s) -->
     <LinearLayout
         android:id="@+id/osdControlsGuide"
         android:layout_width="wrap_content"
@@ -335,7 +422,7 @@
         android:background="@drawable/bg_osd_panel"
         android:orientation="horizontal"
         android:elevation="40dp"
-        android:visibility="invisible"
+        android:visibility="gone"
         android:focusable="false"
         android:clickable="false">
 
@@ -343,9 +430,9 @@
             android:id="@+id/txtGuideText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="🎮 D-Pad: Scroll  •  UP at top / [MENU]: Sources &amp; Settings  •  OK: Click  •  [BACK]: Back"
+            android:text="🎮 D-Pad: Scroll  •  UP at top: Sources  •  OK: Click  •  MENU: Cinema Controls"
             android:textColor="#F0F0FF"
-            android:textSize="16sp" />
+            android:textSize="15sp" />
     </LinearLayout>
 
 </FrameLayout>

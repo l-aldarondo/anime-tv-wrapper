@@ -46,30 +46,37 @@
             };
         }
 
-        // 1b. Neutralize Disqus embed-script injection (9anime.or.at episode/watch pages). The
-        // page's own inline script does d.head.appendChild(s) synchronously as the HTML parser
-        // reaches it - that dispatches the network request to disqus.com immediately, before any
-        // MutationObserver callback (including purgeOverlays() below) gets a chance to react, so
-        // CSS display:none on the comment container alone can't stop it. Overriding appendChild/
-        // insertBefore here (document_start, before the page's own scripts run) wins the race.
-        try {
-            var origAppendChild = Node.prototype.appendChild;
-            Node.prototype.appendChild = function (node) {
-                if (node && node.tagName === 'SCRIPT' && typeof node.src === 'string' && node.src.indexOf('disqus.com/embed.js') !== -1) {
-                    console.log('AnimeTV: Suppressed Disqus embed.js injection -> ' + node.src);
-                    return node;
-                }
-                return origAppendChild.call(this, node);
-            };
-            var origInsertBefore = Node.prototype.insertBefore;
-            Node.prototype.insertBefore = function (node, ref) {
-                if (node && node.tagName === 'SCRIPT' && typeof node.src === 'string' && node.src.indexOf('disqus.com/embed.js') !== -1) {
-                    console.log('AnimeTV: Suppressed Disqus embed.js injection -> ' + node.src);
-                    return node;
-                }
-                return origInsertBefore.call(this, node, ref);
-            };
-        } catch (e) {}
+        // 1b. Neutralize Disqus embed-script injection (9anime.or.at episode/watch pages only).
+        // The page's own inline script does d.head.appendChild(s) synchronously as the HTML
+        // parser reaches it - that dispatches the network request to disqus.com immediately,
+        // before any MutationObserver callback (including purgeOverlays() below) gets a chance to
+        // react, so CSS display:none on the comment container alone can't stop it. Overriding
+        // appendChild/insertBefore here (document_start, before the page's own scripts run) wins
+        // the race. Gated to this one hostname - Node.prototype.appendChild/insertBefore are
+        // among the hottest DOM methods there are (every element any page or script inserts goes
+        // through them), and this file runs on every frame of all 7 sources plus their cross-
+        // origin video-embed iframes - overriding them unconditionally added a check to literally
+        // every DOM insertion on every page, everywhere, for a fix only one single site needed.
+        if (window.location.hostname.indexOf('9anime.or.at') !== -1) {
+            try {
+                var origAppendChild = Node.prototype.appendChild;
+                Node.prototype.appendChild = function (node) {
+                    if (node && node.tagName === 'SCRIPT' && typeof node.src === 'string' && node.src.indexOf('disqus.com/embed.js') !== -1) {
+                        console.log('AnimeTV: Suppressed Disqus embed.js injection -> ' + node.src);
+                        return node;
+                    }
+                    return origAppendChild.call(this, node);
+                };
+                var origInsertBefore = Node.prototype.insertBefore;
+                Node.prototype.insertBefore = function (node, ref) {
+                    if (node && node.tagName === 'SCRIPT' && typeof node.src === 'string' && node.src.indexOf('disqus.com/embed.js') !== -1) {
+                        console.log('AnimeTV: Suppressed Disqus embed.js injection -> ' + node.src);
+                        return node;
+                    }
+                    return origInsertBefore.call(this, node, ref);
+                };
+            } catch (e) {}
+        }
 
         function isInternalLink(u) {
             if (!u || u === '#' || u.indexOf('/') === 0 || u.indexOf('#') === 0 || u.indexOf('javascript:') === 0) return true;
@@ -770,272 +777,6 @@
                         window.expandPlayerFullscreen(!!message.enabled);
                     }
                 });
-            }
-
-            // ── Infinite scroll (client-side auto-pagination) ──────────────────────
-            // Every source paginates its catalog/listing pages as a full page navigation to a
-            // "?page=N"-style URL. A real navigation here is the slowest thing this app does: a
-            // whole new GeckoView page load, this WebExtension re-injecting itself from scratch,
-            // uBlock Origin re-evaluating the page, and losing scroll position. Since every site's
-            // "next page" is a plain, unauthenticated GET returning ordinary server-rendered HTML
-            // (verified live against each site before adding it here - no nonce/session/JS-render
-            // dependency on any of them), a background fetch() from this content script (running
-            // in the real page origin, so it carries the same cookies/referrer a real click would)
-            // can pull the next page's cards and splice them into the current page instead. Only
-            // ever activates on the specific catalog paths listed below, so it can't run wild on
-            // detail/player pages; if a site ever redesigns and a selector stops matching, the
-            // observer just finds nothing and the site's own normal pagination link keeps working.
-            function setupInfiniteScroll() {
-                var host = window.location.hostname;
-                var path = window.location.pathname;
-                var activated = false;
-
-                function hostHas(list) {
-                    for (var i = 0; i < list.length; i++) {
-                        if (host.indexOf(list[i]) !== -1) return true;
-                    }
-                    return false;
-                }
-
-                // Generic engine for sites whose "next page" is a plain HTML document containing
-                // the same card markup as the current page - covers every source except JKAnime
-                // (see runJkanimeDirectorioPagination below), which embeds its data as a JSON blob
-                // instead of relying on repeated card markup. Returns true if it actually found
-                // the container/next-link and armed the observer, so the caller knows whether it's
-                // safe to stop retrying.
-                function runListPagination(config) {
-                    var container = document.querySelector(config.container);
-                    if (!container) return false;
-                    var nextUrl = config.getNextUrl(document);
-                    if (!nextUrl) return false;
-                    console.log('AnimeTV: infinite scroll active (' + config.container + '), next=' + nextUrl);
-
-                    var sentinel = document.createElement('div');
-                    sentinel.setAttribute('data-animetv-infinite-scroll-sentinel', '1');
-                    container.parentNode.insertBefore(sentinel, container.nextSibling);
-
-                    var loading = false;
-                    var observer = new IntersectionObserver(function (entries) {
-                        if (!nextUrl || loading || !entries[0].isIntersecting) return;
-                        loading = true;
-                        var requestedUrl = nextUrl;
-                        fetch(requestedUrl, { credentials: 'same-origin' })
-                            .then(function (res) { return res.text(); })
-                            .then(function (html) {
-                                var doc = new DOMParser().parseFromString(html, 'text/html');
-                                var items = doc.querySelectorAll(config.container + ' ' + config.item);
-                                if (!items.length) {
-                                    nextUrl = null;
-                                    observer.disconnect();
-                                    return;
-                                }
-                                for (var i = 0; i < items.length; i++) {
-                                    var node = items[i];
-                                    // Defensively strip any nested <script> tags before appending -
-                                    // none of the verified sites embed scripts inside card markup,
-                                    // but a fetched-and-parsed foreign document should never get to
-                                    // run script in this page regardless.
-                                    var scripts = node.querySelectorAll ? node.querySelectorAll('script') : [];
-                                    for (var s = 0; s < scripts.length; s++) {
-                                        try { scripts[s].remove(); } catch (ignore) {}
-                                    }
-                                    if (config.afterParse) {
-                                        try { config.afterParse(node); } catch (ignore) {}
-                                    }
-                                    container.appendChild(node);
-                                }
-                                nextUrl = config.getNextUrl(doc);
-                                if (!nextUrl) observer.disconnect();
-                                // Keep the address bar roughly in sync with how far the user has
-                                // auto-loaded, purely cosmetic - not required for the append itself.
-                                try { history.replaceState(null, '', requestedUrl); } catch (ignore) {}
-                            })
-                            .catch(function () {
-                                // A single failed fetch shouldn't wedge the page - just stop rather
-                                // than retry indefinitely against a possibly-broken URL. The site's
-                                // own pagination nav (never removed) still works as a fallback.
-                                observer.disconnect();
-                            })
-                            .then(function () { loading = false; });
-                    }, { rootMargin: '800px' });
-                    observer.observe(sentinel);
-                    return true;
-                }
-
-                // 9anime.or.at ("9animetv" theme) - /filter, /genres/*, /az-list catalog views.
-                // No plain rel="next" link is exposed; the pager instead shows a "go to page"
-                // input plus an "of N" total, so the next URL is built from the current path.
-                if (hostHas(['9anime.or.at']) && /^\/(filter|genres|az-list)(\/|$)/.test(path)) {
-                    activated = runListPagination({
-                        container: '.film_list-wrap',
-                        item: '.flw-item',
-                        getNextUrl: function (doc) {
-                            var input = doc.querySelector('.anime-pagination .input-page');
-                            var totalEl = doc.querySelector('.anime-pagination .ap__-input .btn-blank:last-child');
-                            if (!input || !totalEl) return null;
-                            var current = parseInt(input.value, 10) || 1;
-                            var total = parseInt((totalEl.textContent || '').replace(/\D/g, ''), 10) || current;
-                            if (current >= total) return null;
-                            // doc.location on a DOMParser-created document is always a real but
-                            // useless Location-like object (never reflects the fetched URL), so
-                            // the base catalog path always comes from the real page's own
-                            // location - it never changes across pages, only the /page/N/
-                            // segment does, which is exactly what's being rebuilt here.
-                            var stripped = path.replace(/\/page\/\d+\/?$/, '/').replace(/\/+$/, '');
-                            return stripped + '/page/' + (current + 1) + '/' + window.location.search;
-                        }
-                    });
-                }
-
-                // gogoanime.by and animeflix.team ("dramastream" theme, same markup/mechanism on
-                // both) - the theme's own "Next" link already carries whatever filter query
-                // params are active, so it's read directly rather than reconstructed.
-                if (!activated && hostHas(['gogoanime.by', 'animeflix.team', '9animes.me.uk']) && /^\/(series|Anime)(\/|$)/.test(path)) {
-                    activated = runListPagination({
-                        container: 'div.listupd',
-                        item: 'article.bs',
-                        getNextUrl: function (doc) {
-                            var next = doc.querySelector('div.hpage a.r[href]');
-                            return next ? next.getAttribute('href') : null;
-                        }
-                    });
-                }
-
-                // sololatino.net (both the anime-filtered /animes catalog and the root catalog's
-                // /doramas, /genero/* views) - Laravel-style paginator, exposes a standard
-                // rel="next" link both in <head> and in the visible pagination nav.
-                if (!activated && hostHas(['sololatino.net']) && /^\/(animes|doramas|peliculas|series|genero)(\/|$)/.test(path)) {
-                    activated = runListPagination({
-                        container: 'div.movies-grid',
-                        item: 'div.card',
-                        getNextUrl: function (doc) {
-                            var next = doc.querySelector('link[rel="next"]') || doc.querySelector('nav.pagination a[rel="next"]');
-                            return next ? next.getAttribute('href') : null;
-                        }
-                    });
-                }
-
-                // animeyt.cc ("aniyt" theme) - /tv and /pelicula archives. Cards use a lazy-load
-                // placeholder (data-src/data-srcset) that the theme's own lazy-load script only
-                // wires up once at initial page load, so appended cards need it copied manually.
-                if (!activated && hostHas(['animeyt.cc']) && /^\/(tv|pelicula)(\/|$)/.test(path)) {
-                    activated = runListPagination({
-                        container: 'div.aniyt-poster-grid',
-                        item: 'article.aniyt-anime-card',
-                        getNextUrl: function (doc) {
-                            var next = doc.querySelector('link[rel="next"]') || doc.querySelector('.aniyt-pagination a.next.page-numbers');
-                            return next ? next.getAttribute('href') : null;
-                        },
-                        afterParse: function (node) {
-                            var imgs = node.querySelectorAll('img[data-src], img[data-srcset]');
-                            for (var i = 0; i < imgs.length; i++) {
-                                var img = imgs[i];
-                                if (img.getAttribute('data-src')) img.src = img.getAttribute('data-src');
-                                if (img.getAttribute('data-srcset')) img.srcset = img.getAttribute('data-srcset');
-                            }
-                        }
-                    });
-                }
-
-                // jkanime.net /directorio - bespoke: each page embeds its ~30 results as a JSON
-                // blob (Laravel paginator ->toJson()) rather than repeating card markup verbatim,
-                // so the fetched page is parsed for that blob and rendered by cloning whichever
-                // card the site itself already rendered for the current view mode (grid/list/
-                // compact) - this tracks the site's own template instead of hardcoding one, so it
-                // keeps working even if jkanime tweaks its card HTML later. Returns true once
-                // successfully armed, same contract as runListPagination above.
-                function runJkanimeDirectorioPagination() {
-                    var pagerLink = document.querySelector('nav ul.pagination a[rel="next"]');
-                    if (!pagerLink) return false;
-                    var nextUrl = pagerLink.href;
-
-                    // All three view-mode containers (.page_directorio.mode1/2/3) exist statically
-                    // in the DOM regardless of which is active; only the active one has children,
-                    // so find a template item directly rather than guessing the class order/which
-                    // mode is active.
-                    var templateItem = document.querySelector(
-                        '.page_directorio.mode1 > div, .page_directorio.mode2 > div, .page_directorio.mode3 > div'
-                    );
-                    if (!templateItem) return false;
-                    var container = templateItem.parentElement;
-                    if (!container) return false;
-                    console.log('AnimeTV: infinite scroll active (jkanime directorio), next=' + nextUrl);
-
-                    var sentinel = document.createElement('div');
-                    sentinel.setAttribute('data-animetv-infinite-scroll-sentinel', '1');
-                    var pagination = document.querySelector('nav ul.pagination');
-                    (pagination ? pagination.parentNode : container.parentNode).insertBefore(
-                        sentinel, pagination || container.nextSibling
-                    );
-
-                    var loading = false;
-                    var observer = new IntersectionObserver(function (entries) {
-                        if (!nextUrl || loading || !entries[0].isIntersecting) return;
-                        loading = true;
-                        fetch(nextUrl, { credentials: 'same-origin' })
-                            .then(function (res) { return res.text(); })
-                            .then(function (html) {
-                                var match = html.match(/var animes = (\{[\s\S]*?\});\s*\r?\n\s*var mode/);
-                                if (!match) { nextUrl = null; observer.disconnect(); return; }
-                                var pageData = JSON.parse(match[1]);
-                                var items = pageData && pageData.data ? pageData.data : [];
-                                if (!items.length) { nextUrl = null; observer.disconnect(); return; }
-                                for (var i = 0; i < items.length; i++) {
-                                    var item = items[i];
-                                    var node = templateItem.cloneNode(true);
-                                    try {
-                                        var img = node.querySelector('img');
-                                        if (img && item.image) { img.src = item.image; img.alt = item.title || ''; }
-                                        var link = node.querySelector('a[href]');
-                                        if (link && item.url) link.href = item.url;
-                                        var title = node.querySelector('.card-title');
-                                        if (title) title.textContent = item.title || item.short_title || '';
-                                    } catch (ignore) {}
-                                    container.appendChild(node);
-                                }
-                                nextUrl = pageData.next_page_url || null;
-                                if (!nextUrl) observer.disconnect();
-                            })
-                            .catch(function () { observer.disconnect(); })
-                            .then(function () { loading = false; });
-                    }, { rootMargin: '800px' });
-                    observer.observe(sentinel);
-                    return true;
-                }
-
-                if (!activated && hostHas(['jkanime.net']) && /^\/directorio(\/|$)/.test(path)) {
-                    try { activated = runJkanimeDirectorioPagination(); } catch (e) {}
-                }
-
-                return activated;
-            }
-
-            // Content scripts run at document_start - none of the containers/selectors above
-            // exist in the DOM yet at that point even on fully server-rendered pages (document_start
-            // fires before <body> has been parsed at all, regardless of whether its eventual
-            // content comes from the server or client-side JS), so calling setupInfiniteScroll()
-            // synchronously here would always find nothing and silently never activate - which is
-            // exactly what happened the first time this shipped. Defer to DOMContentLoaded, with a
-            // few retries afterward in case a given site still takes a moment past that point to
-            // finish rendering its catalog grid (a self-healing pattern already used elsewhere in
-            // this file for the same reason - see purgeOverlays()'s MutationObserver/interval).
-            function trySetupInfiniteScrollWithRetries() {
-                var attempts = 0;
-                var maxAttempts = 10;
-                var intervalId = setInterval(function () {
-                    attempts++;
-                    var succeeded = false;
-                    try { succeeded = setupInfiniteScroll(); } catch (e) {}
-                    if (succeeded || attempts >= maxAttempts) {
-                        clearInterval(intervalId);
-                    }
-                }, 500);
-            }
-
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', trySetupInfiniteScrollWithRetries);
-            } else {
-                trySetupInfiniteScrollWithRetries();
             }
         }
     } catch (e) {
