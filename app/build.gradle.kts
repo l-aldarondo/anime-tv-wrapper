@@ -44,6 +44,8 @@ kotlin {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.recyclerview)
+    implementation(libs.glide)
     implementation("androidx.webkit:webkit:1.12.1")
 
     testImplementation(libs.junit)

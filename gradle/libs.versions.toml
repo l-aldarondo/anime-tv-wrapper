@@ -14,8 +14,12 @@ kotlin = "2.3.20"
 nav3Core = "1.0.1"
 lifecycleViewmodelNav3 = "2.10.0"
 androidxAppcompat = "1.7.0"
+androidxRecyclerview = "1.4.0"
+glide = "4.16.0"
 
 [libraries]
+androidx-recyclerview = { module = "androidx.recyclerview:recyclerview", version.ref = "androidxRecyclerview" }
+glide = { module = "com.github.bumptech.glide:glide", version.ref = "glide" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidxActivity" }
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "androidxComposeBom" }

@@ -76,6 +76,23 @@
                     android:orientation="horizontal"
                     android:gravity="center_vertical">
 
+                    <!-- Source 0: Mi Lista (Favorites Grid) -->
+                    <TextView
+                        android:id="@+id/btnSourceFavorites"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_netflix_tab"
+                        android:clickable="true"
+                        android:focusable="true"
+                        
+                        android:paddingHorizontal="14dp"
+                        android:paddingVertical="10dp"
+                        android:text="⭐ Mi Lista"
+                        android:textColor="#FFD54F"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
                     <!-- Source 1: 9Anime -->
                     <TextView
                         android:id="@+id/btnSource9Anime"
@@ -85,7 +102,7 @@
                         android:background="@drawable/bg_netflix_active_tab"
                         android:clickable="true"
                         android:focusable="true"
-                        android:focusableInTouchMode="true"
+                        
                         android:paddingHorizontal="14dp"
                         android:paddingVertical="10dp"
                         android:text="● 9Anime"
@@ -102,7 +119,7 @@
                         android:background="@drawable/bg_netflix_tab"
                         android:clickable="true"
                         android:focusable="true"
-                        android:focusableInTouchMode="true"
+                        
                         android:paddingHorizontal="14dp"
                         android:paddingVertical="10dp"
                         android:text="○ GogoAnime"
@@ -119,7 +136,7 @@
                         android:background="@drawable/bg_netflix_tab"
                         android:clickable="true"
                         android:focusable="true"
-                        android:focusableInTouchMode="true"
+                        
                         android:paddingHorizontal="14dp"
                         android:paddingVertical="10dp"
                         android:text="○ SoloAnime"
@@ -136,7 +153,7 @@
                         android:background="@drawable/bg_netflix_tab"
                         android:clickable="true"
                         android:focusable="true"
-                        android:focusableInTouchMode="true"
+                        
                         android:paddingHorizontal="14dp"
                         android:paddingVertical="10dp"
                         android:text="○ SoloStream"
@@ -153,7 +170,7 @@
                         android:background="@drawable/bg_netflix_tab"
                         android:clickable="true"
                         android:focusable="true"
-                        android:focusableInTouchMode="true"
+                        
                         android:paddingHorizontal="14dp"
                         android:paddingVertical="10dp"
                         android:text="○ AnimeFlix"
@@ -170,7 +187,7 @@
                         android:background="@drawable/bg_netflix_tab"
                         android:clickable="true"
                         android:focusable="true"
-                        android:focusableInTouchMode="true"
+                        
                         android:paddingHorizontal="14dp"
                         android:paddingVertical="10dp"
                         android:text="○ AnimeYT"
@@ -187,7 +204,7 @@
                         android:background="@drawable/bg_netflix_tab"
                         android:clickable="true"
                         android:focusable="true"
-                        android:focusableInTouchMode="true"
+                        
                         android:paddingHorizontal="14dp"
                         android:paddingVertical="10dp"
                         android:text="○ JKAnime"
@@ -195,68 +212,95 @@
                         android:textSize="16sp"
                         android:textStyle="bold" />
 
+                    <!-- Divider between Sources and Actions -->
+                    <View
+                        android:layout_width="1.5dp"
+                        android:layout_height="24dp"
+                        android:layout_marginHorizontal="8dp"
+                        android:background="#2E3444" />
+
+                    <!-- Cinema View toggle (removes site clutter) -->
+                    <TextView
+                        android:id="@+id/btnTopBarCinema"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_netflix_tab"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:paddingHorizontal="10dp"
+                        android:paddingVertical="10dp"
+                        android:text="🍿 Cinema"
+                        android:textColor="#FFD54F"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <!-- Mode toggle (Scroll vs Pointer) -->
+                    <TextView
+                        android:id="@+id/btnTopBarMode"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:background="@drawable/bg_netflix_tab"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:paddingHorizontal="10dp"
+                        android:paddingVertical="10dp"
+                        android:text="📜 Scroll"
+                        android:textColor="#00E676"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <!-- Add to Favorites button -->
+                    <TextView
+                        android:id="@+id/btnTopBarFavorite"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:background="@drawable/bg_netflix_tab"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:paddingHorizontal="10dp"
+                        android:paddingVertical="10dp"
+                        android:text="⭐ + Favorito"
+                        android:textColor="#FFD54F"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <!-- Master Account / Auto-Fill Settings -->
+                    <TextView
+                        android:id="@+id/btnTopBarAccount"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:background="@drawable/bg_netflix_tab"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:paddingHorizontal="10dp"
+                        android:paddingVertical="10dp"
+                        android:text="🔑 Cuenta"
+                        android:textColor="#64B5F6"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <!-- Reload Page -->
+                    <TextView
+                        android:id="@+id/btnTopBarReload"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/bg_netflix_tab"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="10dp"
+                        android:text="↻"
+                        android:textColor="#FFFFFF"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+
                 </LinearLayout>
             </HorizontalScrollView>
-
-            <!-- Quick Action controls (Right side) -->
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginStart="8dp">
-
-                <!-- Cinema View toggle (removes site clutter) -->
-                <TextView
-                    android:id="@+id/btnTopBarCinema"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/bg_netflix_tab"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:focusableInTouchMode="true"
-                    android:paddingHorizontal="10dp"
-                    android:paddingVertical="10dp"
-                    android:text="🍿 Cinema"
-                    android:textColor="#FFD54F"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
-
-                <!-- Mode toggle (Scroll vs Pointer) -->
-                <TextView
-                    android:id="@+id/btnTopBarMode"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="6dp"
-                    android:background="@drawable/bg_netflix_tab"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:focusableInTouchMode="true"
-                    android:paddingHorizontal="10dp"
-                    android:paddingVertical="10dp"
-                    android:text="📜 Scroll"
-                    android:textColor="#00E676"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
-
-                <!-- Reload Page -->
-                <TextView
-                    android:id="@+id/btnTopBarReload"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="6dp"
-                    android:background="@drawable/bg_netflix_tab"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:focusableInTouchMode="true"
-                    android:paddingHorizontal="12dp"
-                    android:paddingVertical="10dp"
-                    android:text="↻"
-                    android:textColor="#FFFFFF"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
-
-            </LinearLayout>
 
         </LinearLayout>
 
@@ -275,7 +319,61 @@
                 android:scrollbars="none"
                 android:overScrollMode="never"
                 android:focusable="true"
-                android:focusableInTouchMode="true" />
+                 />
+
+            <!-- Netflix / Prime Video Style "Mi Lista" Grid Screen -->
+            <FrameLayout
+                android:id="@+id/favoritesScreen"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="#090A0E"
+                android:visibility="gone">
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/favoritesRecyclerView"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipToPadding="false"
+                    android:padding="16dp"
+                    android:scrollbars="none" />
+
+                <LinearLayout
+                    android:id="@+id/favoritesEmptyLayout"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:padding="24dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="⭐"
+                        android:textSize="48sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="Tu lista está vacía"
+                        android:textColor="#FFFFFF"
+                        android:textSize="22sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Explora tus animes favoritos y presiona '⭐ + Favorito' o mantén presionado OK para guardarlos aquí."
+                        android:textColor="#8F92A8"
+                        android:textSize="14sp"
+                        android:gravity="center"
+                        android:maxWidth="420dp" />
+
+                </LinearLayout>
+
+            </FrameLayout>
 
             <!-- Netflix Red Loading Bar -->
             <ProgressBar
@@ -321,7 +419,7 @@
             android:background="@drawable/bg_hud_button"
             android:clickable="true"
             android:focusable="true"
-            android:focusableInTouchMode="true"
+            
             android:paddingHorizontal="14dp"
             android:paddingVertical="10dp"
             android:text="⏪ 10s"
@@ -337,7 +435,7 @@
             android:background="@drawable/bg_hud_button"
             android:clickable="true"
             android:focusable="true"
-            android:focusableInTouchMode="true"
+            
             android:paddingHorizontal="18dp"
             android:paddingVertical="10dp"
             android:text="⏯ Play/Pause"
@@ -353,7 +451,7 @@
             android:background="@drawable/bg_hud_button"
             android:clickable="true"
             android:focusable="true"
-            android:focusableInTouchMode="true"
+            
             android:paddingHorizontal="14dp"
             android:paddingVertical="10dp"
             android:text="⏩ 10s"
@@ -370,7 +468,7 @@
             android:background="@drawable/bg_hud_button"
             android:clickable="true"
             android:focusable="true"
-            android:focusableInTouchMode="true"
+            
             android:paddingHorizontal="16dp"
             android:paddingVertical="10dp"
             android:text="⏩ Skip Intro (+85s)"
@@ -386,7 +484,7 @@
             android:background="@drawable/bg_hud_button"
             android:clickable="true"
             android:focusable="true"
-            android:focusableInTouchMode="true"
+            
             android:paddingHorizontal="14dp"
             android:paddingVertical="10dp"
             android:text="⏭ Next Ep"
@@ -402,11 +500,27 @@
             android:background="@drawable/bg_hud_button"
             android:clickable="true"
             android:focusable="true"
-            android:focusableInTouchMode="true"
+            
             android:paddingHorizontal="14dp"
             android:paddingVertical="10dp"
             android:text="⛶ Fullscreen"
             android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btnHudFavorite"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_hud_button"
+            android:clickable="true"
+            android:focusable="true"
+            
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="10dp"
+            android:text="⭐ + Favorito"
+            android:textColor="#FFD54F"
             android:textSize="15sp"
             android:textStyle="bold" />
 

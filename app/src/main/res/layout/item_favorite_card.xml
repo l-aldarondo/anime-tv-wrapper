@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="8dp"
+    android:layout_margin="8dp"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:clickable="true"
+    android:background="@drawable/bg_favorite_card">
+
+    <!-- Anime Cover Poster -->
+    <ImageView
+        android:id="@+id/imgFavoritePoster"
+        android:layout_width="match_parent"
+        android:layout_height="220dp"
+        android:scaleType="centerCrop"
+        android:background="#0A0B10"
+        android:contentDescription="@null" />
+
+    <!-- Anime Title -->
+    <TextView
+        android:id="@+id/txtFavoriteTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:maxLines="2"
+        android:ellipsize="end"
+        android:textColor="#FFFFFF"
+        android:textSize="15sp"
+        android:textStyle="bold" />
+
+    <!-- Source Badge (e.g. SoloAnime / AnimeFlix) -->
+    <TextView
+        android:id="@+id/txtFavoriteSource"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:background="@drawable/bg_netflix_badge"
+        android:paddingHorizontal="6dp"
+        android:paddingVertical="2dp"
+        android:textColor="#FFD54F"
+        android:textSize="11sp"
+        android:textStyle="bold" />
+
+</LinearLayout>

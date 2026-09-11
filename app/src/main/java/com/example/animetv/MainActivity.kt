@@ -17,6 +17,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.webkit.ConsoleMessage
+import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -24,15 +25,22 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.example.animetv.adblock.AdBlockEngine
+import com.example.animetv.auth.AccountStore
 import com.example.animetv.tv.VirtualCursorView
+import org.json.JSONObject
+import org.json.JSONTokener
 import java.io.ByteArrayInputStream
 
 class MainActivity : AppCompatActivity() {
@@ -45,6 +53,7 @@ class MainActivity : AppCompatActivity() {
         const val KEY_CINEMA_MODE = "cinema_mode"
         const val KEY_NAV_MODE = "nav_mode"
 
+        const val SOURCE_FAVORITES = "favorites"
         const val SOURCE_9ANIME = "9anime"
         const val SOURCE_GOGOANIME = "gogoanime"
         const val SOURCE_SOLOLATINO = "sololatino"
@@ -52,6 +61,8 @@ class MainActivity : AppCompatActivity() {
         const val SOURCE_ANIMEFLIX = "animeflix"
         const val SOURCE_ANIMEYT = "animeyt"
         const val SOURCE_JKANIME = "jkanime"
+
+        private const val LONG_PRESS_FAVORITE_MS = 600L
 
         const val URL_9ANIME = "https://9anime.or.at/"
         const val URL_GOGOANIME = "https://gogoanime.by/"
@@ -128,6 +139,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var osdControlsGuide: LinearLayout
 
     // Top Bar Tab Views
+    private lateinit var btnSourceFavorites: TextView
     private lateinit var btnSource9Anime: TextView
     private lateinit var btnSourceGogoAnime: TextView
     private lateinit var btnSourceSoloLatino: TextView
@@ -139,7 +151,15 @@ class MainActivity : AppCompatActivity() {
     // Top Bar Actions
     private lateinit var btnTopBarCinema: TextView
     private lateinit var btnTopBarMode: TextView
+    private lateinit var btnTopBarFavorite: TextView
+    private lateinit var btnTopBarAccount: TextView
     private lateinit var btnTopBarReload: TextView
+
+    // Favorites Screen Views
+    private lateinit var favoritesScreen: FrameLayout
+    private lateinit var favoritesRecyclerView: RecyclerView
+    private lateinit var favoritesEmptyLayout: LinearLayout
+    private lateinit var favoritesAdapter: FavoritesAdapter
 
     // HUD Player Controls
     private lateinit var btnHudRewind: TextView
@@ -148,6 +168,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnHudSkipIntro: TextView
     private lateinit var btnHudNextEp: TextView
     private lateinit var btnHudFullscreen: TextView
+    private lateinit var btnHudFavorite: TextView
 
     // Fullscreen Custom View Container (for HTML5 video tag fullscreen expansion)
     private var customView: View? = null
@@ -158,6 +179,11 @@ class MainActivity : AppCompatActivity() {
     private val DOUBLE_CLICK_TIMEOUT_MS = 400L
     private val pendingOkClickRunnable = Runnable {
         virtualCursorView.dispatchClick(webView)
+    }
+
+    private var longPressArmed = false
+    private val longPressFavoriteRunnable = Runnable {
+        extractAndSaveCurrentFavorite(isLongPress = true)
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -205,6 +231,7 @@ class MainActivity : AppCompatActivity() {
         initViews()
         setupTopBar()
         setupHudPlayerBar()
+        setupFavoritesScreen()
         setupWebView()
         setupBackPressedHandler()
 
@@ -253,10 +280,16 @@ class MainActivity : AppCompatActivity() {
         hudPlayerBar = findViewById(R.id.hudPlayerBar)
         osdControlsGuide = findViewById(R.id.osdControlsGuide)
 
+        // Favorites Screen
+        favoritesScreen = findViewById(R.id.favoritesScreen)
+        favoritesRecyclerView = findViewById(R.id.favoritesRecyclerView)
+        favoritesEmptyLayout = findViewById(R.id.favoritesEmptyLayout)
+
         virtualCursorView.targetView = webView
         virtualCursorView.isDirectScrollMode = (currentNavMode == MODE_SCROLL)
 
         // Top Bar Tabs
+        btnSourceFavorites = findViewById(R.id.btnSourceFavorites)
         btnSource9Anime = findViewById(R.id.btnSource9Anime)
         btnSourceGogoAnime = findViewById(R.id.btnSourceGogoAnime)
         btnSourceSoloLatino = findViewById(R.id.btnSourceSoloLatino)
@@ -268,6 +301,8 @@ class MainActivity : AppCompatActivity() {
         // Top Bar Actions
         btnTopBarCinema = findViewById(R.id.btnTopBarCinema)
         btnTopBarMode = findViewById(R.id.btnTopBarMode)
+        btnTopBarFavorite = findViewById(R.id.btnTopBarFavorite)
+        btnTopBarAccount = findViewById(R.id.btnTopBarAccount)
         btnTopBarReload = findViewById(R.id.btnTopBarReload)
 
         // HUD Buttons
@@ -277,6 +312,7 @@ class MainActivity : AppCompatActivity() {
         btnHudSkipIntro = findViewById(R.id.btnHudSkipIntro)
         btnHudNextEp = findViewById(R.id.btnHudNextEp)
         btnHudFullscreen = findViewById(R.id.btnHudFullscreen)
+        btnHudFavorite = findViewById(R.id.btnHudFavorite)
 
         if (!isTv) {
             virtualCursorView.visibility = View.GONE
@@ -311,6 +347,11 @@ class MainActivity : AppCompatActivity() {
 
         // Cache policy
         settings.cacheMode = WebSettings.LOAD_DEFAULT
+
+        // Cookie persistence across sessions
+        val cookieManager = CookieManager.getInstance()
+        cookieManager.setAcceptCookie(true)
+        cookieManager.setAcceptThirdPartyCookies(webView, true)
 
         webView.addJavascriptInterface(AnimeTvBridge(), "AndroidBridge")
 
@@ -447,6 +488,14 @@ class MainActivity : AppCompatActivity() {
                 if (isCinemaMode) {
                     injectScript("document.body.classList.add('animetv-cinema-mode');")
                 }
+
+                // Flush cookies to persistent storage
+                CookieManager.getInstance().flush()
+
+                // Silent auto-fill if master credentials exist
+                if (AccountStore.hasMasterCredentials(this@MainActivity)) {
+                    autoFillCredentialsSilently()
+                }
             }
         }
 
@@ -538,6 +587,7 @@ class MainActivity : AppCompatActivity() {
     // ── Netflix / Prime Style Top Bar Setup ──────────────────────────────────
 
     private fun setupTopBar() {
+        btnSourceFavorites.setOnClickListener { switchSource(SOURCE_FAVORITES) }
         btnSource9Anime.setOnClickListener { switchSource(SOURCE_9ANIME) }
         btnSourceGogoAnime.setOnClickListener { switchSource(SOURCE_GOGOANIME) }
         btnSourceSoloLatino.setOnClickListener { switchSource(SOURCE_SOLOLATINO) }
@@ -548,21 +598,32 @@ class MainActivity : AppCompatActivity() {
 
         btnTopBarCinema.setOnClickListener { toggleCinemaMode() }
         btnTopBarMode.setOnClickListener { toggleNavMode() }
-        btnTopBarReload.setOnClickListener { webView.reload() }
+        btnTopBarFavorite.setOnClickListener { extractAndSaveCurrentFavorite() }
+        btnTopBarAccount.setOnClickListener { showAccountSettingsDialog() }
+        btnTopBarReload.setOnClickListener {
+            if (currentSource == SOURCE_FAVORITES) {
+                refreshFavoritesGrid()
+            } else {
+                webView.reload()
+            }
+        }
 
         updateTopBarUi()
     }
 
     private val topBarFocusOrder: List<View> by lazy {
         listOf(
+            btnSourceFavorites,
             btnSource9Anime, btnSourceGogoAnime, btnSourceSoloLatino, btnSourceSoloLatinoHome,
             btnSourceAnimeFlix, btnSourceAnimeYT, btnSourceJKAnime,
-            btnTopBarCinema, btnTopBarMode, btnTopBarReload
+            btnTopBarCinema, btnTopBarMode,
+            btnTopBarFavorite, btnTopBarAccount, btnTopBarReload
         )
     }
 
     private fun updateTopBarUi() {
         val sources = listOf(
+            Triple(btnSourceFavorites, SOURCE_FAVORITES, "⭐ Mi Lista"),
             Triple(btnSource9Anime, SOURCE_9ANIME, "9Anime"),
             Triple(btnSourceGogoAnime, SOURCE_GOGOANIME, "GogoAnime"),
             Triple(btnSourceSoloLatino, SOURCE_SOLOLATINO, "SoloAnime"),
@@ -580,7 +641,7 @@ class MainActivity : AppCompatActivity() {
             } else {
                 btn.text = "○ $name"
                 btn.setBackgroundResource(R.drawable.bg_netflix_tab)
-                btn.setTextColor(Color.parseColor("#E0E0FF"))
+                btn.setTextColor(if (src == SOURCE_FAVORITES) Color.parseColor("#FFD54F") else Color.parseColor("#E0E0FF"))
             }
         }
 
@@ -598,8 +659,19 @@ class MainActivity : AppCompatActivity() {
         prefs.edit().putString(KEY_ACTIVE_SOURCE, source).apply()
         updateTopBarUi()
 
-        webView.loadUrl(urlForSource(source))
-        handler.postDelayed({ moveFocusToPage() }, 200)
+        if (source == SOURCE_FAVORITES) {
+            webView.visibility = View.GONE
+            virtualCursorView.visibility = View.GONE
+            favoritesScreen.visibility = View.VISIBLE
+            refreshFavoritesGrid()
+            favoritesRecyclerView.requestFocus()
+        } else {
+            favoritesScreen.visibility = View.GONE
+            webView.visibility = View.VISIBLE
+            if (isTv) virtualCursorView.visibility = View.VISIBLE
+            webView.loadUrl(urlForSource(source))
+            handler.postDelayed({ moveFocusToPage() }, 200)
+        }
     }
 
     private fun toggleCinemaMode() {
@@ -651,10 +723,254 @@ class MainActivity : AppCompatActivity() {
             togglePlayerFullscreen()
             hideHudPlayerBar()
         }
+        btnHudFavorite.setOnClickListener {
+            extractAndSaveCurrentFavorite()
+            showHudPlayerBarBriefly()
+        }
     }
 
     private val hudFocusOrder: List<View> by lazy {
-        listOf(btnHudRewind, btnHudPlayPause, btnHudForward, btnHudSkipIntro, btnHudNextEp, btnHudFullscreen)
+        listOf(btnHudRewind, btnHudPlayPause, btnHudForward, btnHudSkipIntro, btnHudNextEp, btnHudFullscreen, btnHudFavorite)
+    }
+
+    // ── Favorites ("Mi Lista") Screen Setup ──────────────────────────────────
+
+    private fun setupFavoritesScreen() {
+        val spanCount = if (isTv) 4 else 2
+        favoritesRecyclerView.layoutManager = GridLayoutManager(this, spanCount)
+        favoritesAdapter = FavoritesAdapter(
+            items = mutableListOf(),
+            onOpen = { fav ->
+                favoritesScreen.visibility = View.GONE
+                webView.visibility = View.VISIBLE
+                if (isTv) virtualCursorView.visibility = View.VISIBLE
+                currentSource = when {
+                    fav.source.contains("9anime", ignoreCase = true) -> SOURCE_9ANIME
+                    fav.source.contains("gogo", ignoreCase = true) -> SOURCE_GOGOANIME
+                    fav.source.contains("solostream", ignoreCase = true) -> SOURCE_SOLOLATINO_HOME
+                    fav.source.contains("solo", ignoreCase = true) -> SOURCE_SOLOLATINO
+                    fav.source.contains("flix", ignoreCase = true) -> SOURCE_ANIMEFLIX
+                    fav.source.contains("yt", ignoreCase = true) -> SOURCE_ANIMEYT
+                    fav.source.contains("jk", ignoreCase = true) -> SOURCE_JKANIME
+                    else -> SOURCE_9ANIME
+                }
+                updateTopBarUi()
+                webView.loadUrl(fav.url)
+                handler.postDelayed({ moveFocusToPage() }, 300)
+            },
+            onRemove = { fav ->
+                FavoritesStore.remove(this, fav.url)
+                Toast.makeText(this, "Eliminado de Mi Lista: ${fav.title}", Toast.LENGTH_SHORT).show()
+                refreshFavoritesGrid()
+            }
+        )
+        favoritesRecyclerView.adapter = favoritesAdapter
+        refreshFavoritesGrid()
+    }
+
+    private fun refreshFavoritesGrid() {
+        val items = FavoritesStore.loadAll(this)
+        favoritesAdapter.submit(items)
+        favoritesEmptyLayout.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
+    }
+
+    private fun extractAndSaveCurrentFavorite(isLongPress: Boolean = false) {
+        if (currentSource == SOURCE_FAVORITES) {
+            Toast.makeText(this, "Ya estás en Mi Lista", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        if (isLongPress) {
+            longPressArmed = true
+        }
+
+        val extractScript = """
+            (function() {
+                var title = "";
+                var ogTitle = document.querySelector('meta[property="og:title"]');
+                if (ogTitle && ogTitle.content) title = ogTitle.content;
+                if (!title) {
+                    var h1 = document.querySelector('h1, .film-name, .anime-title, .entry-title, .title, .name');
+                    if (h1) title = h1.innerText.trim();
+                }
+                if (!title) title = document.title;
+                title = title.replace(/\s*[-–|].*$/g, '').trim();
+
+                var poster = "";
+                var ogImg = document.querySelector('meta[property="og:image"]');
+                if (ogImg && ogImg.content) poster = ogImg.content;
+                if (!poster) {
+                    var img = document.querySelector('.anime-poster img, .poster img, img[src*="cover"], img[src*="poster"], .film-poster img, .thumb img');
+                    if (img) poster = img.src;
+                }
+
+                return JSON.stringify({
+                    url: window.location.href,
+                    title: title,
+                    poster: poster
+                });
+            })();
+        """.trimIndent()
+
+        webView.evaluateJavascript(extractScript) { resultJson ->
+            try {
+                Log.d(TAG, "extractAndSaveCurrentFavorite raw: $resultJson")
+                val rawStr = resultJson?.trim() ?: ""
+                val cleanJson = if (rawStr.startsWith("\"") && rawStr.endsWith("\"")) {
+                    try {
+                        JSONTokener(rawStr).nextValue().toString()
+                    } catch (e: Exception) {
+                        rawStr.substring(1, rawStr.length - 1).replace("\\\"", "\"").replace("\\\\", "\\")
+                    }
+                } else rawStr
+
+                Log.d(TAG, "extractAndSaveCurrentFavorite clean: $cleanJson")
+                val obj = JSONObject(if (cleanJson.isNotEmpty()) cleanJson else "{}")
+                val url = obj.optString("url", webView.url ?: "")
+                val title = obj.optString("title", "Anime").ifEmpty { "Anime" }
+                val poster = obj.optString("poster", "")
+                val sourceName = when {
+                    url.contains("9anime") -> "9Anime"
+                    url.contains("gogoanime") -> "GogoAnime"
+                    url.contains("sololatino") -> "SoloAnime"
+                    url.contains("animeflix") -> "AnimeFlix"
+                    url.contains("animeyt") -> "AnimeYT"
+                    url.contains("jkanime") -> "JKAnime"
+                    else -> "Anime"
+                }
+
+                val item = FavoriteItem(url = url, title = title, poster = poster, source = sourceName)
+                val added = FavoritesStore.toggle(this, item)
+                Log.d(TAG, "extractAndSaveCurrentFavorite toggle result: $added, total: ${FavoritesStore.loadAll(this).size}")
+                if (added) {
+                    Toast.makeText(this, "⭐ Guardado en Mi Lista: $title", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "❌ Eliminado de Mi Lista: $title", Toast.LENGTH_SHORT).show()
+                }
+                refreshFavoritesGrid()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error saving favorite", e)
+            }
+        }
+    }
+
+    // ── Master Account & Credentials Dialog ──────────────────────────────────
+
+    private fun showAccountSettingsDialog() {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_account_settings, null)
+        val editUser = dialogView.findViewById<EditText>(R.id.editMasterUser)
+        val editPass = dialogView.findViewById<EditText>(R.id.editMasterPass)
+        val btnCancel = dialogView.findViewById<TextView>(R.id.btnCancelCredentials)
+        val btnAutoFill = dialogView.findViewById<TextView>(R.id.btnAutoFillNow)
+        val btnSave = dialogView.findViewById<TextView>(R.id.btnSaveCredentials)
+
+        editUser.setText(AccountStore.getMasterUsername(this))
+        editPass.setText(AccountStore.getMasterPassword(this))
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .create()
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        btnCancel.setOnClickListener { dialog.dismiss() }
+
+        btnSave.setOnClickListener {
+            val u = editUser.text.toString().trim()
+            val p = editPass.text.toString()
+            AccountStore.saveMasterCredentials(this, u, p)
+            Toast.makeText(this, "💾 Credenciales Maestras Guardadas", Toast.LENGTH_SHORT).show()
+            dialog.dismiss()
+        }
+
+        btnAutoFill.setOnClickListener {
+            val u = editUser.text.toString().trim()
+            val p = editPass.text.toString()
+            if (u.isNotEmpty() && p.isNotEmpty()) {
+                AccountStore.saveMasterCredentials(this, u, p)
+            }
+            autoFillCredentialsOnPage()
+            dialog.dismiss()
+        }
+
+        dialog.show()
+    }
+
+    private fun autoFillCredentialsOnPage() {
+        val host = Uri.parse(webView.url ?: "").host?.lowercase() ?: ""
+        val (user, pass) = AccountStore.getCredentialsForHost(this, host)
+        if (user.isEmpty() || pass.isEmpty()) {
+            Toast.makeText(this, "⚠️ Por favor ingresa tus credenciales primero", Toast.LENGTH_SHORT).show()
+            showAccountSettingsDialog()
+            return
+        }
+
+        val escapedUser = user.replace("'", "\\'")
+        val escapedPass = pass.replace("'", "\\'")
+
+        val autoFillJs = """
+            (function() {
+                var userSelectors = 'input[type="email"], input[type="text"][name*="user" i], input[type="text"][name*="email" i], input[type="text"][name*="login" i], input[name*="user" i], input[id*="user" i], input[id*="login" i], input[name*="email" i], input[id*="email" i]';
+                var userInputs = document.querySelectorAll(userSelectors);
+                var passInputs = document.querySelectorAll('input[type="password"]');
+                var filled = false;
+
+                if (userInputs.length > 0) {
+                    var uInput = userInputs[0];
+                    uInput.value = '$escapedUser';
+                    uInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    uInput.dispatchEvent(new Event('change', { bubbles: true }));
+                    filled = true;
+                }
+                if (passInputs.length > 0) {
+                    var pInput = passInputs[0];
+                    pInput.value = '$escapedPass';
+                    pInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    pInput.dispatchEvent(new Event('change', { bubbles: true }));
+                    filled = true;
+                }
+                return filled;
+            })();
+        """.trimIndent()
+
+        webView.evaluateJavascript(autoFillJs) { result ->
+            if (result == "true") {
+                Toast.makeText(this, "🔑 Formulario completado con Cuenta Maestra", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "ℹ️ No se detectó formulario de login en esta pantalla", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun autoFillCredentialsSilently() {
+        val host = Uri.parse(webView.url ?: "").host?.lowercase() ?: ""
+        val (user, pass) = AccountStore.getCredentialsForHost(this, host)
+        if (user.isEmpty() || pass.isEmpty()) return
+
+        val escapedUser = user.replace("'", "\\'")
+        val escapedPass = pass.replace("'", "\\'")
+
+        val silentJs = """
+            (function() {
+                var passInput = document.querySelector('input[type="password"]');
+                if (!passInput) return false;
+                var userSelectors = 'input[type="email"], input[type="text"][name*="user" i], input[type="text"][name*="email" i], input[type="text"][name*="login" i], input[name*="user" i], input[id*="user" i], input[id*="login" i], input[name*="email" i], input[id*="email" i]';
+                var uInput = document.querySelector(userSelectors);
+                if (uInput && !uInput.value) {
+                    uInput.value = '$escapedUser';
+                    uInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    uInput.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                if (passInput && !passInput.value) {
+                    passInput.value = '$escapedPass';
+                    passInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    passInput.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                return true;
+            })();
+        """.trimIndent()
+
+        webView.evaluateJavascript(silentJs, null)
     }
 
     private fun sendPlayerCommand(action: String, seconds: Int = 0) {
@@ -762,10 +1078,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun moveFocusToPage() {
+        if (currentSource == SOURCE_FAVORITES) {
+            favoritesRecyclerView.requestFocus()
+            return
+        }
         webView.requestFocus()
         if (isTv) {
             virtualCursorView.isCursorVisible = true
         }
+    }
+
+    private fun isFocusInFavoritesTopRow(): Boolean {
+        if (favoritesScreen.visibility != View.VISIBLE) return false
+        val layoutManager = favoritesRecyclerView.layoutManager as? GridLayoutManager ?: return true
+        val focused = currentFocus ?: return true
+        val position = favoritesRecyclerView.getChildAdapterPosition(focused)
+        return position == RecyclerView.NO_POSITION || position < layoutManager.spanCount
     }
 
     private fun scheduleGuideDismiss() {
@@ -879,6 +1207,15 @@ class MainActivity : AppCompatActivity() {
             return super.dispatchKeyEvent(event)
         }
 
+        // When Favorites Grid has focus:
+        if (favoritesScreen.visibility == View.VISIBLE) {
+            if (action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_UP && isFocusInFavoritesTopRow()) {
+                moveFocusToTopBar()
+                return true
+            }
+            return super.dispatchKeyEvent(event)
+        }
+
         // When Page/WebView has focus:
         if (webView.hasFocus() || (!isTopBarFocused && hudPlayerBar.visibility != View.VISIBLE)) {
             val isDpadDirection = keyCode in listOf(
@@ -904,7 +1241,26 @@ class MainActivity : AppCompatActivity() {
             }
 
             if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                if (currentSource == SOURCE_FAVORITES) {
+                    return super.dispatchKeyEvent(event)
+                }
+
+                if (action == KeyEvent.ACTION_DOWN) {
+                    if (event.repeatCount == 0) {
+                        longPressArmed = false
+                        handler.removeCallbacks(longPressFavoriteRunnable)
+                        handler.postDelayed(longPressFavoriteRunnable, LONG_PRESS_FAVORITE_MS)
+                    }
+                    return true
+                }
+
                 if (action == KeyEvent.ACTION_UP) {
+                    handler.removeCallbacks(longPressFavoriteRunnable)
+                    if (longPressArmed) {
+                        longPressArmed = false
+                        return true
+                    }
+
                     val now = System.currentTimeMillis()
                     if (now - lastOkPressTime < DOUBLE_CLICK_TIMEOUT_MS) {
                         lastOkPressTime = 0L
@@ -948,6 +1304,10 @@ class MainActivity : AppCompatActivity() {
                 }
                 if (hudPlayerBar.visibility == View.VISIBLE) {
                     hideHudPlayerBar()
+                    return
+                }
+                if (currentSource == SOURCE_FAVORITES) {
+                    switchSource(SOURCE_9ANIME)
                     return
                 }
                 if (webView.canGoBack()) {
