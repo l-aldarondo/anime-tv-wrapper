@@ -125,7 +125,8 @@ class MainActivity : AppCompatActivity() {
 
     private var isTv = false
     private var isCinemaMode = false
-    private var currentNavMode = MODE_SCROLL
+    private var currentNavMode = MODE_POINTER
+    private var currentDomScrollY = 0f
     private var currentSource = SOURCE_9ANIME
     private var lastBackPressTime = 0L
 
@@ -207,7 +208,7 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         currentSource = prefs.getString(KEY_ACTIVE_SOURCE, SOURCE_9ANIME) ?: SOURCE_9ANIME
         isCinemaMode = prefs.getBoolean(KEY_CINEMA_MODE, false)
-        currentNavMode = prefs.getInt(KEY_NAV_MODE, MODE_SCROLL)
+        currentNavMode = prefs.getInt(KEY_NAV_MODE, MODE_POINTER)
 
         val uiModeManager = getSystemService(Context.UI_MODE_SERVICE) as? android.app.UiModeManager
         isTv = (uiModeManager?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION)
@@ -287,6 +288,17 @@ class MainActivity : AppCompatActivity() {
 
         virtualCursorView.targetView = webView
         virtualCursorView.isDirectScrollMode = (currentNavMode == MODE_SCROLL)
+        virtualCursorView.onScrollRequest = { dy ->
+            val density = resources.displayMetrics.density
+            val cssDy = dy / density
+            currentDomScrollY = (currentDomScrollY + cssDy).coerceAtLeast(0f)
+            webView.evaluateJavascript("window.scrollBy(0, $cssDy);", null)
+        }
+        virtualCursorView.onTopEdgeTrigger = {
+            if (currentDomScrollY <= 15f) {
+                moveFocusToTopBar()
+            }
+        }
 
         // Top Bar Tabs
         btnSourceFavorites = findViewById(R.id.btnSourceFavorites)
@@ -442,6 +454,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                currentDomScrollY = 0f
                 pageLoadingBar.visibility = View.VISIBLE
                 // Inject early guard into DOM before page scripts evaluate
                 injectScript(
@@ -491,6 +504,9 @@ class MainActivity : AppCompatActivity() {
 
                 // Flush cookies to persistent storage
                 CookieManager.getInstance().flush()
+
+                // Inject DOM scroll position listener
+                injectScrollBridge()
 
                 // Silent auto-fill if master credentials exist
                 if (AccountStore.hasMasterCredentials(this@MainActivity)) {
@@ -569,7 +585,34 @@ class MainActivity : AppCompatActivity() {
         webView.evaluateJavascript(script, null)
     }
 
+    private fun injectScrollBridge() {
+        val script = """
+            (function() {
+                if (window.__animeScrollAttached) return;
+                window.__animeScrollAttached = true;
+                function reportScroll() {
+                    try {
+                        var sy = window.scrollY || (document.documentElement && document.documentElement.scrollTop) || (document.body && document.body.scrollTop) || 0;
+                        if (window.AndroidBridge && window.AndroidBridge.onScrollPositionChanged) {
+                            window.AndroidBridge.onScrollPositionChanged(sy);
+                        }
+                    } catch(e) {}
+                }
+                window.addEventListener('scroll', reportScroll, { passive: true });
+                reportScroll();
+            })();
+        """.trimIndent()
+        webView.evaluateJavascript(script, null)
+    }
+
     inner class AnimeTvBridge {
+        @JavascriptInterface
+        fun onScrollPositionChanged(scrollY: Float) {
+            runOnUiThread {
+                currentDomScrollY = scrollY
+            }
+        }
+
         @JavascriptInterface
         fun onVideoPlay() {
             runOnUiThread {
@@ -655,6 +698,7 @@ class MainActivity : AppCompatActivity() {
     private fun switchSource(source: String) {
         if (source == currentSource) return
         currentSource = source
+        currentDomScrollY = 0f
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         prefs.edit().putString(KEY_ACTIVE_SOURCE, source).apply()
         updateTopBarUi()
@@ -1071,10 +1115,23 @@ class MainActivity : AppCompatActivity() {
 
     // ── TV D-Pad Focus & Key Navigation ──────────────────────────────────────
 
+    private fun getButtonForSource(source: String): View = when (source) {
+        SOURCE_FAVORITES -> btnSourceFavorites
+        SOURCE_9ANIME -> btnSource9Anime
+        SOURCE_GOGOANIME -> btnSourceGogoAnime
+        SOURCE_SOLOLATINO -> btnSourceSoloLatino
+        SOURCE_SOLOLATINO_HOME -> btnSourceSoloLatinoHome
+        SOURCE_ANIMEFLIX -> btnSourceAnimeFlix
+        SOURCE_ANIMEYT -> btnSourceAnimeYT
+        SOURCE_JKANIME -> btnSourceJKAnime
+        else -> btnSource9Anime
+    }
+
     private fun moveFocusToTopBar() {
+        virtualCursorView.clearHeldKeys()
         virtualCursorView.isCursorVisible = false
-        val active = topBarFocusOrder.firstOrNull { it.id == btnSource9Anime.id }
-        active?.requestFocus()
+        val active = getButtonForSource(currentSource)
+        active.requestFocus()
     }
 
     private fun moveFocusToPage() {
@@ -1085,6 +1142,13 @@ class MainActivity : AppCompatActivity() {
         webView.requestFocus()
         if (isTv) {
             virtualCursorView.isCursorVisible = true
+            val density = resources.displayMetrics.density
+            if (virtualCursorView.cursorY < 70f * density) {
+                virtualCursorView.setCursorPosition(
+                    virtualCursorView.cursorX,
+                    90f * density
+                )
+            }
         }
     }
 
@@ -1226,8 +1290,8 @@ class MainActivity : AppCompatActivity() {
             )
 
             if (isDpadDirection) {
-                // Check if UP at top of page should move focus into top bar
-                if (action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_UP && webView.scrollY <= 4) {
+                // In Scroll Mode, if page is already at the very top, DPAD_UP transitions focus to top bar
+                if (action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_UP && currentNavMode == MODE_SCROLL && currentDomScrollY <= 15f) {
                     moveFocusToTopBar()
                     return true
                 }

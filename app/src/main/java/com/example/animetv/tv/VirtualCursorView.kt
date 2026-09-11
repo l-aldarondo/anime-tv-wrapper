@@ -38,6 +38,9 @@ class VirtualCursorView @JvmOverloads constructor(
     // The View synthetic clicks and scrolls are dispatched to (e.g. WebView)
     var targetView: View? = null
 
+    // Scroll callback for WebView DOM scrolling
+    var onScrollRequest: ((dy: Int) -> Unit)? = null
+
     private var pendingScrollPx = 0
     private var lastScrollFlushNanos = 0L
     private val minScrollFlushIntervalNanos = 16_000_000L // 60Hz smooth scroll
@@ -49,7 +52,11 @@ class VirtualCursorView @JvmOverloads constructor(
         val flush = pendingScrollPx
         pendingScrollPx = 0
         if (flush == 0) return
-        targetView?.scrollBy(0, flush)
+        if (onScrollRequest != null) {
+            onScrollRequest?.invoke(flush)
+        } else {
+            targetView?.scrollBy(0, flush)
+        }
     }
 
     private val density = resources.displayMetrics.density
@@ -74,6 +81,7 @@ class VirtualCursorView @JvmOverloads constructor(
 
     // Edge callbacks
     var onLeftEdgeTrigger: (() -> Unit)? = null
+    var onTopEdgeTrigger: (() -> Unit)? = null
     var onCursorMoved: ((x: Float, y: Float) -> Unit)? = null
 
     // Direct scroll mode velocities
@@ -189,14 +197,15 @@ class VirtualCursorView @JvmOverloads constructor(
             if (downHeld) sDirY += 1f
             directScrollVy = sDirY * scrollSpeed
 
-            // ...while LEFT/RIGHT instead glides the click reticle sideways, so Scroll Mode can
-            // still aim at and click on-page elements instead of only ever scrolling.
+            // LEFT/RIGHT glides the click reticle sideways, with smooth vertical steering
+            // so Scroll Mode can comfortably aim at and click any element on screen.
             val reticleSpeed = (480f + (holdDurationMs * 0.45f).coerceAtMost(520f)) * density
+            val verticalAimSpeed = (200f + (holdDurationMs * 0.25f).coerceAtMost(250f)) * density
             var dirX = 0f
             if (leftHeld) dirX -= 1f
             if (rightHeld) dirX += 1f
             targetVx = dirX * reticleSpeed
-            targetVy = 0f
+            targetVy = sDirY * verticalAimSpeed
             return
         }
 
@@ -241,21 +250,27 @@ class VirtualCursorView @JvmOverloads constructor(
                     }
                 }
 
-                // Horizontal glide for the click reticle (LEFT/RIGHT), same lerp smoothing as
-                // the pointer-mode cursor uses.
+                // Glide for the click reticle (horizontal and vertical steering)
                 val lerpFactor = (1.0 - Math.exp(-22.0 * dt)).toFloat()
                 vx += (targetVx - vx) * lerpFactor
+                vy += (targetVy - vy) * lerpFactor
                 if (Math.abs(vx) < 1f && targetVx == 0f) vx = 0f
+                if (Math.abs(vy) < 1f && targetVy == 0f) vy = 0f
 
-                if (vx != 0f) {
+                if (vx != 0f || vy != 0f) {
                     val pad = 12f * density
                     cursorX = (cursorX + (vx * dt)).coerceIn(pad, (width - pad).coerceAtLeast(pad))
+                    cursorY = (cursorY + (vy * dt)).coerceIn(pad, (height - pad).coerceAtLeast(pad))
                     invalidate()
 
                     onCursorMoved?.invoke(cursorX, cursorY)
 
                     if (cursorX <= pad + (4f * density) && (vx < 0f || leftHeld)) {
                         onLeftEdgeTrigger?.invoke()
+                    }
+
+                    if (cursorY <= pad + (4f * density) && (vy < 0f || upHeld)) {
+                        onTopEdgeTrigger?.invoke()
                     }
                 }
             } else {
@@ -277,6 +292,11 @@ class VirtualCursorView @JvmOverloads constructor(
                     // Check if cursor collided with the far left edge
                     if (cursorX <= pad + (4f * density) && (vx < 0f || leftHeld)) {
                         onLeftEdgeTrigger?.invoke()
+                    }
+
+                    // Check if cursor collided with the top edge
+                    if (cursorY <= pad + (4f * density) && (vy < 0f || upHeld)) {
+                        onTopEdgeTrigger?.invoke()
                     }
                 }
 
