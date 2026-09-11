@@ -79,7 +79,7 @@ a[href*="instagram.com/"], a[href*="tiktok.com/"], a[href*="whatsapp.com/"], a[h
     pointer-events: none !important;
 }
 
-/* 3. Universal Player Sizing & 16:9 Cinema Aspect Ratio */
+/* 3. Universal Player Sizing */
 .wb_-playerarea, .player-embed, #player, #player-container,
 .player-wrap, .video-content, #main-player-wrap, #player-frame,
 .mg-3mb3d, .mg3-player, #megaplay-player,
@@ -91,9 +91,7 @@ iframe.player_conte, iframe[src*="jkplayer"] {
     visibility: visible !important;
     background: #000000 !important;
     border: none !important;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.8) !important;
-    aspect-ratio: 16 / 9 !important;
-    max-height: 92vh !important;
+    box-shadow: none !important;
     margin: 0 auto !important;
     width: 100% !important;
 }
@@ -109,39 +107,96 @@ iframe.player_conte, iframe[src*="jkplayer"] {
 }
 
 /* 4. Netflix Cinema Mode (Full immersion on player only when a player exists) */
-body.animetv-cinema-mode:has(.player-wrap, #player, .wb_-playerarea, #player-section, iframe) #header,
-body.animetv-cinema-mode:has(.player-wrap, #player, .wb_-playerarea, #player-section, iframe) header,
-body.animetv-cinema-mode:has(.player-wrap, #player, .wb_-playerarea, #player-section, iframe) .site-header,
-body.animetv-cinema-mode:has(.player-wrap, #player, .wb_-playerarea, #player-section, iframe) .top-bar,
-body.animetv-cinema-mode:has(.player-wrap, #player, .wb_-playerarea, #player-section, iframe) .navbar,
-body.animetv-cinema-mode:has(.player-wrap, #player, .wb_-playerarea, #player-section, iframe) .sidebar {
+body.animetv-cinema-mode #header,
+body.animetv-cinema-mode header,
+body.animetv-cinema-mode .site-header,
+body.animetv-cinema-mode .top-bar,
+body.animetv-cinema-mode .navbar,
+body.animetv-cinema-mode .sidebar,
+body.animetv-cinema-mode .episodes-list,
+body.animetv-cinema-mode .episodes-nav,
+body.animetv-cinema-mode .anime-servers,
+body.animetv-cinema-mode .player-tab,
+body.animetv-cinema-mode .server-btn,
+body.animetv-cinema-mode .server-item,
+body.animetv-cinema-mode .servers,
+body.animetv-cinema-mode .opt-server,
+body.animetv-cinema-mode [data-lang-tab],
+body.animetv-cinema-mode [data-server-btn],
+body.animetv-cinema-mode [data-lang-group],
+body.animetv-cinema-mode #player-section > div:not(#main-player-wrap),
+body.animetv-cinema-mode #btn-expand-player,
+body.animetv-cinema-mode h1,
+body.animetv-cinema-mode h2,
+body.animetv-cinema-mode .episode-info,
+body.animetv-cinema-mode .episode-details,
+body.animetv-cinema-mode [class*="episode-header"],
+body.animetv-cinema-mode footer {
     display: none !important;
+}
+
+body.animetv-cinema-mode main,
+body.animetv-cinema-mode .max-w-screen-xl,
+body.animetv-cinema-mode .rounded-2xl {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100vw !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    border-radius: 0 !important;
+    overflow: hidden !important;
+    border: none !important;
+    background: #000000 !important;
 }
 
 body.animetv-cinema-mode .wb_-playerarea,
 body.animetv-cinema-mode .player-wrap,
 body.animetv-cinema-mode #player,
 body.animetv-cinema-mode #player-container,
-body.animetv-cinema-mode .video-content {
+body.animetv-cinema-mode .video-content,
+body.animetv-cinema-mode #player-section,
+body.animetv-cinema-mode #main-player-wrap,
+body.animetv-cinema-mode #player-frame,
+body.animetv-cinema-mode .player-embed,
+body.animetv-cinema-mode .azaku-player-container {
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
     width: 100vw !important;
     height: 100vh !important;
     max-height: 100vh !important;
+    max-width: 100vw !important;
+    aspect-ratio: auto !important;
     z-index: 999999 !important;
     background: #000000 !important;
     margin: 0 !important;
     padding: 0 !important;
+    border: none !important;
 }
 
 body.animetv-cinema-mode .wb_-playerarea iframe,
 body.animetv-cinema-mode .player-wrap iframe,
 body.animetv-cinema-mode #player iframe,
-body.animetv-cinema-mode #player-container iframe {
-    width: 100% !important;
-    height: 100% !important;
+body.animetv-cinema-mode #player-container iframe,
+body.animetv-cinema-mode #main-player-wrap iframe,
+body.animetv-cinema-mode #player-frame iframe,
+body.animetv-cinema-mode .player-embed iframe,
+body.animetv-cinema-mode iframe.player-iframe,
+body.animetv-cinema-mode iframe,
+body.animetv-cinema-mode video {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    max-width: 100vw !important;
+    aspect-ratio: auto !important;
     border: none !important;
+    background: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
 }
 
 /* 5. Episode List & Catalog TV Styling */

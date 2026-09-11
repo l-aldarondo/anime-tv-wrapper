@@ -42,6 +42,8 @@ import com.example.animetv.tv.VirtualCursorView
 import org.json.JSONObject
 import org.json.JSONTokener
 import java.io.ByteArrayInputStream
+import java.net.HttpURLConnection
+import java.net.URL
 
 class MainActivity : AppCompatActivity() {
 
@@ -77,6 +79,8 @@ class MainActivity : AppCompatActivity() {
 
         private const val BACK_PRESS_INTERVAL = 2000L
         private const val HUD_AUTO_HIDE_DELAY_MS = 6000L
+
+        const val USER_AGENT_DESKTOP = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
         // Primary anime domains and trusted media embed providers
         private val ALLOWED_MAIN_HOSTS = setOf(
@@ -177,7 +181,7 @@ class MainActivity : AppCompatActivity() {
     private var isPlayerFullscreen = false
 
     private var lastOkPressTime = 0L
-    private val DOUBLE_CLICK_TIMEOUT_MS = 400L
+    private val DOUBLE_CLICK_TIMEOUT_MS = 550L
     private val pendingOkClickRunnable = Runnable {
         virtualCursorView.dispatchClick(webView)
     }
@@ -355,7 +359,7 @@ class MainActivity : AppCompatActivity() {
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
 
         // Standard Windows 10 Chrome User-Agent for maximum video CDN & JWPlayer compatibility
-        settings.userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+        settings.userAgentString = USER_AGENT_DESKTOP
 
         // Cache policy
         settings.cacheMode = WebSettings.LOAD_DEFAULT
@@ -411,7 +415,8 @@ class MainActivity : AppCompatActivity() {
 
                 if (url.contains("embed69.org/styles-player-oxserver.css")) {
                     val cleanCss = """
-                        .modal-vast, #modal, #tutorialOverlay, .tutorial-overlay {
+                        .modal-vast, #modal, #tutorialOverlay, .tutorial-overlay,
+                        .video-title-overlay, .selector-container {
                             display: none !important;
                             visibility: hidden !important;
                             pointer-events: none !important;
@@ -420,8 +425,109 @@ class MainActivity : AppCompatActivity() {
                             opacity: 0 !important;
                             z-index: -9999 !important;
                         }
+                        body.animetv-clean-player .language-tab-container,
+                        body.animetv-clean-player .tab-container,
+                        body.animetv-clean-player .video-title-overlay,
+                        body.animetv-clean-player .selector-container {
+                            display: none !important;
+                            height: 0 !important;
+                        }
+                        body.animetv-clean-player #DisplayContent,
+                        body.animetv-clean-player #PlayerDisplay,
+                        body.animetv-clean-player .iframe-container,
+                        body.animetv-clean-player .plyr-wrap,
+                        body.animetv-clean-player .plyr,
+                        body.animetv-clean-player video,
+                        body.animetv-clean-player iframe {
+                            width: 100vw !important;
+                            height: 100vh !important;
+                            max-width: 100vw !important;
+                            max-height: 100vh !important;
+                            margin: 0 !important;
+                            padding: 0 !important;
+                            border: none !important;
+                            aspect-ratio: auto !important;
+                        }
                     """.trimIndent()
                     return WebResourceResponse("text/css", "UTF-8", ByteArrayInputStream(cleanCss.toByteArray()))
+                }
+
+                // Intercept player.pelisserieshoy.com / embed iframe to inject full-bleed 16:9 styling and clean controls
+                if (url.contains("pelisserieshoy.com") || url.contains("embed69.org")) {
+                    if (!url.contains(".js") && !url.contains(".css") && !url.contains(".php") &&
+                        !url.contains(".png") && !url.contains(".jpg") && !url.contains(".svg") &&
+                        !url.contains(".woff") && !url.contains(".mp4") && !url.contains(".m3u8")
+                    ) {
+                        try {
+                            val conn = URL(url).openConnection() as HttpURLConnection
+                            conn.requestMethod = "GET"
+                            conn.setRequestProperty("User-Agent", USER_AGENT_DESKTOP)
+                            conn.setRequestProperty("Referer", "https://sololatino.net/")
+                            conn.connectTimeout = 8000
+                            conn.readTimeout = 8000
+                            if (conn.responseCode == 200) {
+                                var html = conn.inputStream.bufferedReader().use { it.readText() }
+                                val injectedStyle = """
+                                    <style id="animetv-embed-clean">
+                                        html, body {
+                                            background: #000 !important;
+                                            overflow: hidden !important;
+                                            width: 100vw !important;
+                                            height: 100vh !important;
+                                            margin: 0 !important;
+                                            padding: 0 !important;
+                                        }
+                                        .language-tab-container,
+                                        .tab-container,
+                                        .language-tab,
+                                        .tab,
+                                        #srvBadge,
+                                        .video-title-overlay,
+                                        .selector-container {
+                                            display: none !important;
+                                            visibility: hidden !important;
+                                            opacity: 0 !important;
+                                            pointer-events: none !important;
+                                            height: 0 !important;
+                                            min-height: 0 !important;
+                                            margin: 0 !important;
+                                            padding: 0 !important;
+                                        }
+                                        #DisplayContent,
+                                        #PlayerDisplay,
+                                        .iframe-container,
+                                        .plyr-wrap,
+                                        .plyr,
+                                        .plyr__video-wrapper,
+                                        video,
+                                        video#vp,
+                                        iframe,
+                                        #iframeWrap {
+                                            width: 100vw !important;
+                                            height: 100vh !important;
+                                            max-width: 100vw !important;
+                                            max-height: 100vh !important;
+                                            margin: 0 !important;
+                                            padding: 0 !important;
+                                            border: none !important;
+                                            aspect-ratio: auto !important;
+                                        }
+                                        .plyr__video-wrapper {
+                                            width: 100% !important;
+                                            height: 100% !important;
+                                        }
+                                        video {
+                                            object-fit: contain !important;
+                                        }
+                                    </style>
+                                """.trimIndent()
+                                html = html.replace("</head>", "$injectedStyle</head>")
+                                return WebResourceResponse("text/html", "UTF-8", ByteArrayInputStream(html.toByteArray()))
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to intercept embed frame HTML: $url", e)
+                        }
+                    }
                 }
 
                 return super.shouldInterceptRequest(view, request)
@@ -723,11 +829,42 @@ class MainActivity : AppCompatActivity() {
         getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putBoolean(KEY_CINEMA_MODE, isCinemaMode).apply()
         updateTopBarUi()
         if (isCinemaMode) {
-            injectScript("document.body.classList.add('animetv-cinema-mode');")
-            Toast.makeText(this, "🍿 Cinema Mode Enabled", Toast.LENGTH_SHORT).show()
+            topBar.visibility = View.GONE
+            hudPlayerBar.visibility = View.GONE
+            enableImmersiveMode()
+            injectScript("""
+                (function() {
+                    document.body.classList.add('animetv-cinema-mode');
+                    document.documentElement.classList.add('animetv-cinema-mode');
+                    var p = document.querySelector('#main-player-wrap, #player-frame, .player-wrap, .wb_-playerarea, #player-section, #player');
+                    if (p) {
+                        try { p.scrollIntoView({ behavior: 'instant', block: 'start' }); } catch(e){}
+                    }
+                    document.querySelectorAll('iframe').forEach(function(f) {
+                        try {
+                            f.setAttribute('allowfullscreen', 'true');
+                            f.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture; encrypted-media');
+                            f.contentWindow.postMessage({ type: 'animetv-cinema', enabled: true }, '*');
+                        } catch(e) {}
+                    });
+                })();
+            """.trimIndent())
+            Toast.makeText(this, "🍿 Modo Cine Activado (Pulsa Atrás para salir)", Toast.LENGTH_SHORT).show()
         } else {
-            injectScript("document.body.classList.remove('animetv-cinema-mode');")
-            Toast.makeText(this, "Standard View", Toast.LENGTH_SHORT).show()
+            topBar.visibility = View.VISIBLE
+            enableImmersiveMode()
+            injectScript("""
+                (function() {
+                    document.body.classList.remove('animetv-cinema-mode');
+                    document.documentElement.classList.remove('animetv-cinema-mode');
+                    document.querySelectorAll('iframe').forEach(function(f) {
+                        try {
+                            f.contentWindow.postMessage({ type: 'animetv-cinema', enabled: false }, '*');
+                        } catch(e) {}
+                    });
+                })();
+            """.trimIndent())
+            Toast.makeText(this, "Vista Estándar", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1079,14 +1216,17 @@ class MainActivity : AppCompatActivity() {
                 (function() {
                     document.body.classList.add('animetv-fullscreen-player');
                     document.documentElement.classList.add('animetv-fullscreen-player');
-                    var p = document.querySelector('#player-section, #main-player-wrap, #player-frame, .player-wrap, .wb_-playerarea, #player');
+                    var p = document.querySelector('#main-player-wrap, #player-frame, .player-wrap, .wb_-playerarea, #player-section, #player');
                     if (p) {
                         try { p.scrollIntoView({ behavior: 'instant', block: 'start' }); } catch(e){}
                     }
-                    var ifr = document.querySelector('#player-frame iframe, .player-wrap iframe, #player-container iframe, .player-embed iframe, iframe.player-iframe');
-                    if (ifr && ifr.requestFullscreen) {
-                        try { ifr.requestFullscreen().catch(function(){}); } catch(e){}
-                    }
+                    document.querySelectorAll('iframe').forEach(function(f) {
+                        try {
+                            f.setAttribute('allowfullscreen', 'true');
+                            f.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture; encrypted-media');
+                            f.contentWindow.postMessage({ type: 'animetv-fullscreen', enabled: true }, '*');
+                        } catch(e) {}
+                    });
                     var vid = document.querySelector('video');
                     if (vid && vid.requestFullscreen) {
                         try { vid.requestFullscreen().catch(function(){}); } catch(e){}
@@ -1103,6 +1243,11 @@ class MainActivity : AppCompatActivity() {
                 (function() {
                     document.body.classList.remove('animetv-fullscreen-player');
                     document.documentElement.classList.remove('animetv-fullscreen-player');
+                    document.querySelectorAll('iframe').forEach(function(f) {
+                        try {
+                            f.contentWindow.postMessage({ type: 'animetv-fullscreen', enabled: false }, '*');
+                        } catch(e) {}
+                    });
                     try {
                         if (document.exitFullscreen) document.exitFullscreen().catch(function(){});
                     } catch(e){}
@@ -1364,6 +1509,10 @@ class MainActivity : AppCompatActivity() {
                 }
                 if (isPlayerFullscreen) {
                     togglePlayerFullscreen()
+                    return
+                }
+                if (isCinemaMode) {
+                    toggleCinemaMode()
                     return
                 }
                 if (hudPlayerBar.visibility == View.VISIBLE) {
