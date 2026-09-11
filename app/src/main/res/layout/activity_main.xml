@@ -322,7 +322,10 @@
 
     </LinearLayout>
 
-    <!-- Bottom Remote Controls Guide (Auto-fades out after 5 seconds) -->
+    <!-- Bottom Remote Controls Guide (Auto-fades out after 5 seconds). Starts invisible - shown
+         via scheduleGuideDismiss() only once the first page actually finishes loading (see
+         onPageStop, MainActivity.kt), not at app launch, so its 5-second timer doesn't race the
+         initial page load and burn down against a blank/loading screen. -->
     <LinearLayout
         android:id="@+id/osdControlsGuide"
         android:layout_width="wrap_content"
@@ -332,6 +335,7 @@
         android:background="@drawable/bg_osd_panel"
         android:orientation="horizontal"
         android:elevation="40dp"
+        android:visibility="invisible"
         android:focusable="false"
         android:clickable="false">
 

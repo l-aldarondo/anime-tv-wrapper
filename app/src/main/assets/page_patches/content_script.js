@@ -46,6 +46,31 @@
             };
         }
 
+        // 1b. Neutralize Disqus embed-script injection (9anime.or.at episode/watch pages). The
+        // page's own inline script does d.head.appendChild(s) synchronously as the HTML parser
+        // reaches it - that dispatches the network request to disqus.com immediately, before any
+        // MutationObserver callback (including purgeOverlays() below) gets a chance to react, so
+        // CSS display:none on the comment container alone can't stop it. Overriding appendChild/
+        // insertBefore here (document_start, before the page's own scripts run) wins the race.
+        try {
+            var origAppendChild = Node.prototype.appendChild;
+            Node.prototype.appendChild = function (node) {
+                if (node && node.tagName === 'SCRIPT' && typeof node.src === 'string' && node.src.indexOf('disqus.com/embed.js') !== -1) {
+                    console.log('AnimeTV: Suppressed Disqus embed.js injection -> ' + node.src);
+                    return node;
+                }
+                return origAppendChild.call(this, node);
+            };
+            var origInsertBefore = Node.prototype.insertBefore;
+            Node.prototype.insertBefore = function (node, ref) {
+                if (node && node.tagName === 'SCRIPT' && typeof node.src === 'string' && node.src.indexOf('disqus.com/embed.js') !== -1) {
+                    console.log('AnimeTV: Suppressed Disqus embed.js injection -> ' + node.src);
+                    return node;
+                }
+                return origInsertBefore.call(this, node, ref);
+            };
+        } catch (e) {}
+
         function isInternalLink(u) {
             if (!u || u === '#' || u.indexOf('/') === 0 || u.indexOf('#') === 0 || u.indexOf('javascript:') === 0) return true;
             var curHost = window.location.hostname;
@@ -138,10 +163,23 @@
         // the top document, one injected per sanitized iframe); now there's exactly one.
         function purgeOverlays() {
             neutralizeSlAdsElement();
-            // Remove fake robot verification / notification / loading / APK download prompts
+            // Remove fake robot verification / notification / loading / APK download prompts.
+            // This had no size/length bound at all - since it checks EVERY div/section/dialog at
+            // every nesting level (not just small leaf popups) via .innerText (which aggregates
+            // ALL descendant text), a large, completely legitimate ancestor section could satisfy
+            // both halves of the condition purely by coincidence: a real Cloudflare Turnstile
+            // widget rendering the word "robot" ANYWHERE on the page, combined with a large parent
+            // that also happens to contain one of the very common action words ("download", "ok",
+            // "continue", "allow" - virtually guaranteed to appear somewhere on a real streaming
+            // page with per-episode download buttons) ANYWHERE within it, e.g. an episode list's
+            // whole wrapping section. Capping the text length keeps this scoped to small,
+            // popup-sized content the way it was actually meant to be, matching the same 400-char
+            // bound already used below for the ad-wall text detector.
             var botCards = document.querySelectorAll('div, section, dialog');
             for (var bc = 0; bc < botCards.length; bc++) {
-                var bcTxt = (botCards[bc].innerText || '').toLowerCase();
+                var bcRawTxt = botCards[bc].innerText || '';
+                if (bcRawTxt.length > 400) continue;
+                var bcTxt = bcRawTxt.toLowerCase();
                 if ((bcTxt.indexOf('not a robot') !== -1 || bcTxt.indexOf('kindly verify') !== -1 || bcTxt.indexOf('robot') !== -1 || bcTxt.indexOf('need to "allow"') !== -1 || bcTxt.indexOf('need to allow') !== -1 || (bcTxt.indexOf('loading...') !== -1 && bcTxt.indexOf('allow') !== -1) || bcTxt.indexOf("we're ready") !== -1 || bcTxt.indexOf('file_download.apk') !== -1 || (bcTxt.indexOf('.apk') !== -1 && bcTxt.indexOf('download') !== -1)) && (bcTxt.indexOf('attention') !== -1 || bcTxt.indexOf('cancel') !== -1 || bcTxt.indexOf('allow') !== -1 || bcTxt.indexOf('continue') !== -1 || bcTxt.indexOf('ok') !== -1 || bcTxt.indexOf('download') !== -1)) {
                     try { botCards[bc].remove(); } catch (e) {}
                 }
@@ -171,7 +209,16 @@
                     if (!tTxt || tTxt.length > 400 || !adWallTextRe.test(tTxt)) continue;
                     var tCs = window.getComputedStyle(tEl);
                     var tZ = parseInt(tCs.zIndex || '0', 10) || 0;
-                    if (tCs.position === 'fixed' || tCs.position === 'absolute' || tZ > 100 || tEl.offsetWidth > window.innerWidth * 0.5) {
+                    // A real ad wall is virtually always taken out of normal document flow via
+                    // fixed/absolute positioning to sit on top of content - require that as a
+                    // baseline, then use z-index/width only as a secondary signal on TOP of that.
+                    // Previously any one of these four alone was enough, which meant a plain
+                    // in-flow page section (a season's episode-list wrapper, a synopsis paragraph,
+                    // anything comfortably over half the viewport wide - which describes most main
+                    // content on a phone/TV layout) could get removed outright just for
+                    // coincidentally containing one of this regex's fairly generic words/phrases.
+                    var isPositionedOverlay = tCs.position === 'fixed' || tCs.position === 'absolute';
+                    if (isPositionedOverlay && (tZ > 100 || tEl.offsetWidth > window.innerWidth * 0.5)) {
                         try { tEl.remove(); } catch (e) {}
                     }
                 }
@@ -249,8 +296,17 @@
                     try { skipBtns[sk].click(); } catch (e) {}
                 }
             }
+            // sololatino.net's own trailer-close and auth-modal-close buttons both happen to
+            // carry aria-label="Cerrar" (Spanish "Close") - the same generic label this sweep
+            // targets for OTHER sites' cookie/tutorial dialogs. Opening the trailer sets a class
+            // on #trailer-modal, which is inside this observer's own attributeFilter, so the very
+            // next purgeOverlays() pass (next animation frame) found #trailer-close via this
+            // selector and clicked it - auto-closing the trailer the instant it opened. Excluding
+            // both modals' own controls here, same idea as the id checks already used elsewhere
+            // in this file for these two ids.
             var dismissBtns = document.querySelectorAll('button[data-aniyt-cookie-dismiss], [data-abismo-login-dialog] .close, [aria-label="Cerrar"]');
             for (var d = 0; d < dismissBtns.length; d++) {
+                if (dismissBtns[d].closest && dismissBtns[d].closest('#trailer-modal, #auth-modal')) continue;
                 try { dismissBtns[d].click(); } catch (e) {}
             }
             var allBtns = document.querySelectorAll('button');
@@ -260,14 +316,27 @@
                 }
             }
 
-            // SoloLatino: dismiss the auth modal and visually de-emphasize paid-tier server buttons
-            // (Premium/VIP) - no auto-clicking (see git history: every attempt at that caused a
-            // reload loop or interrupted an already-playing free server). The user picks their own
-            // server from the visible buttons, same as always; this only makes the paid ones look
-            // less like the right choice.
+            // SoloLatino: visually de-emphasize paid-tier server buttons (Premium/VIP) - no
+            // auto-clicking (see git history: every attempt at that caused a reload loop or
+            // interrupted an already-playing free server). The user picks their own server from
+            // the visible buttons, same as always; this only makes the paid ones look less like
+            // the right choice.
+            // NOTE: this used to also force-remove #auth-modal here (plus a matching fixes.css
+            // display:none rule). That's the site's real login dialog - already `hidden` by
+            // default in its own markup, only unhidden by the site's own JS when an account
+            // action needs it (e.g. clicking Favorito/Mi Lista/Vista while logged out gets a 401,
+            // and the response handler calls window.showAuthModal()). Removing it meant those
+            // clicks still fired their request but the resulting login prompt never appeared -
+            // "if I click on them nothing happens." Left alone now; it stays invisible on its own
+            // whenever the site itself has no reason to show it.
             if (window.location.hostname.indexOf('sololatino.net') !== -1) {
-                var authM = document.getElementById('auth-modal') || document.querySelector('.auth-modal');
-                if (authM) { try { authM.remove(); } catch (e) {} }
+                // sololatino.net's real <footer> has no unique class/id (plain Tailwind utility
+                // classes, confirmed live) - a bare `footer` CSS selector in fixes.css would be
+                // unsafe there since that file applies to every third-party player iframe this
+                // app loads too (all_frames + <all_urls>), so it's removed via JS instead,
+                // hostname-scoped like everything else in this block.
+                var slFooter = document.querySelector('footer');
+                if (slFooter) { try { slFooter.remove(); } catch (e) {} }
 
                 var paidTierRe = /premium|\bvip\b/i;
                 var allServerBtns = document.querySelectorAll('button[data-server-btn], .server-btn');

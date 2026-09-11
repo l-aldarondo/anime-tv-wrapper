@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
@@ -176,6 +177,12 @@ class MainActivity : AppCompatActivity() {
     private var canGoBackFlag = false
     private var lastBackPressTime = 0L
     private var lastOkUpTime = 0L
+    // Which ALLOWED_MAIN_HOSTS entry the top-level document currently matches - used by
+    // onLoadRequest to tell a real cross-source jump from a same-site redirect (see its comment).
+    private var currentAllowedHostFamily: String? = null
+    // Guards the D-pad hint guide's one-shot launch trigger (onPageStop) so it only auto-shows
+    // once per app session, not on every subsequent page load/source switch.
+    private var initialGuideShown = false
 
     // Native <-> page bridge (video-play-detected, double-tap, player commands, fullscreen
     // toggle) - see app/src/main/assets/page_patches/. GeckoView has no evaluateJavascript()
@@ -215,13 +222,14 @@ class MainActivity : AppCompatActivity() {
         initViews()
         setupBackPressedHandler()
 
-        if (isTv) {
-            scheduleGuideDismiss()
-        } else {
+        if (!isTv) {
             // On phones with touch screens, hide the virtual D-Pad cursor and TV remote hints
             virtualCursorView.visibility = View.GONE
             osdControlsGuide.visibility = View.GONE
         }
+        // On TV, osdControlsGuide starts invisible (activity_main.xml) - scheduleGuideDismiss()
+        // is deferred to the first onPageStop instead of firing here, so its 5-second countdown
+        // starts once real content is on screen rather than racing the initial page load.
 
         bootGeckoViewEngine()
     }
@@ -400,7 +408,13 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             override fun onPageStop(session: GeckoSession, success: Boolean) {
-                runOnUiThread { pageLoadingBar.visibility = View.GONE }
+                runOnUiThread {
+                    pageLoadingBar.visibility = View.GONE
+                    if (isTv && !initialGuideShown) {
+                        initialGuideShown = true
+                        scheduleGuideDismiss()
+                    }
+                }
             }
         }
 
@@ -435,8 +449,27 @@ class MainActivity : AppCompatActivity() {
                     return GeckoResult.fromValue(AllowOrDeny.DENY)
                 }
                 val host = uri?.host?.lowercase() ?: ""
-                val isAllowed = ALLOWED_MAIN_HOSTS.any { host == it || host.endsWith(".$it") }
-                return GeckoResult.fromValue(if (isAllowed) AllowOrDeny.ALLOW else AllowOrDeny.DENY)
+                val matchedFamily = ALLOWED_MAIN_HOSTS.find { host == it || host.endsWith(".$it") }
+                if (matchedFamily == null) {
+                    return GeckoResult.fromValue(AllowOrDeny.DENY)
+                }
+                // A source's own ad network occasionally tries a silent top-level redirect to a
+                // DIFFERENT source's real site (seen live: animeyt.cc's ad scripts redirecting to
+                // jkanime.net) - since jkanime.net is itself a legitimate allowed host (needed for
+                // its own tab), the plain host-allowlist check above lets it straight through. Any
+                // GENUINE reason to cross from one source's site to a different one always has
+                // either a real user gesture (the user tapped a link) or comes from our own native
+                // switchSource()/loadUri() call (isDirectNavigation) - a script-triggered jump
+                // between two unrelated allowed families with neither signal is never legitimate,
+                // so it's the one case denied here instead of just allowlist-checked.
+                val currentFamily = currentAllowedHostFamily
+                val isCrossFamilyJump = currentFamily != null && currentFamily != matchedFamily
+                if (isCrossFamilyJump && !request.hasUserGesture && !request.isDirectNavigation) {
+                    Log.w("AnimeTV", "Blocked cross-family redirect: $currentFamily -> $matchedFamily ($host)")
+                    return GeckoResult.fromValue(AllowOrDeny.DENY)
+                }
+                currentAllowedHostFamily = matchedFamily
+                return GeckoResult.fromValue(AllowOrDeny.ALLOW)
             }
 
             // Not overriding this returns null, which GeckoView treats as "deny the popup" -

@@ -74,13 +74,22 @@ div[class*="announcement"], .notice-bar, .domain-alert, #notice {
     opacity: 1 !important;
 }
 
-#modal.modal-vast, .modal-vast, .download-panel, .tutorial-overlay, #decryptionLoader, .server-toast,
-#auth-modal, .auth-modal, .modal-auth, .auth-modal__backdrop {
+#modal.modal-vast, .modal-vast, .download-panel, .tutorial-overlay, #decryptionLoader, .server-toast {
     display: none !important;
     visibility: hidden !important;
     height: 0 !important;
     pointer-events: none !important;
 }
+
+/* #auth-modal/.auth-modal on sololatino.net is NOT an ad/nuisance overlay - it's the site's real
+   login dialog, already `hidden` by default in its own markup and only unhidden by the site's own
+   JS (window.showAuthModal()) when an account action needs it - e.g. clicking Favorito/Mi Lista/
+   Vista fires a POST that 401s while logged out, and the site's response handler calls
+   showAuthModal() to prompt login. This used to be force-hidden here (display:none + pointer-events:
+   none), which silently killed that prompt - the buttons still fired their request, just with no
+   visible feedback, matching the report that "if I click on them nothing happens." Do not re-add a
+   blanket hide for this selector without first confirming, on-device, that a real annoyance (not
+   this login flow) is the one triggering it. */
 
 iframe#iframe-embed, iframe.player-iframe, .player-embed iframe, iframe[src*="player"],
 iframe[src*="embed"], iframe[src*="megaplay"], iframe[src*="mytsumi"], iframe[src*="xupalace"],
@@ -153,11 +162,15 @@ div[id*="ad_layer"], div[class*="ad_layer"], div[id*="fake_player"] {
    things uBlock has no reason to know are unwanted (a site's own footer, its own first-party
    "sorry for delays"-style promo popups, etc). */
 
-/* gogoanime.by / sololatino.net / animeflix.team / animeyt.cc all currently serve the same
-   WordPress "aniyt" theme/network (confirmed live - sololatino.net and animeyt.cc are already in
-   isInternalLink()'s allowlist as the same site family). Footer + the theme's own periodic
-   "Un pequeño aviso" delay-apology modal (id and class both #abismo-aviso-temporal /
-   .abismo-aviso-temporal, injected client-side ~700ms after load, throttled ~12h). */
+/* animeyt.cc genuinely runs the WordPress "aniyt" theme (confirmed live via wp-content/themes/
+   aniyt and the exact footer.aniyt-footer markup). It was previously assumed gogoanime.by,
+   sololatino.net, and animeflix.team shared this theme too, based on isInternalLink()'s allowlist
+   grouping them as the same site "family" for click-navigation purposes - that inference was
+   wrong (unrelated to markup/theme) and this rule never actually matched on any of those three,
+   confirmed via a fresh live re-fetch: their real footers/themes are handled by the rules below
+   instead. Footer + the theme's own periodic "Un pequeño aviso" delay-apology modal (id and class
+   both #abismo-aviso-temporal / .abismo-aviso-temporal, injected client-side ~700ms after load,
+   throttled ~12h). */
 footer.aniyt-footer, .aniyt-footer,
 #abismo-aviso-temporal, .abismo-aviso-temporal {
     display: none !important;
@@ -167,6 +180,24 @@ footer.aniyt-footer, .aniyt-footer,
     padding: 0 !important;
     overflow: hidden !important;
 }
+
+/* gogoanime.by AND animeflix.team run WordPress "dramastream"/"animestream" themes - confirmed
+   live via wp-content/themes/dramastream and wp-content/themes/animestream, identical real footer
+   on both across home/catalog/detail/episode pages: <footer id="colophon" class="site-footer" ...> */
+footer#colophon.site-footer, #colophon, .site-footer {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+/* sololatino.net's real <footer> has no unique class/id at all (plain Tailwind utility classes) -
+   a bare `footer` selector here would be unsafe since this file also applies inside every
+   third-party player iframe this app loads (all_frames + <all_urls>, manifest.json), so it's
+   removed via hostname-scoped JS instead (content_script.js, purgeOverlays()'s sololatino.net
+   block) rather than CSS. */
 
 /* 9anime.or.at's native "9animetv" theme footer (its content/episode pages - not the anomalous
    AnimeYT-rebranded root "/" page, which is already covered by footer.aniyt-footer above). */
@@ -191,4 +222,62 @@ ins[data-cp-host], ins.604c7625,
     margin: 0 !important;
     padding: 0 !important;
     overflow: hidden !important;
+}
+
+/* Comments sections - blocked per user request. Each selector verified live against a real
+   detail AND episode page for its source before being added. jkanime.net is deliberately NOT
+   included here - #jk_thread is a genuine first-party comments widget the site lazy-loads via
+   its own IntersectionObserver; only the ad iframe nested inside it (#adangle-pop-iframe-container,
+   above) is unwanted. */
+
+/* 9anime.or.at episode/watch pages - Disqus widget container. This only stops the visible box;
+   the embed.js network request itself is separately suppressed in content_script.js, since the
+   page's own inline script injects that <script> synchronously before any CSS/MutationObserver
+   reaction is possible. */
+.block_area-comment {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+/* gogoanime.by / animeflix.team - native WP comment form. :has() scopes this to only the one
+   .bixbox that actually contains the comment form - .bixbox itself is reused for other sections
+   (e.g. Recommended Series) and must not be hidden wholesale. */
+.bixbox:has(.cmt.commentx) {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+/* animeyt.cc - bespoke "Comunidad" comments widget, id is unique on both detail and episode pages */
+#comentarios {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+/* sololatino.net (both tabs) - custom comments block. #comment-form-wrap is a unique id, so
+   :has() safely scopes to just its one enclosing <section> whether that section sits inline
+   (episode pages) or inside a tab-panel (detail pages). The "Comentarios" tab button itself lives
+   in a different DOM branch (the tabs-nav bar) and is hidden separately, since otherwise a detail
+   page would leave it behind as a dead tab into an empty panel. */
+section:has(#comment-form-wrap) {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+button[data-tab-btn="comentarios"] {
+    display: none !important;
 }
