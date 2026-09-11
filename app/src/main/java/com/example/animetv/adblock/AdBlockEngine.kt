@@ -60,30 +60,43 @@ object AdBlockEngine {
         "advertising.com",
         "serving-sys.com",
         "smartadserver.com",
+        // Social widgets & trackers
         "disqus.com",
+        "disquscdn.com",
+        "addthis.com",
+        "sharethis.com",
+        "addtoany.com",
+        "platform.twitter.com",
+        "connect.facebook.net",
         "histats.com",
         "yandex.ru",
         "mc.yandex.ru",
 
         // Known anime site ad-networks and redirect domains
+        "cloudwindow-route.com",
+        "duotypesleeted.com",
+        "etaargon.com",
+        "subduepaler.cyou",
+        "potdarmottoed.com",
+        "osarcotypes.com",
+        "shaptinfulmars.com",
+        "densenbl.com",
+        "dayworkannona.shop",
+        "webfedrewraps.qpon",
+        "dearthsongman.shop",
         "furudloof.com",
         "belchlipin.com",
         "subduepaler.com",
         "buildsstate.com",
         "oxserver.com",
         "excavatenearbywand.com",
-        "cloudwindow-route.com",
-        "desu.sh",
-        "snapcdn.top",
-        "bysesukior.com",
-        "bysedikamoum.com",
-        "minochinos.com",
-        "ghbrisk.com",
-        "audinifer.com",
-        "f7hyg4q.org",
-        "morencius.com",
         "anura.io",
         "clarium.global",
+        "ashrafiundined.com",
+        "motelmute.com",
+        "alwingulla.com",
+        "bidgear.com",
+        "pemsrv.com",
         "ad-delivery.net",
         "trafficstars.com",
         "ero-advertising.com",
@@ -168,11 +181,29 @@ object AdBlockEngine {
         "googleads",
         "pagead/js",
         "disqus.com/embed.js",
+        "invoke.js",
+        "/invoke",
         "furudloof",
         "belchlipin",
         "subduepaler",
-        "excavatenearbywand"
+        "excavatenearbywand",
+        "ashrafiundined",
+        "motelmute",
+        "duotypesleeted",
+        "etaargon",
+        "potdarmottoed",
+        "osarcotypes",
+        "shaptinfulmars",
+        "densenbl",
+        "dayworkannona",
+        "webfedrewraps",
+        "dearthsongman",
+        "bw.xml",
+        "/mtn/"
     )
+
+    // Adsterra / Monetag popunder pattern: /[10-32 char slug]/[5-8 digits]
+    private val ADSTERRA_POPUNDER_REGEX = Regex("/[a-zA-Z0-9_-]{10,32}/[0-9]{5,8}")
 
     fun initialize(context: Context) {
         // Asynchronously load additional domains from assets if available
@@ -216,19 +247,37 @@ object AdBlockEngine {
 
         val host = uri.host?.lowercase() ?: return false
 
+        // Never block Cloudflare security challenges or Turnstile
+        if (host == "challenges.cloudflare.com" || host.endsWith(".cloudflare.com") || url.contains("/challenge-platform/")) {
+            return false
+        }
+
         // Fast host matching with subdomain stripping (e.g. s1.ads.monetag.com -> monetag.com)
         if (isHostBlocked(host)) {
             Log.d(TAG, "BLOCKED (Host): $host -> $url")
             return true
         }
 
-        // Fast path pattern matching
         val lowerUrl = url.lowercase()
+
+        // Never block legitimate video stream segments or playlists (unless host was explicitly in BLOCKED_DOMAINS)
+        if (lowerUrl.endsWith(".m3u8") || lowerUrl.endsWith(".ts") || lowerUrl.endsWith(".m4s") ||
+            lowerUrl.endsWith(".mp4") || lowerUrl.contains(".m3u8?") || lowerUrl.contains(".ts?")) {
+            return false
+        }
+
+        // Fast path pattern matching
         for (pattern in BLOCKED_PATH_PATTERNS) {
             if (lowerUrl.contains(pattern)) {
                 Log.d(TAG, "BLOCKED (Pattern: $pattern): $url")
                 return true
             }
+        }
+
+        // Regex popunder match
+        if (ADSTERRA_POPUNDER_REGEX.containsMatchIn(url)) {
+            Log.d(TAG, "BLOCKED (Popunder Regex): $url")
+            return true
         }
 
         return false

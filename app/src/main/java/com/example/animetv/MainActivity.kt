@@ -33,6 +33,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import com.example.animetv.adblock.AdBlockEngine
 import com.example.animetv.tv.VirtualCursorView
+import java.io.ByteArrayInputStream
 
 class MainActivity : AppCompatActivity() {
 
@@ -80,16 +81,34 @@ class MainActivity : AppCompatActivity() {
             "jkanime.net",
             "pelisserieshoy.com",
             "mediafire.com",
-            "cloudwindow-route.com",
             "voe.sx",
+            "voe-network.net",
             "gofile.io",
             "embed69.org",
+            "morencius.com",
+            "vidhide.com",
+            "vidhidepre.com",
+            "vidhidepro.com",
+            "streamwish.to",
+            "streamwish.com",
+            "hglink.to",
+            "minochinos.com",
+            "ghbrisk.com",
+            "audinifer.com",
+            "f7hyg4q.org",
             "xupalace.org",
             "mega.nz",
             "mega.co.nz",
             "mega.io",
             "ok.ru",
-            "vk.com"
+            "vk.com",
+            "megaplay.buzz",
+            "megaplay.top",
+            "snapcdn.top",
+            "filemoon.sx",
+            "streamtape.com",
+            "mp4upload.com",
+            "dood.to"
         )
     }
 
@@ -133,6 +152,13 @@ class MainActivity : AppCompatActivity() {
     // Fullscreen Custom View Container (for HTML5 video tag fullscreen expansion)
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
+    private var isPlayerFullscreen = false
+
+    private var lastOkPressTime = 0L
+    private val DOUBLE_CLICK_TIMEOUT_MS = 400L
+    private val pendingOkClickRunnable = Runnable {
+        virtualCursorView.dispatchClick(webView)
+    }
 
     private val handler = Handler(Looper.getMainLooper())
     private val hideHudRunnable = Runnable { hideHudPlayerBar() }
@@ -277,8 +303,11 @@ class MainActivity : AppCompatActivity() {
         settings.setSupportMultipleWindows(true)
         settings.javaScriptCanOpenWindowsAutomatically = false
 
-        // Desktop / TV Chrome User-Agent for standard 16:9 HTML5 playback
-        settings.userAgentString = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 TV/GoogleTV"
+        // Allow mixed content for HLS chunk streams across CDNs
+        settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+
+        // Standard Windows 10 Chrome User-Agent for maximum video CDN & JWPlayer compatibility
+        settings.userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
         // Cache policy
         settings.cacheMode = WebSettings.LOAD_DEFAULT
@@ -288,26 +317,83 @@ class MainActivity : AppCompatActivity() {
         webView.webViewClient = object : WebViewClient() {
 
             override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
-                val url = request?.url?.toString()
+                val url = request?.url?.toString() ?: return null
                 if (AdBlockEngine.shouldBlock(url)) {
                     return AdBlockEngine.EMPTY_RESPONSE
                 }
+
+                // Intercept embed69.org VAST ad player & tutorial overlay
+                if (url.contains("embed69.org/player-oxserver.js")) {
+                    val cleanScript = """
+                        window.__playerOxServerLoaded = true;
+                        window.go_to_playerVast = function(u, u2) {
+                            console.log('[AnimeTV] VAST ad bypassed');
+                        };
+                        window.startTutorial = function() {};
+                        window.shouldShowTutorial = function() { return false; };
+                        (function() {
+                            var style = document.createElement('style');
+                            style.textContent = '.modal-vast, #modal, #tutorialOverlay, .tutorial-overlay { display: none !important; visibility: hidden !important; pointer-events: none !important; width: 0 !important; height: 0 !important; opacity: 0 !important; z-index: -9999 !important; }';
+                            (document.head || document.documentElement).appendChild(style);
+
+                            function autoStart() {
+                                try {
+                                    if (typeof showPlayerInterface === 'function') {
+                                        var fake = document.getElementById('fakePlayer');
+                                        if (fake && fake.style.display !== 'none') {
+                                            showPlayerInterface();
+                                        }
+                                    }
+                                } catch(e) {}
+                            }
+                            if (document.readyState === 'loading') {
+                                document.addEventListener('DOMContentLoaded', function() { setTimeout(autoStart, 200); });
+                            } else {
+                                setTimeout(autoStart, 200);
+                            }
+                        })();
+                    """.trimIndent()
+                    return WebResourceResponse("application/javascript", "UTF-8", ByteArrayInputStream(cleanScript.toByteArray()))
+                }
+
+                if (url.contains("embed69.org/styles-player-oxserver.css")) {
+                    val cleanCss = """
+                        .modal-vast, #modal, #tutorialOverlay, .tutorial-overlay {
+                            display: none !important;
+                            visibility: hidden !important;
+                            pointer-events: none !important;
+                            width: 0 !important;
+                            height: 0 !important;
+                            opacity: 0 !important;
+                            z-index: -9999 !important;
+                        }
+                    """.trimIndent()
+                    return WebResourceResponse("text/css", "UTF-8", ByteArrayInputStream(cleanCss.toByteArray()))
+                }
+
                 return super.shouldInterceptRequest(view, request)
             }
 
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val uri = request?.url ?: return false
+                val urlStr = uri.toString()
                 val scheme = uri.scheme?.lowercase() ?: ""
 
                 if (scheme == "about" || scheme == "data" || scheme == "blob") return false
                 if (scheme != "http" && scheme != "https") return true // block external protocols
+
+                // Check AdBlockEngine first (blocks ad links and popunders)
+                if (AdBlockEngine.shouldBlock(urlStr)) {
+                    Log.w(TAG, "Blocked ad navigation in shouldOverrideUrlLoading: $urlStr")
+                    return true
+                }
 
                 val host = uri.host?.lowercase() ?: ""
 
                 // Check if host matches any allowed streaming or embed provider
                 val isAllowed = ALLOWED_MAIN_HOSTS.any { host == it || host.endsWith(".$it") }
                 if (!isAllowed) {
-                    Log.w(TAG, "Blocked external navigation to: $host")
+                    Log.w(TAG, "Blocked external navigation to: $host ($urlStr)")
                     return true // block popup/redirect
                 }
 
@@ -316,12 +402,25 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 pageLoadingBar.visibility = View.VISIBLE
-                // Inject early guard
+                // Inject early guard into DOM before page scripts evaluate
                 injectScript(
                     """
                     (function() {
                         try {
                             window.open = function() { return null; };
+
+                            // Intercept SoloLatino __sl_ads retrieval idempotently
+                            if (!Document.prototype._origGetById) {
+                                Document.prototype._origGetById = Document.prototype.getElementById;
+                                Document.prototype.getElementById = function(id) {
+                                    var el = this._origGetById.apply(this, arguments);
+                                    if (id === '__sl_ads' && el) {
+                                        el.textContent = '{"h":"","b":""}';
+                                    }
+                                    return el;
+                                };
+                            }
+
                             var sl = document.getElementById('__sl_ads');
                             if (sl) sl.textContent = '{"h":"","b":""}';
                         } catch(e) {}
@@ -394,6 +493,7 @@ class MainActivity : AppCompatActivity() {
                 customView = null
                 customViewCallback?.onCustomViewHidden()
                 customViewCallback = null
+                isPlayerFullscreen = false
 
                 webView.visibility = View.VISIBLE
                 topBar.visibility = View.VISIBLE
@@ -548,7 +648,7 @@ class MainActivity : AppCompatActivity() {
             showHudPlayerBarBriefly()
         }
         btnHudFullscreen.setOnClickListener {
-            toggleFullscreen()
+            togglePlayerFullscreen()
             hideHudPlayerBar()
         }
     }
@@ -572,19 +672,21 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showHudPlayerBar() {
+    private fun showHudPlayerBarBriefly() {
+        showHudPlayerBar()
         handler.removeCallbacks(hideHudRunnable)
-        hudPlayerBar.visibility = View.VISIBLE
-        hudPlayerBar.alpha = 1f
-        btnHudPlayPause.requestFocus()
         handler.postDelayed(hideHudRunnable, HUD_AUTO_HIDE_DELAY_MS)
     }
 
-    private fun showHudPlayerBarBriefly() {
-        handler.removeCallbacks(hideHudRunnable)
+    private fun showHudPlayerBar() {
         hudPlayerBar.visibility = View.VISIBLE
-        hudPlayerBar.alpha = 1f
-        handler.postDelayed(hideHudRunnable, HUD_AUTO_HIDE_DELAY_MS)
+        hudPlayerBar.animate()
+            .alpha(1f)
+            .setDuration(200)
+            .withEndAction {
+                btnHudPlayPause.requestFocus()
+            }
+            .start()
     }
 
     private fun hideHudPlayerBar() {
@@ -598,21 +700,56 @@ class MainActivity : AppCompatActivity() {
             .start()
     }
 
-    private fun toggleFullscreen() {
+    private fun togglePlayerFullscreen() {
         if (customView != null) {
             customViewCallback?.onCustomViewHidden()
-        } else {
+            customView = null
+            isPlayerFullscreen = false
+            return
+        }
+
+        isPlayerFullscreen = !isPlayerFullscreen
+
+        if (isPlayerFullscreen) {
+            topBar.visibility = View.GONE
+            hudPlayerBar.visibility = View.GONE
+            enableImmersiveMode()
             injectScript(
                 """
                 (function() {
+                    document.body.classList.add('animetv-fullscreen-player');
+                    document.documentElement.classList.add('animetv-fullscreen-player');
+                    var p = document.querySelector('#player-section, #main-player-wrap, #player-frame, .player-wrap, .wb_-playerarea, #player');
+                    if (p) {
+                        try { p.scrollIntoView({ behavior: 'instant', block: 'start' }); } catch(e){}
+                    }
+                    var ifr = document.querySelector('#player-frame iframe, .player-wrap iframe, #player-container iframe, .player-embed iframe, iframe.player-iframe');
+                    if (ifr && ifr.requestFullscreen) {
+                        try { ifr.requestFullscreen().catch(function(){}); } catch(e){}
+                    }
                     var vid = document.querySelector('video');
-                    if (vid) {
-                        if (vid.requestFullscreen) vid.requestFullscreen();
-                        else if (vid.webkitRequestFullscreen) vid.webkitRequestFullscreen();
+                    if (vid && vid.requestFullscreen) {
+                        try { vid.requestFullscreen().catch(function(){}); } catch(e){}
                     }
                 })();
                 """.trimIndent()
             )
+            Toast.makeText(this, "📺 Pantalla Completa (Doble clic OK o Atrás para salir)", Toast.LENGTH_SHORT).show()
+        } else {
+            topBar.visibility = View.VISIBLE
+            enableImmersiveMode()
+            injectScript(
+                """
+                (function() {
+                    document.body.classList.remove('animetv-fullscreen-player');
+                    document.documentElement.classList.remove('animetv-fullscreen-player');
+                    try {
+                        if (document.exitFullscreen) document.exitFullscreen().catch(function(){});
+                    } catch(e){}
+                })();
+                """.trimIndent()
+            )
+            Toast.makeText(this, "Vista Estándar", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -768,7 +905,18 @@ class MainActivity : AppCompatActivity() {
 
             if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
                 if (action == KeyEvent.ACTION_UP) {
-                    virtualCursorView.dispatchClick(webView)
+                    val now = System.currentTimeMillis()
+                    if (now - lastOkPressTime < DOUBLE_CLICK_TIMEOUT_MS) {
+                        lastOkPressTime = 0L
+                        handler.removeCallbacks(pendingOkClickRunnable)
+                        togglePlayerFullscreen()
+                        return true
+                    } else {
+                        lastOkPressTime = now
+                        handler.removeCallbacks(pendingOkClickRunnable)
+                        handler.postDelayed(pendingOkClickRunnable, DOUBLE_CLICK_TIMEOUT_MS)
+                        return true
+                    }
                 }
                 return true
             }
@@ -792,6 +940,10 @@ class MainActivity : AppCompatActivity() {
             override fun handleOnBackPressed() {
                 if (customView != null) {
                     customViewCallback?.onCustomViewHidden()
+                    return
+                }
+                if (isPlayerFullscreen) {
+                    togglePlayerFullscreen()
                     return
                 }
                 if (hudPlayerBar.visibility == View.VISIBLE) {

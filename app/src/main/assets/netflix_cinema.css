@@ -20,25 +20,69 @@ html, body {
     scroll-behavior: auto !important;
 }
 
-/* 2. Hide intrusive website noise & promotional banners */
+/* 2. Hide intrusive website noise, ads & floating banners */
 .ts-announcement, .notice-bar, .domain-alert, #notice,
 .deslide-wrap, #slider, .swiper-container#slider,
-#disqus_thread, #comments, .comments-wrap, .fb-comments,
 .footer, footer, #footer, .site-footer, .app-download-banner,
 .ads, .ad-box, .advertisement, div[id*="google_ads"],
-.social-share, .share-buttons, .report-box, #report-modal {
+.report-box, #report-modal,
+.xb, div.xb, .x-x, div[style*="bottom: 84px"], div[style*="bottom: 5px"],
+iframe[src*="motelmute"], iframe[src*="ashrafiundined"],
+[class*="ads-modal" i], [class*="ad-modal" i], [class*="ad-warning" i],
+[class*="antiadblock" i], [class*="disable-ad" i], [class*="adsblocker" i], [id*="adsblocker" i],
+[class*="adblock-modal" i], [id*="adblock-modal" i], .modal-vast, #modal.modal-vast,
+div[class*="popunder"], div[class*="popup"], .D1BnW, [class*="D1BnW"] {
     display: none !important;
     visibility: hidden !important;
     height: 0 !important;
+    width: 0 !important;
     margin: 0 !important;
     padding: 0 !important;
     overflow: hidden !important;
+    pointer-events: none !important;
+}
+
+/* 2b. Universal Social Media Widgets & Links Elimination */
+.social-share, .share-buttons, .share-bar, .social-icons, .social-buttons,
+.social-media, .socials, .social-box, .social-links, .share-box,
+.addthis, .sharethis, .a2a_kit, .a2a_floating_style, .at-expanding-share-button,
+.telegram-btn, .discord-btn, .reddit-share, .twitter-share, .facebook-share,
+.community, .community-box, .discord-widget, .telegram-widget,
+a[href*="t.me/"], a[href*="telegram.me/"], a[href*="discord.gg/"], a[href*="discord.com/"],
+a[href*="twitter.com/"], a[href*="x.com/"], a[href*="facebook.com/"], a[href*="reddit.com/"],
+a[href*="instagram.com/"], a[href*="tiktok.com/"], a[href*="whatsapp.com/"], a[href*="pinterest.com/"] {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+}
+
+/* 2c. Universal Comments & Comment Box Elimination */
+#disqus_thread, #disqus_recommendations, iframe[src*="disqus.com"], iframe[src*="disquscdn"], .disqus,
+#comments, .comments, .comments-area, .comment-section, .comments-wrap, #comment,
+.comment-box, .comment-list, .comment-respond, .comment-form, .comment-container,
+#commentform, .fb-comments, iframe[src*="facebook.com/plugins/comments"], #fb-root,
+.v-comments, .ep-comments, .anime-comments, #show-comments, .comments-holder,
+#wpcomm, .wp-comments, .gogo-comments, .animeflix-comments, #comments-block,
+.thread, .conversation-wrapper, .chat-room, .c-comments {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
 }
 
 /* 3. Universal Player Sizing & 16:9 Cinema Aspect Ratio */
 .wb_-playerarea, .player-embed, #player, #player-container,
 .player-wrap, .video-content, #main-player-wrap, #player-frame,
-#player-section, .mg-3mb3d, .mg3-player, #megaplay-player,
+.mg-3mb3d, .mg3-player, #megaplay-player,
 .azaku-player-container, #iframe-embed, .player-iframe,
 iframe[src*="player"], iframe[src*="embed"], iframe[src*="megaplay"],
 iframe[src*="mytsumi"], iframe[src*="xupalace"], iframe#iframePlayer,
@@ -54,13 +98,23 @@ iframe.player_conte, iframe[src*="jkplayer"] {
     width: 100% !important;
 }
 
-/* 4. Netflix Cinema Mode (Full immersion on player) */
-body.animetv-cinema-mode #header,
-body.animetv-cinema-mode header,
-body.animetv-cinema-mode .site-header,
-body.animetv-cinema-mode .top-bar,
-body.animetv-cinema-mode .navbar,
-body.animetv-cinema-mode .sidebar {
+#player-section {
+    width: 100% !important;
+    aspect-ratio: auto !important;
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    display: block !important;
+}
+
+/* 4. Netflix Cinema Mode (Full immersion on player only when a player exists) */
+body.animetv-cinema-mode:has(.player-wrap, #player, .wb_-playerarea, #player-section, iframe) #header,
+body.animetv-cinema-mode:has(.player-wrap, #player, .wb_-playerarea, #player-section, iframe) header,
+body.animetv-cinema-mode:has(.player-wrap, #player, .wb_-playerarea, #player-section, iframe) .site-header,
+body.animetv-cinema-mode:has(.player-wrap, #player, .wb_-playerarea, #player-section, iframe) .top-bar,
+body.animetv-cinema-mode:has(.player-wrap, #player, .wb_-playerarea, #player-section, iframe) .navbar,
+body.animetv-cinema-mode:has(.player-wrap, #player, .wb_-playerarea, #player-section, iframe) .sidebar {
     display: none !important;
 }
 
