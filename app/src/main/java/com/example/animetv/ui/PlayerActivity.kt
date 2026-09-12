@@ -43,6 +43,13 @@ class PlayerActivity : AppCompatActivity() {
         const val EXTRA_IS_HLS = "extra_is_hls"
         const val EXTRA_IS_EMBED = "extra_is_embed"
         const val EXTRA_REFERER = "extra_referer"
+        const val EXTRA_ANIME_URL = "extra_anime_url"
+        const val EXTRA_ANIME_TITLE = "extra_anime_title"
+        const val EXTRA_POSTER_URL = "extra_poster_url"
+        const val EXTRA_SOURCE = "extra_source"
+        const val EXTRA_EPISODE_URL = "extra_episode_url"
+        const val EXTRA_EPISODE_TITLE = "extra_episode_title"
+        const val EXTRA_EPISODE_NUMBER = "extra_episode_number"
 
         fun start(
             context: Context,
@@ -50,7 +57,14 @@ class PlayerActivity : AppCompatActivity() {
             title: String,
             isHls: Boolean = true,
             isEmbed: Boolean = false,
-            referer: String = ""
+            referer: String = "",
+            animeDetailUrl: String = "",
+            animeTitle: String = "",
+            posterUrl: String = "",
+            source: String = "",
+            episodeUrl: String = "",
+            episodeTitle: String = "",
+            episodeNumber: Int = 1
         ) {
             val intent = Intent(context, PlayerActivity::class.java).apply {
                 putExtra(EXTRA_VIDEO_URL, videoUrl)
@@ -58,6 +72,13 @@ class PlayerActivity : AppCompatActivity() {
                 putExtra(EXTRA_IS_HLS, isHls)
                 putExtra(EXTRA_IS_EMBED, isEmbed)
                 putExtra(EXTRA_REFERER, referer)
+                putExtra(EXTRA_ANIME_URL, animeDetailUrl)
+                putExtra(EXTRA_ANIME_TITLE, animeTitle)
+                putExtra(EXTRA_POSTER_URL, posterUrl)
+                putExtra(EXTRA_SOURCE, source)
+                putExtra(EXTRA_EPISODE_URL, episodeUrl)
+                putExtra(EXTRA_EPISODE_TITLE, episodeTitle)
+                putExtra(EXTRA_EPISODE_NUMBER, episodeNumber)
             }
             context.startActivity(intent)
         }
@@ -77,6 +98,42 @@ class PlayerActivity : AppCompatActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var isOsdVisible = false
     private var isEmbedMode = false
+
+    private var animeDetailUrl: String = ""
+    private var animeTitle: String = ""
+    private var posterUrl: String = ""
+    private var sourceName: String = ""
+    private var episodeUrl: String = ""
+    private var episodeTitle: String = ""
+    private var episodeNumber: Int = 1
+    private var hasAutoResumed: Boolean = false
+
+    inner class AndroidMediaBridge {
+        @android.webkit.JavascriptInterface
+        fun onProgressUpdate(currentTimeSec: Float, durationSec: Float) {
+            val posMs = (currentTimeSec * 1000).toLong()
+            val durMs = (durationSec * 1000).toLong()
+            saveCurrentPlaybackPosition(posMs, durMs)
+        }
+    }
+
+    private fun saveCurrentPlaybackPosition(posMs: Long, durMs: Long) {
+        if (episodeUrl.isEmpty() && animeDetailUrl.isEmpty()) return
+        if (posMs > 1000) {
+            com.example.animetv.core.history.PlaybackHistoryStore.saveProgress(
+                this,
+                animeDetailUrl = animeDetailUrl,
+                animeTitle = animeTitle,
+                posterUrl = posterUrl,
+                source = sourceName,
+                episodeUrl = episodeUrl,
+                episodeTitle = episodeTitle,
+                episodeNumber = episodeNumber,
+                positionMs = posMs,
+                durationMs = durMs
+            )
+        }
+    }
 
     private val hideOsdRunnable = Runnable {
         hideOsd()
@@ -115,13 +172,21 @@ class PlayerActivity : AppCompatActivity() {
         val referer = intent.getStringExtra(EXTRA_REFERER) ?: ""
         isEmbedMode = intent.getBooleanExtra(EXTRA_IS_EMBED, false)
 
+        animeDetailUrl = intent.getStringExtra(EXTRA_ANIME_URL) ?: ""
+        animeTitle = intent.getStringExtra(EXTRA_ANIME_TITLE) ?: ""
+        posterUrl = intent.getStringExtra(EXTRA_POSTER_URL) ?: ""
+        sourceName = intent.getStringExtra(EXTRA_SOURCE) ?: ""
+        episodeUrl = intent.getStringExtra(EXTRA_EPISODE_URL) ?: ""
+        episodeTitle = intent.getStringExtra(EXTRA_EPISODE_TITLE) ?: ""
+        episodeNumber = intent.getIntExtra(EXTRA_EPISODE_NUMBER, 1)
+
         // Always rewrite pelisserieshoy (rate-limited VIP server) to embed69 (Servidor 1)
         if (videoUrl.contains("player.pelisserieshoy.com/f/")) {
             videoUrl = videoUrl.replace("player.pelisserieshoy.com", "embed69.org")
             isEmbedMode = true
         }
 
-        android.util.Log.d("PlayerActivity", "onCreate: videoUrl=$videoUrl, isEmbedMode=$isEmbedMode")
+        android.util.Log.d("PlayerActivity", "onCreate: videoUrl=$videoUrl, isEmbedMode=$isEmbedMode, ep=$episodeNumber")
         txtPlayerTitle.text = title
 
         if (videoUrl.isEmpty()) {
@@ -182,6 +247,18 @@ class PlayerActivity : AppCompatActivity() {
                             }
                             Player.STATE_READY -> {
                                 playerBuffering.visibility = View.GONE
+                                if (!hasAutoResumed) {
+                                    val saved = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForEpisode(this@PlayerActivity, episodeUrl)
+                                        ?: com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this@PlayerActivity, animeDetailUrl)
+                                    if (saved != null && (saved.episodeUrl == episodeUrl || saved.episodeNumber == episodeNumber)) {
+                                        val dur = this@apply.duration
+                                        if (saved.positionMs > 5000 && (dur <= 0 || saved.positionMs < dur - 15000)) {
+                                            this@apply.seekTo(saved.positionMs)
+                                            showFeedback("▶ Reanudando en ${formatTime(saved.positionMs)}")
+                                        }
+                                    }
+                                    hasAutoResumed = true
+                                }
                                 updateProgress()
                                 showOsdBriefly()
                             }
@@ -228,7 +305,13 @@ class PlayerActivity : AppCompatActivity() {
         } else {
             url
         }
-        android.util.Log.d("PlayerActivity", "startCleanWebPlayer: loading playUrl=$playUrl, referer=$referer")
+        cleanWebPlayer.addJavascriptInterface(AndroidMediaBridge(), "AndroidMediaBridge")
+
+        val saved = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForEpisode(this, episodeUrl)
+            ?: com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this, animeDetailUrl)
+        val savedPosSec = if (saved != null && (saved.episodeUrl == episodeUrl || saved.episodeNumber == episodeNumber) && saved.positionMs > 5000) {
+            saved.positionMs / 1000
+        } else 0
 
         cleanWebPlayer.settings.apply {
             javaScriptEnabled = true
@@ -262,12 +345,26 @@ class PlayerActivity : AppCompatActivity() {
                             hls.loadSource('$playUrl');
                             hls.attachMedia(video);
                             hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                                if ($savedPosSec > 5) {
+                                    video.currentTime = $savedPosSec;
+                                }
                                 video.play();
                             });
                         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                             video.src = '$playUrl';
+                            if ($savedPosSec > 5) {
+                                video.currentTime = $savedPosSec;
+                            }
                             video.play();
                         }
+
+                        setInterval(function() {
+                            try {
+                                if (video && !video.paused && video.duration > 0 && typeof AndroidMediaBridge !== 'undefined') {
+                                    AndroidMediaBridge.onProgressUpdate(video.currentTime, video.duration);
+                                }
+                            } catch(e) {}
+                        }, 3500);
                     </script>
                 </body>
                 </html>
@@ -438,11 +535,30 @@ class PlayerActivity : AppCompatActivity() {
                                     btn.click();
                                 });
                             } catch(e) {}
+
+                            // 7. Auto-resume saved time
+                            try {
+                                var v = document.querySelector('video');
+                                if (v && !v.dataset.hasResumed && $savedPosSec > 5) {
+                                    v.currentTime = $savedPosSec;
+                                    v.dataset.hasResumed = 'true';
+                                }
+                            } catch(e) {}
                         }
 
                         nukeDecoysAndPlay();
                         var intv = setInterval(nukeDecoysAndPlay, 600);
                         setTimeout(function() { clearInterval(intv); }, 6000);
+
+                        // 8. Periodic progress updates to Android
+                        setInterval(function() {
+                            try {
+                                var v = document.querySelector('video');
+                                if (v && !v.paused && v.duration > 0 && typeof AndroidMediaBridge !== 'undefined') {
+                                    AndroidMediaBridge.onProgressUpdate(v.currentTime, v.duration);
+                                }
+                            } catch(e) {}
+                        }, 4000);
                     })();
                 """.trimIndent()
                 view?.evaluateJavascript(cssScript, null)
@@ -484,6 +600,10 @@ class PlayerActivity : AppCompatActivity() {
         val player = exoPlayer ?: return
         val current = player.currentPosition
         val duration = player.duration
+
+        if (player.isPlaying && current > 2000) {
+            saveCurrentPlaybackPosition(current, duration)
+        }
 
         if (duration > 0) {
             val progress = (current * 1000 / duration).toInt()
@@ -605,11 +725,17 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        exoPlayer?.pause()
+        exoPlayer?.let {
+            saveCurrentPlaybackPosition(it.currentPosition, it.duration)
+            it.pause()
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        exoPlayer?.let {
+            saveCurrentPlaybackPosition(it.currentPosition, it.duration)
+        }
         mainHandler.removeCallbacksAndMessages(null)
         exoPlayer?.release()
         exoPlayer = null

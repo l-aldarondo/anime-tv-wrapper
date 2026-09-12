@@ -43,33 +43,43 @@ class JKAnimeSource : AnimeSource {
             if (html.isEmpty()) return@withContext list
             val doc = Jsoup.parse(html, baseUrl)
 
-            // Select trending items or home cards
-            val cards = doc.select(".trending__anime .card, .card")
+            // Select cards from home page
+            val cards = doc.select(".card")
             for (c in cards) {
                 val a = c.selectFirst("a") ?: continue
                 val href = a.absUrl("href")
                 val img = c.selectFirst("img")
-                val imgUrl = img?.attr("src")?.ifEmpty { img.attr("data-src") } ?: ""
-                val titleEl = c.selectFirst("h5, .title, .card-title, a")
-                var rawTitle = titleEl?.text()?.trim() ?: ""
+                val imgUrl = img?.attr("data-animepic")?.ifEmpty { img.attr("src") } ?: ""
+                val titleEl = c.selectFirst("h5, .title, .card-title")
+                var rawTitle = img?.attr("alt")?.trim()?.ifEmpty { titleEl?.text()?.trim() ?: "" } ?: ""
 
-                // Filter out episode numbers in title (e.g. "Ep 24 Hoy Mao")
-                var epBadge = ""
-                val epMatch = Regex("""Ep\s*(\d+)""", RegexOption.IGNORE_CASE).find(rawTitle)
-                if (epMatch != null) {
-                    epBadge = "Ep ${epMatch.groupValues[1]}"
-                    rawTitle = rawTitle.replace(Regex("""Ep\s*\d+\s*(Hoy)?""", RegexOption.IGNORE_CASE), "").trim()
+                if (rawTitle.isEmpty()) continue
+
+                val epBadgeEl = c.selectFirst(".badge-primary, .badge, .card-text.ep")
+                var epBadge = epBadgeEl?.text()?.trim() ?: ""
+                if (epBadge.isEmpty()) {
+                    val epMatch = Regex("""Ep\s*(\d+)""", RegexOption.IGNORE_CASE).find(rawTitle)
+                    if (epMatch != null) {
+                        epBadge = "Ep ${epMatch.groupValues[1]}"
+                    }
                 }
 
-                if (rawTitle.isNotEmpty() && href.isNotEmpty()) {
+                // Normalize detailUrl to series URL
+                val detailUrl = if (href.matches(Regex(""".*/\d+/?$"""))) {
+                    href.replace(Regex("""/\d+/?$"""), "/")
+                } else {
+                    href
+                }
+
+                if (rawTitle.isNotEmpty() && detailUrl.isNotEmpty()) {
                     list.add(
                         AnimeCard(
-                            id = href,
+                            id = detailUrl,
                             title = rawTitle,
                             posterUrl = imgUrl,
-                            detailUrl = href,
+                            detailUrl = detailUrl,
                             source = name,
-                            episodeBadge = epBadge
+                            episodeBadge = epBadge.ifEmpty { "Anime" }
                         )
                     )
                 }
@@ -80,10 +90,7 @@ class JKAnimeSource : AnimeSource {
         list.distinctBy { it.detailUrl }
     }
 
-    override suspend fun getRecentEpisodes(): List<AnimeCard> = withContext(Dispatchers.IO) {
-        // JKAnime's home contains latest released episodes
-        getTrending().filter { it.episodeBadge.isNotEmpty() }
-    }
+    override suspend fun getRecentEpisodes(): List<AnimeCard> = getTrending()
 
     override suspend fun search(query: String): List<AnimeCard> = withContext(Dispatchers.IO) {
         val list = mutableListOf<AnimeCard>()
@@ -141,14 +148,27 @@ class JKAnimeSource : AnimeSource {
             // Extract episodes
             val episodes = mutableListOf<AnimeEpisode>()
 
-            // Episode list can be in script var anime_info or pagination links
-            val scriptContent = doc.select("script").map { it.data() }.firstOrNull { it.contains("anime_info") || it.contains("total_ep") }
             var totalEps = 0
-            if (scriptContent != null) {
-                val totalMatch = Regex("""total_ep\s*=\s*['"]?(\d+)['"]?""").find(scriptContent)
-                    ?: Regex("""total_episodios\s*=\s*['"]?(\d+)['"]?""").find(scriptContent)
-                if (totalMatch != null) {
-                    totalEps = totalMatch.groupValues[1].toIntOrNull() ?: 0
+
+            // 1. Check #uep (last published episode link, e.g. /one-piece/1177/)
+            val uepEl = doc.selectFirst("#uep")
+            val uepHref = uepEl?.attr("href") ?: ""
+            if (uepHref.isNotEmpty()) {
+                val uepMatch = Regex("""/(\d+)/?$""").find(uepHref)
+                if (uepMatch != null) {
+                    totalEps = uepMatch.groupValues[1].toIntOrNull() ?: 0
+                }
+            }
+
+            // 2. If #uep not found, check script variables
+            if (totalEps == 0) {
+                val scriptContent = doc.select("script").map { it.data() }.firstOrNull { it.contains("anime_info") || it.contains("total_ep") }
+                if (scriptContent != null) {
+                    val totalMatch = Regex("""total_ep\s*=\s*['"]?(\d+)['"]?""").find(scriptContent)
+                        ?: Regex("""total_episodios\s*=\s*['"]?(\d+)['"]?""").find(scriptContent)
+                    if (totalMatch != null) {
+                        totalEps = totalMatch.groupValues[1].toIntOrNull() ?: 0
+                    }
                 }
             }
 

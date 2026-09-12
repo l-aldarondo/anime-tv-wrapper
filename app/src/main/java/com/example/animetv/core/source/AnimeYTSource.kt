@@ -114,8 +114,26 @@ class AnimeYTSource : AnimeSource {
 
     override suspend fun getAnimeDetail(detailUrl: String): AnimeDetail = withContext(Dispatchers.IO) {
         try {
-            val html = fetchHtml(detailUrl)
-            val doc = Jsoup.parse(html, detailUrl)
+            var pageUrl = detailUrl
+            var html = fetchHtml(pageUrl)
+            var doc = Jsoup.parse(html, pageUrl)
+
+            // If detailUrl is an episode URL (e.g. /115068/anime/slug-capitulo-11/), navigate to the series page (/tv/slug/)
+            if (pageUrl.contains("/anime/") || pageUrl.contains("-capitulo-")) {
+                val seriesLink = doc.select("a[href*=/tv/]").firstOrNull { 
+                    val h = it.attr("href")
+                    h.contains("/tv/") && !h.endsWith("/tv/") && !h.endsWith("/tv")
+                }?.absUrl("href")?.substringBefore("#")
+
+                if (!seriesLink.isNullOrEmpty()) {
+                    val seriesHtml = fetchHtml(seriesLink)
+                    if (seriesHtml.isNotEmpty()) {
+                        pageUrl = seriesLink
+                        html = seriesHtml
+                        doc = Jsoup.parse(seriesHtml, seriesLink)
+                    }
+                }
+            }
 
             val title = doc.selectFirst("h1, .entry-title, .title")?.text()?.trim() ?: "Anime"
             val synopsis = doc.selectFirst(".sinopsis, .overview, .entry-content p, .description")?.text()?.trim() ?: ""
@@ -125,34 +143,25 @@ class AnimeYTSource : AnimeSource {
             val genres = doc.select(".genres a, .genre a").map { it.text().trim() }
 
             val episodes = mutableListOf<AnimeEpisode>()
-            val epLinks = doc.select("a[href*=/ver/], a[href*=-episodio-], .episodes-list a, .list-episodes a")
+            val epLinks = doc.select("a[href*=/anime/], a[href*=/ver/], a[href*=-episodio-], a[href*=-capitulo-]")
 
             for (link in epLinks) {
                 val href = link.absUrl("href")
-                val epText = link.text().trim()
-                val epNumMatch = Regex("""(?:episodio|episode)-?(\d+)""", RegexOption.IGNORE_CASE).find(href)
+                if (!href.contains("-capitulo-") && !href.contains("-episodio-") && !href.contains("/anime/")) continue
+                val epNumMatch = Regex("""(?:episodio|capitulo)-?(\d+)""", RegexOption.IGNORE_CASE).find(href)
                 val epNum = epNumMatch?.groupValues?.get(1)?.toIntOrNull() ?: (episodes.size + 1)
 
                 episodes.add(
                     AnimeEpisode(
                         episodeNumber = epNum,
                         seasonNumber = 1,
-                        title = if (epText.isNotEmpty() && epText.length < 50) epText else "Episodio $epNum",
+                        title = "Episodio $epNum",
                         episodeUrl = href
                     )
                 )
             }
 
-            if (episodes.isEmpty()) {
-                episodes.add(
-                    AnimeEpisode(
-                        episodeNumber = 1,
-                        seasonNumber = 1,
-                        title = "Episodio 1",
-                        episodeUrl = detailUrl
-                    )
-                )
-            }
+            val uniqueEpisodes = episodes.distinctBy { it.episodeUrl }.sortedBy { it.episodeNumber }
 
             AnimeDetail(
                 title = title,
@@ -160,8 +169,8 @@ class AnimeYTSource : AnimeSource {
                 synopsis = synopsis,
                 genres = genres,
                 source = name,
-                detailUrl = detailUrl,
-                episodes = episodes.sortedBy { it.episodeNumber }
+                detailUrl = pageUrl,
+                episodes = if (uniqueEpisodes.isNotEmpty()) uniqueEpisodes else listOf(AnimeEpisode(1, 1, "Episodio 1", detailUrl))
             )
         } catch (e: Exception) {
             e.printStackTrace()

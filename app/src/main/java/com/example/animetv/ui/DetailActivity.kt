@@ -46,11 +46,18 @@ class DetailActivity : AppCompatActivity() {
     private lateinit var btnPlayFirst: Button
     private lateinit var btnToggleFavorite: Button
     private lateinit var btnBack: Button
+    private lateinit var txtEpisodesHeader: TextView
+    private lateinit var btnSortOrder: Button
+    private lateinit var btnJumpStart: Button
+    private lateinit var btnJumpEnd: Button
     private lateinit var recyclerEpisodes: RecyclerView
     private lateinit var progressBar: ProgressBar
 
     private var currentCard: AnimeCard? = null
     private var currentDetail: AnimeDetail? = null
+    private var isAscendingOrder: Boolean = true
+    private var episodeAdapter: EpisodeAdapter? = null
+    private var rawEpisodes: List<AnimeEpisode> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,12 +71,32 @@ class DetailActivity : AppCompatActivity() {
         btnPlayFirst = findViewById(R.id.btnPlayFirst)
         btnToggleFavorite = findViewById(R.id.btnToggleFavorite)
         btnBack = findViewById(R.id.btnBack)
+        txtEpisodesHeader = findViewById(R.id.txtEpisodesHeader)
+        btnSortOrder = findViewById(R.id.btnSortOrder)
+        btnJumpStart = findViewById(R.id.btnJumpStart)
+        btnJumpEnd = findViewById(R.id.btnJumpEnd)
         recyclerEpisodes = findViewById(R.id.recyclerEpisodes)
         progressBar = findViewById(R.id.progressBarDetail)
 
         recyclerEpisodes.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
 
         btnBack.setOnClickListener { finish() }
+
+        btnSortOrder.setOnClickListener {
+            toggleSortOrder()
+        }
+
+        btnJumpStart.setOnClickListener {
+            if (rawEpisodes.isNotEmpty()) {
+                recyclerEpisodes.smoothScrollToPosition(0)
+            }
+        }
+
+        btnJumpEnd.setOnClickListener {
+            if (rawEpisodes.isNotEmpty()) {
+                recyclerEpisodes.smoothScrollToPosition(rawEpisodes.size - 1)
+            }
+        }
 
         @Suppress("DEPRECATION")
         currentCard = intent.getSerializableExtra(EXTRA_ANIME_CARD) as? AnimeCard
@@ -81,6 +108,53 @@ class DetailActivity : AppCompatActivity() {
 
         bindInitialCard(currentCard!!)
         loadDetail(currentCard!!)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Refresh playback progress when returning from player
+        refreshPlaybackState()
+    }
+
+    private fun refreshPlaybackState() {
+        val card = currentCard ?: return
+        val record = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this, card.detailUrl)
+        
+        if (record != null) {
+            val timeStr = if (record.positionMs > 5000) " (${formatTime(record.positionMs)})" else ""
+            btnPlayFirst.text = "▶  Continuar: ${record.episodeTitle}$timeStr"
+            btnPlayFirst.setOnClickListener {
+                // Play last watched episode
+                val detail = currentDetail
+                val ep = rawEpisodes.firstOrNull { it.episodeUrl == record.episodeUrl || it.episodeNumber == record.episodeNumber }
+                    ?: AnimeEpisode(record.episodeNumber, 1, record.episodeTitle, record.episodeUrl)
+                if (detail != null) {
+                    playEpisode(detail, ep)
+                } else {
+                    playEpisodeDirect(card, ep)
+                }
+            }
+        } else if (rawEpisodes.isNotEmpty()) {
+            val firstEp = rawEpisodes.first()
+            btnPlayFirst.text = "▶  ${firstEp.title}"
+            btnPlayFirst.setOnClickListener {
+                currentDetail?.let { playEpisode(it, firstEp) }
+            }
+        }
+
+        episodeAdapter?.let { adapter ->
+            val list = if (isAscendingOrder) rawEpisodes.sortedBy { it.episodeNumber } else rawEpisodes.sortedByDescending { it.episodeNumber }
+            adapter.updateList(list, record)
+        }
+    }
+
+    private fun toggleSortOrder() {
+        isAscendingOrder = !isAscendingOrder
+        btnSortOrder.text = if (isAscendingOrder) "⇄ Orden: 1 ➔ N" else "⇄ Orden: N ➔ 1"
+        val sorted = if (isAscendingOrder) rawEpisodes.sortedBy { it.episodeNumber } else rawEpisodes.sortedByDescending { it.episodeNumber }
+        val record = currentCard?.let { com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this, it.detailUrl) }
+        episodeAdapter?.updateList(sorted, record)
+        recyclerEpisodes.scrollToPosition(0)
     }
 
     private fun bindInitialCard(card: AnimeCard) {
@@ -143,23 +217,25 @@ class DetailActivity : AppCompatActivity() {
             try {
                 val detail = CatalogRepository.getAnimeDetail(card)
                 currentDetail = detail
+                rawEpisodes = detail.episodes
                 progressBar.visibility = View.GONE
 
                 txtTitle.text = detail.title
                 val genresStr = if (detail.genres.isNotEmpty()) detail.genres.take(3).joinToString(", ") else "Anime"
                 txtMeta.text = "${detail.source}  •  $genresStr"
                 txtSynopsis.text = detail.synopsis.ifEmpty { "Sin sinopsis disponible." }
+                txtEpisodesHeader.text = "Episodios Disponibles (${detail.episodes.size})"
 
                 if (detail.episodes.isNotEmpty()) {
-                    val adapter = EpisodeAdapter(detail.episodes) { ep ->
+                    val record = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this@DetailActivity, card.detailUrl)
+                    val sortedList = if (isAscendingOrder) detail.episodes.sortedBy { it.episodeNumber } else detail.episodes.sortedByDescending { it.episodeNumber }
+                    val adapter = EpisodeAdapter(sortedList, record) { ep ->
                         playEpisode(detail, ep)
                     }
+                    episodeAdapter = adapter
                     recyclerEpisodes.adapter = adapter
 
-                    btnPlayFirst.text = "▶  ${detail.episodes.first().title}"
-                    btnPlayFirst.setOnClickListener {
-                        playEpisode(detail, detail.episodes.first())
-                    }
+                    refreshPlaybackState()
                     btnPlayFirst.requestFocus()
                 } else {
                     btnPlayFirst.text = "▶  Ver en Web"
@@ -189,7 +265,14 @@ class DetailActivity : AppCompatActivity() {
                         title = "${detail.title} - ${episode.title}",
                         isHls = stream.isHls,
                         isEmbed = stream.isEmbed,
-                        referer = stream.headers["Referer"] ?: ""
+                        referer = stream.headers["Referer"] ?: "",
+                        animeDetailUrl = detail.detailUrl,
+                        animeTitle = detail.title,
+                        posterUrl = detail.posterUrl,
+                        source = detail.source,
+                        episodeUrl = episode.episodeUrl,
+                        episodeTitle = episode.title,
+                        episodeNumber = episode.episodeNumber
                     )
                 } else {
                     // Fallback to clean embedded player, NEVER raw HTML in ExoPlayer
@@ -199,7 +282,14 @@ class DetailActivity : AppCompatActivity() {
                         title = "${detail.title} - ${episode.title}",
                         isHls = false,
                         isEmbed = true,
-                        referer = detail.detailUrl
+                        referer = detail.detailUrl,
+                        animeDetailUrl = detail.detailUrl,
+                        animeTitle = detail.title,
+                        posterUrl = detail.posterUrl,
+                        source = detail.source,
+                        episodeUrl = episode.episodeUrl,
+                        episodeTitle = episode.title,
+                        episodeNumber = episode.episodeNumber
                     )
                 }
             } catch (e: Exception) {
@@ -209,6 +299,18 @@ class DetailActivity : AppCompatActivity() {
         }
     }
 
+    private fun playEpisodeDirect(card: AnimeCard, episode: AnimeEpisode) {
+        val dummyDetail = AnimeDetail(
+            title = card.title,
+            posterUrl = card.posterUrl,
+            synopsis = card.synopsis,
+            source = card.source,
+            detailUrl = card.detailUrl,
+            episodes = rawEpisodes
+        )
+        playEpisode(dummyDetail, episode)
+    }
+
     private fun playDirectUrl(url: String, title: String) {
         PlayerActivity.start(
             this,
@@ -216,7 +318,22 @@ class DetailActivity : AppCompatActivity() {
             title = title,
             isHls = false,
             isEmbed = true,
-            referer = ""
+            referer = "",
+            animeDetailUrl = currentCard?.detailUrl ?: "",
+            animeTitle = currentCard?.title ?: title,
+            posterUrl = currentCard?.posterUrl ?: "",
+            source = currentCard?.source ?: "",
+            episodeUrl = url,
+            episodeTitle = title,
+            episodeNumber = 1
         )
+    }
+
+    private fun formatTime(ms: Long): String {
+        val totalSec = ms / 1000
+        val m = (totalSec / 60) % 60
+        val s = totalSec % 60
+        val h = totalSec / 3600
+        return if (h > 0) String.format(java.util.Locale.US, "%d:%02d:%02d", h, m, s) else String.format(java.util.Locale.US, "%02d:%02d", m, s)
     }
 }

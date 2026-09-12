@@ -122,22 +122,64 @@ class NineAnimeSource : AnimeSource {
             val genres = doc.select(".genre a, .genres a").map { it.text().trim() }
 
             val episodes = mutableListOf<AnimeEpisode>()
-            val epLinks = doc.select("a[href*=-episode-], a[href*=/episode/]")
-            for (link in epLinks) {
-                val href = link.absUrl("href")
-                val text = link.text().trim()
-                val numMatch = Regex("""episode-(\d+)""").find(href)
-                val epNum = numMatch?.groupValues?.get(1)?.toIntOrNull() ?: episodes.size + 1
-                val epTitle = if (text.isNotEmpty() && text.length < 60) text else "Episode $epNum"
 
-                episodes.add(
-                    AnimeEpisode(
-                        episodeNumber = epNum,
-                        seasonNumber = 1,
-                        title = epTitle,
-                        episodeUrl = href
+            // 1. Check for data-series ID to fetch episodes dynamically from 9Anime API
+            val seriesIdMatch = Regex("""data-series=["'](\d+)["']""").find(html)
+            val seriesId = seriesIdMatch?.groupValues?.get(1)
+
+            if (!seriesId.isNullOrEmpty()) {
+                try {
+                    val apiUrl = "$baseUrl/wp-json/9animetv/v1/episodes/$seriesId?active=0"
+                    val apiJson = fetchHtml(apiUrl)
+                    if (apiJson.isNotEmpty()) {
+                        val jsonObj = org.json.JSONObject(apiJson)
+                        val pagesHtml = jsonObj.optString("pages", "")
+                        if (pagesHtml.isNotEmpty()) {
+                            val epDoc = Jsoup.parse(pagesHtml, baseUrl)
+                            val epAnchors = epDoc.select("a[href]")
+                            for (anchor in epAnchors) {
+                                val href = anchor.absUrl("href")
+                                val dataNum = anchor.attr("data-number").toIntOrNull()
+                                val numMatch = Regex("""episode-(\d+)""").find(href)
+                                val epNum = dataNum ?: (numMatch?.groupValues?.get(1)?.toIntOrNull() ?: (episodes.size + 1))
+                                val rawTitle = anchor.attr("title").trim()
+                                val epTitle = if (rawTitle.isNotEmpty()) rawTitle else "Episode $epNum"
+
+                                episodes.add(
+                                    AnimeEpisode(
+                                        episodeNumber = epNum,
+                                        seasonNumber = 1,
+                                        title = epTitle,
+                                        episodeUrl = href
+                                    )
+                                )
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+
+            // 2. Fallback: static episode links in page
+            if (episodes.isEmpty()) {
+                val epLinks = doc.select("a[href*=-episode-], a[href*=/episode/]")
+                for (link in epLinks) {
+                    val href = link.absUrl("href")
+                    val text = link.text().trim()
+                    val numMatch = Regex("""episode-(\d+)""").find(href)
+                    val epNum = numMatch?.groupValues?.get(1)?.toIntOrNull() ?: (episodes.size + 1)
+                    val epTitle = if (text.isNotEmpty() && text.length < 60) text else "Episode $epNum"
+
+                    episodes.add(
+                        AnimeEpisode(
+                            episodeNumber = epNum,
+                            seasonNumber = 1,
+                            title = epTitle,
+                            episodeUrl = href
+                        )
                     )
-                )
+                }
             }
 
             if (episodes.isEmpty()) {
