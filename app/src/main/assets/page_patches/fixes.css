@@ -441,18 +441,30 @@ button[data-tab-btn="comentarios"] {
 }
 
 /* ── AnimeTV Spatial Navigation (Netflix / Prime Video 10-foot TV Focus) ────── */
+#animetv-tv-focus-cursor {
+    position: fixed !important;
+    pointer-events: none !important;
+    z-index: 2147483647 !important;
+    border: 3.5px solid #00E5FF !important;
+    outline: 2px solid #FFFFFF !important;
+    border-radius: 10px !important;
+    box-shadow: 0 0 30px rgba(0, 229, 255, 0.95), 0 0 12px #ffffff, inset 0 0 15px rgba(0, 229, 255, 0.3) !important;
+    transition: top 0.12s cubic-bezier(0.2, 0, 0, 1), left 0.12s cubic-bezier(0.2, 0, 0, 1), width 0.12s ease, height 0.12s ease, opacity 0.1s ease !important;
+    box-sizing: border-box !important;
+}
+
 .animetv-focused-card {
-    transform: scale(1.08) !important;
-    box-shadow: 0 0 25px rgba(229, 9, 20, 0.9), 0 0 10px #ffffff !important;
-    outline: 3.5px solid #ffffff !important;
-    outline-offset: 3px !important;
+    transform: scale(1.06) !important;
+    box-shadow: 0 0 25px rgba(0, 229, 255, 0.8), 0 0 10px #ffffff !important;
+    outline: 3px solid #00E5FF !important;
+    outline-offset: 2px !important;
     border-radius: 8px !important;
-    z-index: 1000 !important;
-    transition: transform 0.16s cubic-bezier(0.2, 0, 0.1, 1), box-shadow 0.16s ease !important;
+    z-index: 999 !important;
+    transition: transform 0.15s cubic-bezier(0.2, 0, 0.1, 1), box-shadow 0.15s ease !important;
 }
 
 .animetv-clicked-pulse {
-    transform: scale(0.95) !important;
+    transform: scale(0.96) !important;
     box-shadow: 0 0 35px #00e676 !important;
     outline-color: #00e676 !important;
     transition: transform 0.08s ease !important;

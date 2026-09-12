@@ -55,6 +55,7 @@ class MainActivity : AppCompatActivity() {
         const val KEY_CINEMA_MODE = "cinema_mode"
         const val KEY_NAV_MODE = "nav_mode"
 
+        const val SOURCE_HUB = "hub"
         const val SOURCE_FAVORITES = "favorites"
         const val SOURCE_9ANIME = "9anime"
         const val SOURCE_GOGOANIME = "gogoanime"
@@ -145,6 +146,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var osdControlsGuide: LinearLayout
 
     // Top Bar Tab Views
+    private lateinit var btnTopBarSearch: TextView
+    private lateinit var btnSourceHub: TextView
     private lateinit var btnSourceFavorites: TextView
     private lateinit var btnSource9Anime: TextView
     private lateinit var btnSourceGogoAnime: TextView
@@ -161,11 +164,21 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnTopBarAccount: TextView
     private lateinit var btnTopBarReload: TextView
 
-    // Favorites Screen Views
-    private lateinit var favoritesScreen: FrameLayout
+    // TV Hub & Favorites Screen Views
+    private lateinit var favoritesScreen: androidx.core.widget.NestedScrollView
     private lateinit var favoritesRecyclerView: RecyclerView
     private lateinit var favoritesEmptyLayout: LinearLayout
     private lateinit var favoritesAdapter: FavoritesAdapter
+
+    // TV Hub Quick Actions & Source Cards
+    private lateinit var hubBannerSearch: View
+    private lateinit var hubCardSoloAnime: View
+    private lateinit var hubCardSoloStream: View
+    private lateinit var hubCard9Anime: View
+    private lateinit var hubCardGogoAnime: View
+    private lateinit var hubCardAnimeFlix: View
+    private lateinit var hubCardAnimeYT: View
+    private lateinit var hubCardJKAnime: View
 
     // HUD Player Controls
     private lateinit var btnHudRewind: TextView
@@ -224,7 +237,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
 
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-        currentSource = prefs.getString(KEY_ACTIVE_SOURCE, SOURCE_9ANIME) ?: SOURCE_9ANIME
+        currentSource = prefs.getString(KEY_ACTIVE_SOURCE, SOURCE_HUB) ?: SOURCE_HUB
         isCinemaMode = false
         currentNavMode = prefs.getInt(KEY_NAV_MODE, MODE_SPATIAL_CARDS)
 
@@ -254,8 +267,22 @@ class MainActivity : AppCompatActivity() {
         setupWebView()
         setupBackPressedHandler()
 
-        val startUrl = intent?.dataString ?: urlForSource(currentSource)
-        webView.loadUrl(startUrl)
+        if (intent?.dataString != null) {
+            webView.loadUrl(intent.dataString!!)
+        } else if (currentSource == SOURCE_HUB || currentSource == SOURCE_FAVORITES) {
+            webView.visibility = View.GONE
+            virtualCursorView.visibility = View.GONE
+            favoritesScreen.visibility = View.VISIBLE
+            refreshFavoritesGrid()
+            if (currentSource == SOURCE_HUB) {
+                favoritesScreen.scrollTo(0, 0)
+                hubBannerSearch.requestFocus()
+            } else {
+                favoritesRecyclerView.requestFocus()
+            }
+        } else {
+            webView.loadUrl(urlForSource(currentSource))
+        }
 
         if (isTv) {
             scheduleGuideDismiss()
@@ -328,7 +355,9 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Top Bar Tabs
+        // Top Bar Tabs & Actions
+        btnTopBarSearch = findViewById(R.id.btnTopBarSearch)
+        btnSourceHub = findViewById(R.id.btnSourceHub)
         btnSourceFavorites = findViewById(R.id.btnSourceFavorites)
         btnSource9Anime = findViewById(R.id.btnSource9Anime)
         btnSourceGogoAnime = findViewById(R.id.btnSourceGogoAnime)
@@ -337,6 +366,25 @@ class MainActivity : AppCompatActivity() {
         btnSourceAnimeFlix = findViewById(R.id.btnSourceAnimeFlix)
         btnSourceAnimeYT = findViewById(R.id.btnSourceAnimeYT)
         btnSourceJKAnime = findViewById(R.id.btnSourceJKAnime)
+
+        // TV Hub Interactive Cards
+        hubBannerSearch = findViewById(R.id.hubBannerSearch)
+        hubCardSoloAnime = findViewById(R.id.hubCardSoloAnime)
+        hubCardSoloStream = findViewById(R.id.hubCardSoloStream)
+        hubCard9Anime = findViewById(R.id.hubCard9Anime)
+        hubCardGogoAnime = findViewById(R.id.hubCardGogoAnime)
+        hubCardAnimeFlix = findViewById(R.id.hubCardAnimeFlix)
+        hubCardAnimeYT = findViewById(R.id.hubCardAnimeYT)
+        hubCardJKAnime = findViewById(R.id.hubCardJKAnime)
+
+        hubBannerSearch.setOnClickListener { showUniversalSearchDialog() }
+        hubCardSoloAnime.setOnClickListener { switchSource(SOURCE_SOLOLATINO) }
+        hubCardSoloStream.setOnClickListener { switchSource(SOURCE_SOLOLATINO_HOME) }
+        hubCard9Anime.setOnClickListener { switchSource(SOURCE_9ANIME) }
+        hubCardGogoAnime.setOnClickListener { switchSource(SOURCE_GOGOANIME) }
+        hubCardAnimeFlix.setOnClickListener { switchSource(SOURCE_ANIMEFLIX) }
+        hubCardAnimeYT.setOnClickListener { switchSource(SOURCE_ANIMEYT) }
+        hubCardJKAnime.setOnClickListener { switchSource(SOURCE_JKANIME) }
 
         // Top Bar Actions
         btnTopBarCinema = findViewById(R.id.btnTopBarCinema)
@@ -707,6 +755,8 @@ class MainActivity : AppCompatActivity() {
     // ── Netflix / Prime Style Top Bar Setup ──────────────────────────────────
 
     private fun setupTopBar() {
+        btnTopBarSearch.setOnClickListener { showUniversalSearchDialog() }
+        btnSourceHub.setOnClickListener { switchSource(SOURCE_HUB) }
         btnSourceFavorites.setOnClickListener { switchSource(SOURCE_FAVORITES) }
         btnSource9Anime.setOnClickListener { switchSource(SOURCE_9ANIME) }
         btnSourceGogoAnime.setOnClickListener { switchSource(SOURCE_GOGOANIME) }
@@ -721,7 +771,7 @@ class MainActivity : AppCompatActivity() {
         btnTopBarFavorite.setOnClickListener { extractAndSaveCurrentFavorite() }
         btnTopBarAccount.setOnClickListener { showAccountSettingsDialog() }
         btnTopBarReload.setOnClickListener {
-            if (currentSource == SOURCE_FAVORITES) {
+            if (currentSource == SOURCE_FAVORITES || currentSource == SOURCE_HUB) {
                 refreshFavoritesGrid()
             } else {
                 webView.reload()
@@ -733,7 +783,8 @@ class MainActivity : AppCompatActivity() {
 
     private val topBarFocusOrder: List<View> by lazy {
         listOf(
-            btnSourceFavorites,
+            btnTopBarSearch,
+            btnSourceHub, btnSourceFavorites,
             btnSource9Anime, btnSourceGogoAnime, btnSourceSoloLatino, btnSourceSoloLatinoHome,
             btnSourceAnimeFlix, btnSourceAnimeYT, btnSourceJKAnime,
             btnTopBarCinema, btnTopBarMode,
@@ -743,7 +794,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateTopBarUi() {
         val sources = listOf(
-            Triple(btnSourceFavorites, SOURCE_FAVORITES, "⭐ Mi Lista"),
+            Triple(btnSourceHub, SOURCE_HUB, "Inicio"),
+            Triple(btnSourceFavorites, SOURCE_FAVORITES, "Mi Lista"),
             Triple(btnSource9Anime, SOURCE_9ANIME, "9Anime"),
             Triple(btnSourceGogoAnime, SOURCE_GOGOANIME, "GogoAnime"),
             Triple(btnSourceSoloLatino, SOURCE_SOLOLATINO, "SoloAnime"),
@@ -754,14 +806,19 @@ class MainActivity : AppCompatActivity() {
         )
 
         for ((btn, src, name) in sources) {
+            val prefix = if (src == SOURCE_HUB) "🏠 " else if (src == SOURCE_FAVORITES) "⭐ " else ""
             if (currentSource == src) {
-                btn.text = "● $name"
+                btn.text = "● $prefix$name"
                 btn.setBackgroundResource(R.drawable.bg_netflix_active_tab)
                 btn.setTextColor(Color.WHITE)
             } else {
-                btn.text = "○ $name"
+                btn.text = "○ $prefix$name"
                 btn.setBackgroundResource(R.drawable.bg_netflix_tab)
-                btn.setTextColor(if (src == SOURCE_FAVORITES) Color.parseColor("#FFD54F") else Color.parseColor("#E0E0FF"))
+                btn.setTextColor(when (src) {
+                    SOURCE_HUB -> Color.parseColor("#00E5FF")
+                    SOURCE_FAVORITES -> Color.parseColor("#FFD54F")
+                    else -> Color.parseColor("#E0E0FF")
+                })
             }
         }
 
@@ -788,12 +845,17 @@ class MainActivity : AppCompatActivity() {
         prefs.edit().putString(KEY_ACTIVE_SOURCE, source).apply()
         updateTopBarUi()
 
-        if (source == SOURCE_FAVORITES) {
+        if (source == SOURCE_FAVORITES || source == SOURCE_HUB) {
             webView.visibility = View.GONE
             virtualCursorView.visibility = View.GONE
             favoritesScreen.visibility = View.VISIBLE
             refreshFavoritesGrid()
-            favoritesRecyclerView.requestFocus()
+            if (source == SOURCE_HUB) {
+                favoritesScreen.scrollTo(0, 0)
+                hubBannerSearch.requestFocus()
+            } else {
+                favoritesRecyclerView.requestFocus()
+            }
         } else {
             favoritesScreen.visibility = View.GONE
             webView.visibility = View.VISIBLE
@@ -964,8 +1026,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun extractAndSaveCurrentFavorite(isLongPress: Boolean = false) {
-        if (currentSource == SOURCE_FAVORITES) {
-            Toast.makeText(this, "Ya estás en Mi Lista", Toast.LENGTH_SHORT).show()
+        if (currentSource == SOURCE_FAVORITES || currentSource == SOURCE_HUB) {
+            Toast.makeText(this, "Navega a un anime para guardarlo en Mi Lista", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -1041,6 +1103,115 @@ class MainActivity : AppCompatActivity() {
                 Log.e(TAG, "Error saving favorite", e)
             }
         }
+    }
+
+    // ── Universal TV Search Dialog ───────────────────────────────────────────
+
+    private fun showUniversalSearchDialog(defaultQuery: String = "") {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_universal_search, null)
+        val editQuery = dialogView.findViewById<EditText>(R.id.editSearchQuery)
+        val pillSoloAnime = dialogView.findViewById<TextView>(R.id.pillSearchSoloLatino)
+        val pillSoloStream = dialogView.findViewById<TextView>(R.id.pillSearchSoloStream)
+        val pill9Anime = dialogView.findViewById<TextView>(R.id.pillSearch9Anime)
+        val pillGogoAnime = dialogView.findViewById<TextView>(R.id.pillSearchGogoAnime)
+        val pillAnimeFlix = dialogView.findViewById<TextView>(R.id.pillSearchAnimeFlix)
+        val pillAnimeYT = dialogView.findViewById<TextView>(R.id.pillSearchAnimeYT)
+        val pillJKAnime = dialogView.findViewById<TextView>(R.id.pillSearchJKAnime)
+        val btnCancel = dialogView.findViewById<TextView>(R.id.btnCancelSearch)
+        val btnSearch = dialogView.findViewById<TextView>(R.id.btnExecuteSearch)
+
+        var targetSource = when (currentSource) {
+            SOURCE_SOLOLATINO, SOURCE_SOLOLATINO_HOME, SOURCE_9ANIME, SOURCE_GOGOANIME,
+            SOURCE_ANIMEFLIX, SOURCE_ANIMEYT, SOURCE_JKANIME -> currentSource
+            else -> SOURCE_SOLOLATINO
+        }
+
+        val pills = listOf(
+            Pair(pillSoloAnime, SOURCE_SOLOLATINO),
+            Pair(pillSoloStream, SOURCE_SOLOLATINO_HOME),
+            Pair(pill9Anime, SOURCE_9ANIME),
+            Pair(pillGogoAnime, SOURCE_GOGOANIME),
+            Pair(pillAnimeFlix, SOURCE_ANIMEFLIX),
+            Pair(pillAnimeYT, SOURCE_ANIMEYT),
+            Pair(pillJKAnime, SOURCE_JKANIME)
+        )
+
+        fun updatePillStyles() {
+            for ((pill, src) in pills) {
+                if (src == targetSource) {
+                    pill.setBackgroundResource(R.drawable.bg_netflix_active_tab)
+                    pill.setTextColor(Color.WHITE)
+                } else {
+                    pill.setBackgroundResource(R.drawable.bg_netflix_tab)
+                    pill.setTextColor(Color.parseColor("#E0E0FF"))
+                }
+            }
+        }
+
+        for ((pill, src) in pills) {
+            pill.setOnClickListener {
+                targetSource = src
+                updatePillStyles()
+            }
+        }
+        updatePillStyles()
+
+        if (defaultQuery.isNotEmpty()) {
+            editQuery.setText(defaultQuery)
+        }
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .create()
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        fun executeSearch() {
+            val q = editQuery.text.toString().trim()
+            if (q.isEmpty()) {
+                Toast.makeText(this, "Por favor escribe qué deseas buscar", Toast.LENGTH_SHORT).show()
+                return
+            }
+            val encoded = Uri.encode(q)
+            val searchUrl = when (targetSource) {
+                SOURCE_SOLOLATINO -> "https://sololatino.net/animes?buscar=$encoded"
+                SOURCE_SOLOLATINO_HOME -> "https://sololatino.net/buscar?q=$encoded"
+                SOURCE_9ANIME -> "https://9anime.or.at/filter?keyword=$encoded"
+                SOURCE_GOGOANIME -> "https://gogoanime.by/search.html?keyword=$encoded"
+                SOURCE_ANIMEFLIX -> "https://animeflix.team/?s=$encoded"
+                SOURCE_ANIMEYT -> "https://animeyt.cc/?s=$encoded"
+                SOURCE_JKANIME -> "https://jkanime.net/buscar/$encoded/"
+                else -> "https://sololatino.net/animes?buscar=$encoded"
+            }
+
+            currentSource = targetSource
+            val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            prefs.edit().putString(KEY_ACTIVE_SOURCE, targetSource).apply()
+            updateTopBarUi()
+
+            favoritesScreen.visibility = View.GONE
+            webView.visibility = View.VISIBLE
+            if (isTv && currentNavMode != MODE_SPATIAL_CARDS) {
+                virtualCursorView.visibility = View.VISIBLE
+            }
+            webView.loadUrl(searchUrl)
+            dialog.dismiss()
+            Toast.makeText(this, "🔍 Buscando: $q", Toast.LENGTH_SHORT).show()
+            handler.postDelayed({ moveFocusToPage() }, 300)
+        }
+
+        editQuery.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH ||
+                actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+                executeSearch()
+                true
+            } else false
+        }
+
+        btnSearch.setOnClickListener { executeSearch() }
+        btnCancel.setOnClickListener { dialog.dismiss() }
+
+        dialog.show()
+        editQuery.requestFocus()
     }
 
     // ── Master Account & Credentials Dialog ──────────────────────────────────
@@ -1277,6 +1448,7 @@ class MainActivity : AppCompatActivity() {
     // ── TV D-Pad Focus & Key Navigation ──────────────────────────────────────
 
     private fun getButtonForSource(source: String): View = when (source) {
+        SOURCE_HUB -> btnSourceHub
         SOURCE_FAVORITES -> btnSourceFavorites
         SOURCE_9ANIME -> btnSource9Anime
         SOURCE_GOGOANIME -> btnSourceGogoAnime
@@ -1285,7 +1457,7 @@ class MainActivity : AppCompatActivity() {
         SOURCE_ANIMEFLIX -> btnSourceAnimeFlix
         SOURCE_ANIMEYT -> btnSourceAnimeYT
         SOURCE_JKANIME -> btnSourceJKAnime
-        else -> btnSource9Anime
+        else -> btnSourceHub
     }
 
     private fun moveFocusToTopBar() {
@@ -1296,6 +1468,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun moveFocusToPage() {
+        if (currentSource == SOURCE_HUB) {
+            hubBannerSearch.requestFocus()
+            return
+        }
         if (currentSource == SOURCE_FAVORITES) {
             favoritesRecyclerView.requestFocus()
             return
@@ -1322,8 +1498,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun isFocusInFavoritesTopRow(): Boolean {
         if (favoritesScreen.visibility != View.VISIBLE) return false
-        val layoutManager = favoritesRecyclerView.layoutManager as? GridLayoutManager ?: return true
         val focused = currentFocus ?: return true
+        if (focused == hubBannerSearch ||
+            focused == hubCardSoloAnime || focused == hubCardSoloStream ||
+            focused == hubCard9Anime || focused == hubCardGogoAnime ||
+            focused == hubCardAnimeFlix || focused == hubCardAnimeYT ||
+            focused == hubCardJKAnime) {
+            return true
+        }
+        val layoutManager = favoritesRecyclerView.layoutManager as? GridLayoutManager ?: return true
         val position = favoritesRecyclerView.getChildAdapterPosition(focused)
         return position == RecyclerView.NO_POSITION || position < layoutManager.spanCount
     }
@@ -1502,7 +1685,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-                    if (currentSource == SOURCE_FAVORITES) {
+                    if (currentSource == SOURCE_FAVORITES || currentSource == SOURCE_HUB) {
                         return super.dispatchKeyEvent(event)
                     }
 
@@ -1562,7 +1745,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-                if (currentSource == SOURCE_FAVORITES) {
+                if (currentSource == SOURCE_FAVORITES || currentSource == SOURCE_HUB) {
                     return super.dispatchKeyEvent(event)
                 }
 
@@ -1631,7 +1814,7 @@ class MainActivity : AppCompatActivity() {
                     hideHudPlayerBar()
                     return
                 }
-                if (currentSource == SOURCE_FAVORITES) {
+                if (currentSource == SOURCE_FAVORITES || currentSource == SOURCE_HUB) {
                     switchSource(SOURCE_9ANIME)
                     return
                 }

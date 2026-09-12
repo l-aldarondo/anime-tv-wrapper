@@ -62,6 +62,22 @@
                     android:textStyle="bold" />
             </LinearLayout>
 
+            <!-- Universal Search Button (10-foot remote friendly) -->
+            <TextView
+                android:id="@+id/btnTopBarSearch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="10dp"
+                android:background="@drawable/bg_netflix_badge"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="9dp"
+                android:text="🔍 Buscar"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true" />
+
             <!-- Scrollable source selector tabs -->
             <HorizontalScrollView
                 android:layout_width="0dp"
@@ -76,6 +92,22 @@
                     android:orientation="horizontal"
                     android:gravity="center_vertical">
 
+                    <!-- Source Hub: Inicio (Universal TV Hub) -->
+                    <TextView
+                        android:id="@+id/btnSourceHub"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_netflix_tab"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:paddingHorizontal="14dp"
+                        android:paddingVertical="10dp"
+                        android:text="🏠 Inicio"
+                        android:textColor="#00E5FF"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
                     <!-- Source 0: Mi Lista (Favorites Grid) -->
                     <TextView
                         android:id="@+id/btnSourceFavorites"
@@ -85,7 +117,6 @@
                         android:background="@drawable/bg_netflix_tab"
                         android:clickable="true"
                         android:focusable="true"
-                        
                         android:paddingHorizontal="14dp"
                         android:paddingVertical="10dp"
                         android:text="⭐ Mi Lista"
@@ -321,59 +352,346 @@
                 android:focusable="true"
                  />
 
-            <!-- Netflix / Prime Video Style "Mi Lista" Grid Screen -->
-            <FrameLayout
+            <!-- Universal Netflix / Prime Video Style Hub & "Mi Lista" Screen -->
+            <androidx.core.widget.NestedScrollView
                 android:id="@+id/favoritesScreen"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:background="#090A0E"
+                android:scrollbars="none"
                 android:visibility="gone">
 
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/favoritesRecyclerView"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:clipToPadding="false"
-                    android:padding="16dp"
-                    android:scrollbars="none" />
-
                 <LinearLayout
-                    android:id="@+id/favoritesEmptyLayout"
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:gravity="center"
                     android:orientation="vertical"
-                    android:padding="24dp">
+                    android:paddingHorizontal="24dp"
+                    android:paddingVertical="16dp">
 
+                    <!-- Search Prompt Banner (Opens Universal TV Search) -->
+                    <LinearLayout
+                        android:id="@+id/hubBannerSearch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_favorite_card"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingHorizontal="20dp"
+                        android:paddingVertical="14dp"
+                        android:focusable="true"
+                        android:clickable="true">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🔍"
+                            android:textSize="20sp" />
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="12dp"
+                            android:text="Búsqueda Universal TV (Escribe anime, serie o película...)"
+                            android:textColor="#B0B3C6"
+                            android:textSize="16sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_netflix_badge"
+                            android:paddingHorizontal="10dp"
+                            android:paddingVertical="4dp"
+                            android:text="BUSCAR"
+                            android:textColor="#FFFFFF"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <!-- Section 1: Selector Rápido de Fuentes -->
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="⭐"
-                        android:textSize="48sp" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:text="Tu lista está vacía"
+                        android:layout_marginTop="20dp"
+                        android:text="🌐 Selector de Fuentes de Streaming"
                         android:textColor="#FFFFFF"
-                        android:textSize="22sp"
+                        android:textSize="18sp"
                         android:textStyle="bold" />
 
-                    <TextView
-                        android:layout_width="wrap_content"
+                    <HorizontalScrollView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:scrollbars="none"
+                        android:overScrollMode="never">
+
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+
+                            <!-- Source Card 1: SoloAnime -->
+                            <LinearLayout
+                                android:id="@+id/hubCardSoloAnime"
+                                android:layout_width="160dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginEnd="12dp"
+                                android:background="@drawable/bg_favorite_card"
+                                android:orientation="vertical"
+                                android:padding="12dp"
+                                android:focusable="true"
+                                android:clickable="true">
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="🇲🇽 SoloAnime"
+                                    android:textColor="#00E5FF"
+                                    android:textSize="15sp"
+                                    android:textStyle="bold" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:text="Audio Latino &amp; Castellano"
+                                    android:textColor="#8F92A8"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <!-- Source Card 2: SoloStream -->
+                            <LinearLayout
+                                android:id="@+id/hubCardSoloStream"
+                                android:layout_width="160dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginEnd="12dp"
+                                android:background="@drawable/bg_favorite_card"
+                                android:orientation="vertical"
+                                android:padding="12dp"
+                                android:focusable="true"
+                                android:clickable="true">
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="🎬 SoloStream"
+                                    android:textColor="#FFD54F"
+                                    android:textSize="15sp"
+                                    android:textStyle="bold" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:text="Películas &amp; Series de Estreno"
+                                    android:textColor="#8F92A8"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <!-- Source Card 3: 9Anime -->
+                            <LinearLayout
+                                android:id="@+id/hubCard9Anime"
+                                android:layout_width="160dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginEnd="12dp"
+                                android:background="@drawable/bg_favorite_card"
+                                android:orientation="vertical"
+                                android:padding="12dp"
+                                android:focusable="true"
+                                android:clickable="true">
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="🔥 9Anime"
+                                    android:textColor="#E50914"
+                                    android:textSize="15sp"
+                                    android:textStyle="bold" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:text="Sub Español &amp; Global"
+                                    android:textColor="#8F92A8"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <!-- Source Card 4: GogoAnime -->
+                            <LinearLayout
+                                android:id="@+id/hubCardGogoAnime"
+                                android:layout_width="160dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginEnd="12dp"
+                                android:background="@drawable/bg_favorite_card"
+                                android:orientation="vertical"
+                                android:padding="12dp"
+                                android:focusable="true"
+                                android:clickable="true">
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="⚡ GogoAnime"
+                                    android:textColor="#64B5F6"
+                                    android:textSize="15sp"
+                                    android:textStyle="bold" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:text="Últimos Episodios Rápidos"
+                                    android:textColor="#8F92A8"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <!-- Source Card 5: AnimeFlix -->
+                            <LinearLayout
+                                android:id="@+id/hubCardAnimeFlix"
+                                android:layout_width="160dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginEnd="12dp"
+                                android:background="@drawable/bg_favorite_card"
+                                android:orientation="vertical"
+                                android:padding="12dp"
+                                android:focusable="true"
+                                android:clickable="true">
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="🍿 AnimeFlix"
+                                    android:textColor="#00E676"
+                                    android:textSize="15sp"
+                                    android:textStyle="bold" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:text="Emisiones en HD"
+                                    android:textColor="#8F92A8"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <!-- Source Card 6: AnimeYT -->
+                            <LinearLayout
+                                android:id="@+id/hubCardAnimeYT"
+                                android:layout_width="160dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginEnd="12dp"
+                                android:background="@drawable/bg_favorite_card"
+                                android:orientation="vertical"
+                                android:padding="12dp"
+                                android:focusable="true"
+                                android:clickable="true">
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="📺 AnimeYT"
+                                    android:textColor="#FF80AB"
+                                    android:textSize="15sp"
+                                    android:textStyle="bold" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:text="Anime en Español"
+                                    android:textColor="#8F92A8"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <!-- Source Card 7: JKAnime -->
+                            <LinearLayout
+                                android:id="@+id/hubCardJKAnime"
+                                android:layout_width="160dp"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/bg_favorite_card"
+                                android:orientation="vertical"
+                                android:padding="12dp"
+                                android:focusable="true"
+                                android:clickable="true">
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="⛩️ JKAnime"
+                                    android:textColor="#FFD54F"
+                                    android:textSize="15sp"
+                                    android:textStyle="bold" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:text="Clásicos y Estrenos"
+                                    android:textColor="#8F92A8"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                        </LinearLayout>
+                    </HorizontalScrollView>
+
+                    <!-- Section 2: Mi Lista / Continuar Viendo -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="24dp"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:id="@+id/txtFavoritesHeaderTitle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="⭐ Mi Lista / Continuar Viendo"
+                            android:textColor="#FFFFFF"
+                            android:textSize="18sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Mantén OK para eliminar"
+                            android:textColor="#8F92A8"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/favoritesRecyclerView"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="Explora tus animes favoritos y presiona '⭐ + Favorito' o mantén presionado OK para guardarlos aquí."
-                        android:textColor="#8F92A8"
-                        android:textSize="14sp"
+                        android:nestedScrollingEnabled="false"
+                        android:clipToPadding="false"
+                        android:scrollbars="none" />
+
+                    <LinearLayout
+                        android:id="@+id/favoritesEmptyLayout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
                         android:gravity="center"
-                        android:maxWidth="420dp" />
+                        android:orientation="vertical"
+                        android:padding="28dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="⭐"
+                            android:textSize="42sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="Tu lista está vacía"
+                            android:textColor="#FFFFFF"
+                            android:textSize="18sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="Presiona '⭐ + Favorito' mientras ves cualquier anime para guardarlo aquí."
+                            android:textColor="#8F92A8"
+                            android:textSize="13sp"
+                            android:gravity="center" />
+                    </LinearLayout>
 
                 </LinearLayout>
 
-            </FrameLayout>
+            </androidx.core.widget.NestedScrollView>
 
             <!-- Netflix Red Loading Bar -->
             <ProgressBar
