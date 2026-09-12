@@ -211,7 +211,7 @@ class MainActivity : AppCompatActivity() {
 
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         currentSource = prefs.getString(KEY_ACTIVE_SOURCE, SOURCE_9ANIME) ?: SOURCE_9ANIME
-        isCinemaMode = prefs.getBoolean(KEY_CINEMA_MODE, false)
+        isCinemaMode = false
         currentNavMode = prefs.getInt(KEY_NAV_MODE, MODE_POINTER)
 
         val uiModeManager = getSystemService(Context.UI_MODE_SERVICE) as? android.app.UiModeManager
@@ -450,84 +450,6 @@ class MainActivity : AppCompatActivity() {
                         }
                     """.trimIndent()
                     return WebResourceResponse("text/css", "UTF-8", ByteArrayInputStream(cleanCss.toByteArray()))
-                }
-
-                // Intercept player.pelisserieshoy.com / embed iframe to inject full-bleed 16:9 styling and clean controls
-                if (url.contains("pelisserieshoy.com") || url.contains("embed69.org")) {
-                    if (!url.contains(".js") && !url.contains(".css") && !url.contains(".php") &&
-                        !url.contains(".png") && !url.contains(".jpg") && !url.contains(".svg") &&
-                        !url.contains(".woff") && !url.contains(".mp4") && !url.contains(".m3u8")
-                    ) {
-                        try {
-                            val conn = URL(url).openConnection() as HttpURLConnection
-                            conn.requestMethod = "GET"
-                            conn.setRequestProperty("User-Agent", USER_AGENT_DESKTOP)
-                            conn.setRequestProperty("Referer", "https://sololatino.net/")
-                            conn.connectTimeout = 8000
-                            conn.readTimeout = 8000
-                            if (conn.responseCode == 200) {
-                                var html = conn.inputStream.bufferedReader().use { it.readText() }
-                                val injectedStyle = """
-                                    <style id="animetv-embed-clean">
-                                        html, body {
-                                            background: #000 !important;
-                                            overflow: hidden !important;
-                                            width: 100vw !important;
-                                            height: 100vh !important;
-                                            margin: 0 !important;
-                                            padding: 0 !important;
-                                        }
-                                        .language-tab-container,
-                                        .tab-container,
-                                        .language-tab,
-                                        .tab,
-                                        #srvBadge,
-                                        .video-title-overlay,
-                                        .selector-container {
-                                            display: none !important;
-                                            visibility: hidden !important;
-                                            opacity: 0 !important;
-                                            pointer-events: none !important;
-                                            height: 0 !important;
-                                            min-height: 0 !important;
-                                            margin: 0 !important;
-                                            padding: 0 !important;
-                                        }
-                                        #DisplayContent,
-                                        #PlayerDisplay,
-                                        .iframe-container,
-                                        .plyr-wrap,
-                                        .plyr,
-                                        .plyr__video-wrapper,
-                                        video,
-                                        video#vp,
-                                        iframe,
-                                        #iframeWrap {
-                                            width: 100vw !important;
-                                            height: 100vh !important;
-                                            max-width: 100vw !important;
-                                            max-height: 100vh !important;
-                                            margin: 0 !important;
-                                            padding: 0 !important;
-                                            border: none !important;
-                                            aspect-ratio: auto !important;
-                                        }
-                                        .plyr__video-wrapper {
-                                            width: 100% !important;
-                                            height: 100% !important;
-                                        }
-                                        video {
-                                            object-fit: contain !important;
-                                        }
-                                    </style>
-                                """.trimIndent()
-                                html = html.replace("</head>", "$injectedStyle</head>")
-                                return WebResourceResponse("text/html", "UTF-8", ByteArrayInputStream(html.toByteArray()))
-                            }
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Failed to intercept embed frame HTML: $url", e)
-                        }
-                    }
                 }
 
                 return super.shouldInterceptRequest(view, request)
