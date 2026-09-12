@@ -60,6 +60,17 @@
             </intent-filter>
 
         </activity>
+
+        <activity
+            android:name=".ui.DetailActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize" />
+
+        <activity
+            android:name=".ui.PlayerActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize" />
     </application>
 
 </manifest>

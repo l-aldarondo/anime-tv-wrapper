@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0A0B10">
+
+    <!-- Backdrop Background Image with Dark Vignette -->
+    <ImageView
+        android:id="@+id/imgDetailBackdrop"
+        android:layout_width="match_parent"
+        android:layout_height="380dp"
+        android:scaleType="centerCrop"
+        android:alpha="0.25"
+        android:contentDescription="@null" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="380dp"
+        android:background="@drawable/bg_bottom_fader" />
+
+    <!-- Main Scrollable Content -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:padding="32dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Top Info Row (Poster + Metadata) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="28dp">
+
+                <!-- Anime Poster -->
+                <ImageView
+                    android:id="@+id/imgDetailPoster"
+                    android:layout_width="180dp"
+                    android:layout_height="260dp"
+                    android:scaleType="centerCrop"
+                    android:background="@drawable/bg_favorite_card"
+                    android:contentDescription="@null" />
+
+                <!-- Metadata Column -->
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="24dp"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/txtDetailTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="#FFFFFF"
+                        android:textSize="26sp"
+                        android:textStyle="bold" />
+
+                    <!-- Source & Genres -->
+                    <TextView
+                        android:id="@+id/txtDetailMeta"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:textColor="#FFD54F"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <!-- Synopsis -->
+                    <TextView
+                        android:id="@+id/txtDetailSynopsis"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:lineSpacingExtra="4dp"
+                        android:maxLines="5"
+                        android:ellipsize="end"
+                        android:textColor="#B0B3C6"
+                        android:textSize="14sp" />
+
+                    <!-- Action Buttons -->
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:orientation="horizontal">
+
+                        <Button
+                            android:id="@+id/btnPlayFirst"
+                            android:layout_width="wrap_content"
+                            android:layout_height="48dp"
+                            android:background="@drawable/bg_topbar_active_source"
+                            android:focusable="true"
+                            android:focusableInTouchMode="true"
+                            android:paddingHorizontal="20dp"
+                            android:text="▶  Reproducir"
+                            android:textColor="#FFFFFF"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <Button
+                            android:id="@+id/btnToggleFavorite"
+                            android:layout_width="wrap_content"
+                            android:layout_height="48dp"
+                            android:layout_marginStart="14dp"
+                            android:background="@drawable/bg_topbar_item"
+                            android:focusable="true"
+                            android:focusableInTouchMode="true"
+                            android:paddingHorizontal="18dp"
+                            android:text="⭐  Mi Lista"
+                            android:textColor="#F0F0FF"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <Button
+                            android:id="@+id/btnBack"
+                            android:layout_width="wrap_content"
+                            android:layout_height="48dp"
+                            android:layout_marginStart="14dp"
+                            android:background="@drawable/bg_topbar_item"
+                            android:focusable="true"
+                            android:focusableInTouchMode="true"
+                            android:paddingHorizontal="16dp"
+                            android:text="↩  Volver"
+                            android:textColor="#F0F0FF"
+                            android:textSize="14sp" />
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <!-- Episodes Section -->
+            <TextView
+                android:id="@+id/txtEpisodesHeader"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:text="Episodios Disponibles"
+                android:textColor="#FFFFFF"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recyclerEpisodes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:clipToPadding="false"
+                android:overScrollMode="never" />
+
+        </LinearLayout>
+
+    </ScrollView>
+
+    <!-- Loading Indicator -->
+    <ProgressBar
+        android:id="@+id/progressBarDetail"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_gravity="center"
+        android:indeterminateTint="#E50914"
+        android:visibility="gone" />
+
+</FrameLayout>

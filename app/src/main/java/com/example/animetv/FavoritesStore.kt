@@ -59,4 +59,14 @@ object FavoritesStore {
         val current = loadAll(context).filterNot { it.url == url }
         saveAll(context, current)
     }
+
+    fun isFavorite(context: Context, url: String): Boolean = contains(context, url)
+
+    fun getFavorites(context: Context): List<FavoriteItem> = loadAll(context)
+
+    fun add(context: Context, item: FavoriteItem) {
+        if (!contains(context, item.url)) {
+            toggle(context, item)
+        }
+    }
 }

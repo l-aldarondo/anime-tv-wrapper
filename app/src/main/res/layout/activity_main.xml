@@ -1,888 +1,252 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/rootContainer"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/mainRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#090A0E"
-    android:focusable="false">
+    android:orientation="vertical"
+    android:background="#0A0B10">
 
-    <!-- Structural Stack: Top Bar + Content Area -->
+    <!-- Top Persistent Header Bar -->
     <LinearLayout
+        android:id="@+id/topBarHeader"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical">
+        android:layout_height="56dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="#12141D"
+        android:paddingHorizontal="24dp">
 
-        <!-- Top Bar: Netflix / Prime Video Style Cinematic Header -->
-        <LinearLayout
-            android:id="@+id/topBar"
-            android:layout_width="match_parent"
+        <!-- App Logo / Title -->
+        <TextView
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="#12141C"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
+            android:text="ANIME TV"
+            android:textColor="#E50914"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.08" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_netflix_badge"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="2dp"
+            android:text="NATIVE"
+            android:textColor="#FFFFFF"
+            android:textSize="9sp"
+            android:textStyle="bold" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <!-- Navigation Tabs -->
+        <Button
+            android:id="@+id/btnNavCatalog"
+            android:layout_width="wrap_content"
+            android:layout_height="38dp"
+            android:background="@drawable/bg_topbar_active_source"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
             android:paddingHorizontal="14dp"
-            android:paddingVertical="8dp"
-            android:elevation="20dp"
-            android:focusable="false">
+            android:text="🔥  Catálogo"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:textStyle="bold" />
 
-            <!-- Netflix style brand logo -->
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginEnd="14dp">
+        <Button
+            android:id="@+id/btnNavMyList"
+            android:layout_width="wrap_content"
+            android:layout_height="38dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_topbar_item"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:paddingHorizontal="14dp"
+            android:text="⭐  Mi Lista"
+            android:textColor="#F0F0FF"
+            android:textSize="12sp" />
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="ANIME"
-                    android:textColor="#E50914"
-                    android:textSize="20sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.05" />
+        <Button
+            android:id="@+id/btnNavSearch"
+            android:layout_width="wrap_content"
+            android:layout_height="38dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_topbar_item"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:paddingHorizontal="14dp"
+            android:text="🔍  Buscar"
+            android:textColor="#F0F0FF"
+            android:textSize="12sp" />
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="TV"
-                    android:textColor="#FFFFFF"
-                    android:textSize="20sp"
-                    android:textStyle="bold"
-                    android:layout_marginStart="4dp" />
+        <Button
+            android:id="@+id/btnNavRefresh"
+            android:layout_width="wrap_content"
+            android:layout_height="38dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_topbar_item"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:paddingHorizontal="12dp"
+            android:text="↻"
+            android:textColor="#F0F0FF"
+            android:textSize="15sp" />
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:background="@drawable/bg_netflix_badge"
-                    android:text="LITE"
-                    android:textColor="#FFFFFF"
-                    android:textSize="11sp"
-                    android:textStyle="bold" />
-            </LinearLayout>
+    </LinearLayout>
 
-            <!-- Universal Search Button (10-foot remote friendly) -->
-            <TextView
-                android:id="@+id/btnTopBarSearch"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="10dp"
-                android:background="@drawable/bg_netflix_badge"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="9dp"
-                android:text="🔍 Buscar"
-                android:textColor="#FFFFFF"
-                android:textSize="15sp"
-                android:textStyle="bold"
-                android:focusable="true"
-                android:clickable="true" />
+    <!-- Scrollable Main View for Catalog & Hero -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
 
-            <!-- Scrollable source selector tabs -->
-            <HorizontalScrollView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:scrollbars="none"
-                android:overScrollMode="never">
-
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <!-- Source Hub: Inicio (Universal TV Hub) -->
-                    <TextView
-                        android:id="@+id/btnSourceHub"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="6dp"
-                        android:background="@drawable/bg_netflix_tab"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:paddingHorizontal="14dp"
-                        android:paddingVertical="10dp"
-                        android:text="🏠 Inicio"
-                        android:textColor="#00E5FF"
-                        android:textSize="16sp"
-                        android:textStyle="bold" />
-
-                    <!-- Source 0: Mi Lista (Favorites Grid) -->
-                    <TextView
-                        android:id="@+id/btnSourceFavorites"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="6dp"
-                        android:background="@drawable/bg_netflix_tab"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:paddingHorizontal="14dp"
-                        android:paddingVertical="10dp"
-                        android:text="⭐ Mi Lista"
-                        android:textColor="#FFD54F"
-                        android:textSize="16sp"
-                        android:textStyle="bold" />
-
-                    <!-- Source 1: 9Anime -->
-                    <TextView
-                        android:id="@+id/btnSource9Anime"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="6dp"
-                        android:background="@drawable/bg_netflix_active_tab"
-                        android:clickable="true"
-                        android:focusable="true"
-                        
-                        android:paddingHorizontal="14dp"
-                        android:paddingVertical="10dp"
-                        android:text="● 9Anime"
-                        android:textColor="#FFFFFF"
-                        android:textSize="16sp"
-                        android:textStyle="bold" />
-
-                    <!-- Source 2: GogoAnime -->
-                    <TextView
-                        android:id="@+id/btnSourceGogoAnime"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="6dp"
-                        android:background="@drawable/bg_netflix_tab"
-                        android:clickable="true"
-                        android:focusable="true"
-                        
-                        android:paddingHorizontal="14dp"
-                        android:paddingVertical="10dp"
-                        android:text="○ GogoAnime"
-                        android:textColor="#E0E0FF"
-                        android:textSize="16sp"
-                        android:textStyle="bold" />
-
-                    <!-- Source 3: SoloLatino -->
-                    <TextView
-                        android:id="@+id/btnSourceSoloLatino"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="6dp"
-                        android:background="@drawable/bg_netflix_tab"
-                        android:clickable="true"
-                        android:focusable="true"
-                        
-                        android:paddingHorizontal="14dp"
-                        android:paddingVertical="10dp"
-                        android:text="○ SoloAnime"
-                        android:textColor="#E0E0FF"
-                        android:textSize="16sp"
-                        android:textStyle="bold" />
-
-                    <!-- Source 4: SoloStream (Películas/Series) -->
-                    <TextView
-                        android:id="@+id/btnSourceSoloLatinoHome"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="6dp"
-                        android:background="@drawable/bg_netflix_tab"
-                        android:clickable="true"
-                        android:focusable="true"
-                        
-                        android:paddingHorizontal="14dp"
-                        android:paddingVertical="10dp"
-                        android:text="○ SoloStream"
-                        android:textColor="#E0E0FF"
-                        android:textSize="16sp"
-                        android:textStyle="bold" />
-
-                    <!-- Source 5: AnimeFlix -->
-                    <TextView
-                        android:id="@+id/btnSourceAnimeFlix"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="6dp"
-                        android:background="@drawable/bg_netflix_tab"
-                        android:clickable="true"
-                        android:focusable="true"
-                        
-                        android:paddingHorizontal="14dp"
-                        android:paddingVertical="10dp"
-                        android:text="○ AnimeFlix"
-                        android:textColor="#E0E0FF"
-                        android:textSize="16sp"
-                        android:textStyle="bold" />
-
-                    <!-- Source 6: AnimeYT -->
-                    <TextView
-                        android:id="@+id/btnSourceAnimeYT"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="6dp"
-                        android:background="@drawable/bg_netflix_tab"
-                        android:clickable="true"
-                        android:focusable="true"
-                        
-                        android:paddingHorizontal="14dp"
-                        android:paddingVertical="10dp"
-                        android:text="○ AnimeYT"
-                        android:textColor="#E0E0FF"
-                        android:textSize="16sp"
-                        android:textStyle="bold" />
-
-                    <!-- Source 7: JKAnime -->
-                    <TextView
-                        android:id="@+id/btnSourceJKAnime"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="6dp"
-                        android:background="@drawable/bg_netflix_tab"
-                        android:clickable="true"
-                        android:focusable="true"
-                        
-                        android:paddingHorizontal="14dp"
-                        android:paddingVertical="10dp"
-                        android:text="○ JKAnime"
-                        android:textColor="#E0E0FF"
-                        android:textSize="16sp"
-                        android:textStyle="bold" />
-
-                    <!-- Divider between Sources and Actions -->
-                    <View
-                        android:layout_width="1.5dp"
-                        android:layout_height="24dp"
-                        android:layout_marginHorizontal="8dp"
-                        android:background="#2E3444" />
-
-                    <!-- Cinema View toggle (removes site clutter) -->
-                    <TextView
-                        android:id="@+id/btnTopBarCinema"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:background="@drawable/bg_netflix_tab"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:paddingHorizontal="10dp"
-                        android:paddingVertical="10dp"
-                        android:text="🍿 Cinema"
-                        android:textColor="#FFD54F"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
-
-                    <!-- Mode toggle (Scroll vs Pointer) -->
-                    <TextView
-                        android:id="@+id/btnTopBarMode"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="6dp"
-                        android:background="@drawable/bg_netflix_tab"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:paddingHorizontal="10dp"
-                        android:paddingVertical="10dp"
-                        android:text="📜 Scroll"
-                        android:textColor="#00E676"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
-
-                    <!-- Add to Favorites button -->
-                    <TextView
-                        android:id="@+id/btnTopBarFavorite"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="6dp"
-                        android:background="@drawable/bg_netflix_tab"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:paddingHorizontal="10dp"
-                        android:paddingVertical="10dp"
-                        android:text="⭐ + Favorito"
-                        android:textColor="#FFD54F"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
-
-                    <!-- Master Account / Auto-Fill Settings -->
-                    <TextView
-                        android:id="@+id/btnTopBarAccount"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="6dp"
-                        android:background="@drawable/bg_netflix_tab"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:paddingHorizontal="10dp"
-                        android:paddingVertical="10dp"
-                        android:text="🔑 Cuenta"
-                        android:textColor="#64B5F6"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
-
-                    <!-- Reload Page -->
-                    <TextView
-                        android:id="@+id/btnTopBarReload"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="6dp"
-                        android:layout_marginEnd="8dp"
-                        android:background="@drawable/bg_netflix_tab"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:paddingHorizontal="12dp"
-                        android:paddingVertical="10dp"
-                        android:text="↻"
-                        android:textColor="#FFFFFF"
-                        android:textSize="15sp"
-                        android:textStyle="bold" />
-
-                </LinearLayout>
-            </HorizontalScrollView>
-
-        </LinearLayout>
-
-        <!-- Main Web & Video Content Area -->
-        <FrameLayout
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/scrollMain"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1">
+            android:layout_height="match_parent"
+            android:fillViewport="true">
 
-            <!-- High-Performance Native Android WebView -->
-            <WebView
-                android:id="@+id/webView"
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:background="#000000"
-                android:scrollbars="none"
-                android:overScrollMode="never"
-                android:focusable="true"
-                 />
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingBottom="40dp">
 
-            <!-- Universal Netflix / Prime Video Style Hub & "Mi Lista" Screen -->
-            <androidx.core.widget.NestedScrollView
-                android:id="@+id/favoritesScreen"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:background="#090A0E"
-                android:scrollbars="none"
-                android:visibility="gone">
-
-                <LinearLayout
+                <!-- Featured Hero Billboard (Netflix / Stremio Top Banner) -->
+                <FrameLayout
+                    android:id="@+id/layoutHeroBanner"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:paddingHorizontal="24dp"
-                    android:paddingVertical="16dp">
+                    android:layout_height="260dp"
+                    android:background="#151722">
 
-                    <!-- Search Prompt Banner (Opens Universal TV Search) -->
+                    <!-- Hero Backdrop Image -->
+                    <ImageView
+                        android:id="@+id/imgHeroBackdrop"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="centerCrop"
+                        android:alpha="0.4"
+                        android:contentDescription="@null" />
+
+                    <!-- Bottom Gradient Fader -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/bg_bottom_fader" />
+
+                    <!-- Hero Info Container -->
                     <LinearLayout
-                        android:id="@+id/hubBannerSearch"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:background="@drawable/bg_favorite_card"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:paddingHorizontal="20dp"
-                        android:paddingVertical="14dp"
-                        android:focusable="true"
-                        android:clickable="true">
+                        android:layout_gravity="bottom"
+                        android:orientation="vertical"
+                        android:paddingHorizontal="24dp"
+                        android:paddingBottom="16dp">
 
+                        <!-- Featured Tag -->
                         <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="🔍"
-                            android:textSize="20sp" />
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:layout_marginStart="12dp"
-                            android:text="Búsqueda Universal TV (Escribe anime, serie o película...)"
-                            android:textColor="#B0B3C6"
-                            android:textSize="16sp" />
-
-                        <TextView
+                            android:id="@+id/txtHeroBadge"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:background="@drawable/bg_netflix_badge"
-                            android:paddingHorizontal="10dp"
-                            android:paddingVertical="4dp"
-                            android:text="BUSCAR"
+                            android:paddingHorizontal="8dp"
+                            android:paddingVertical="2dp"
+                            android:text="★ DESTACADO DE LA SEMANA"
                             android:textColor="#FFFFFF"
-                            android:textSize="12sp"
+                            android:textSize="10sp"
                             android:textStyle="bold" />
-                    </LinearLayout>
 
-                    <!-- Section 1: Selector Rápido de Fuentes -->
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="20dp"
-                        android:text="🌐 Selector de Fuentes de Streaming"
-                        android:textColor="#FFFFFF"
-                        android:textSize="18sp"
-                        android:textStyle="bold" />
+                        <!-- Hero Title -->
+                        <TextView
+                            android:id="@+id/txtHeroTitle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:textColor="#FFFFFF"
+                            android:textSize="24sp"
+                            android:textStyle="bold"
+                            android:shadowColor="#000000"
+                            android:shadowRadius="10" />
 
-                    <HorizontalScrollView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:scrollbars="none"
-                        android:overScrollMode="never">
+                        <!-- Hero Synopsis -->
+                        <TextView
+                            android:id="@+id/txtHeroSynopsis"
+                            android:layout_width="600dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:maxLines="2"
+                            android:ellipsize="end"
+                            android:textColor="#D0D3E2"
+                            android:textSize="13sp"
+                            android:shadowColor="#000000"
+                            android:shadowRadius="6" />
 
+                        <!-- Hero Action Buttons -->
                         <LinearLayout
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
                             android:orientation="horizontal">
 
-                            <!-- Source Card 1: SoloAnime -->
-                            <LinearLayout
-                                android:id="@+id/hubCardSoloAnime"
-                                android:layout_width="160dp"
-                                android:layout_height="wrap_content"
-                                android:layout_marginEnd="12dp"
-                                android:background="@drawable/bg_favorite_card"
-                                android:orientation="vertical"
-                                android:padding="12dp"
+                            <Button
+                                android:id="@+id/btnHeroPlay"
+                                android:layout_width="wrap_content"
+                                android:layout_height="40dp"
+                                android:background="@drawable/bg_topbar_active_source"
                                 android:focusable="true"
-                                android:clickable="true">
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="🇲🇽 SoloAnime"
-                                    android:textColor="#00E5FF"
-                                    android:textSize="15sp"
-                                    android:textStyle="bold" />
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="4dp"
-                                    android:text="Audio Latino &amp; Castellano"
-                                    android:textColor="#8F92A8"
-                                    android:textSize="11sp" />
-                            </LinearLayout>
+                                android:focusableInTouchMode="true"
+                                android:paddingHorizontal="20dp"
+                                android:text="▶  Ver Ahora"
+                                android:textColor="#FFFFFF"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
 
-                            <!-- Source Card 2: SoloStream -->
-                            <LinearLayout
-                                android:id="@+id/hubCardSoloStream"
-                                android:layout_width="160dp"
-                                android:layout_height="wrap_content"
-                                android:layout_marginEnd="12dp"
-                                android:background="@drawable/bg_favorite_card"
-                                android:orientation="vertical"
-                                android:padding="12dp"
+                            <Button
+                                android:id="@+id/btnHeroFavorite"
+                                android:layout_width="wrap_content"
+                                android:layout_height="40dp"
+                                android:layout_marginStart="12dp"
+                                android:background="@drawable/bg_topbar_item"
                                 android:focusable="true"
-                                android:clickable="true">
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="🎬 SoloStream"
-                                    android:textColor="#FFD54F"
-                                    android:textSize="15sp"
-                                    android:textStyle="bold" />
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="4dp"
-                                    android:text="Películas &amp; Series de Estreno"
-                                    android:textColor="#8F92A8"
-                                    android:textSize="11sp" />
-                            </LinearLayout>
-
-                            <!-- Source Card 3: 9Anime -->
-                            <LinearLayout
-                                android:id="@+id/hubCard9Anime"
-                                android:layout_width="160dp"
-                                android:layout_height="wrap_content"
-                                android:layout_marginEnd="12dp"
-                                android:background="@drawable/bg_favorite_card"
-                                android:orientation="vertical"
-                                android:padding="12dp"
-                                android:focusable="true"
-                                android:clickable="true">
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="🔥 9Anime"
-                                    android:textColor="#E50914"
-                                    android:textSize="15sp"
-                                    android:textStyle="bold" />
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="4dp"
-                                    android:text="Sub Español &amp; Global"
-                                    android:textColor="#8F92A8"
-                                    android:textSize="11sp" />
-                            </LinearLayout>
-
-                            <!-- Source Card 4: GogoAnime -->
-                            <LinearLayout
-                                android:id="@+id/hubCardGogoAnime"
-                                android:layout_width="160dp"
-                                android:layout_height="wrap_content"
-                                android:layout_marginEnd="12dp"
-                                android:background="@drawable/bg_favorite_card"
-                                android:orientation="vertical"
-                                android:padding="12dp"
-                                android:focusable="true"
-                                android:clickable="true">
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="⚡ GogoAnime"
-                                    android:textColor="#64B5F6"
-                                    android:textSize="15sp"
-                                    android:textStyle="bold" />
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="4dp"
-                                    android:text="Últimos Episodios Rápidos"
-                                    android:textColor="#8F92A8"
-                                    android:textSize="11sp" />
-                            </LinearLayout>
-
-                            <!-- Source Card 5: AnimeFlix -->
-                            <LinearLayout
-                                android:id="@+id/hubCardAnimeFlix"
-                                android:layout_width="160dp"
-                                android:layout_height="wrap_content"
-                                android:layout_marginEnd="12dp"
-                                android:background="@drawable/bg_favorite_card"
-                                android:orientation="vertical"
-                                android:padding="12dp"
-                                android:focusable="true"
-                                android:clickable="true">
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="🍿 AnimeFlix"
-                                    android:textColor="#00E676"
-                                    android:textSize="15sp"
-                                    android:textStyle="bold" />
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="4dp"
-                                    android:text="Emisiones en HD"
-                                    android:textColor="#8F92A8"
-                                    android:textSize="11sp" />
-                            </LinearLayout>
-
-                            <!-- Source Card 6: AnimeYT -->
-                            <LinearLayout
-                                android:id="@+id/hubCardAnimeYT"
-                                android:layout_width="160dp"
-                                android:layout_height="wrap_content"
-                                android:layout_marginEnd="12dp"
-                                android:background="@drawable/bg_favorite_card"
-                                android:orientation="vertical"
-                                android:padding="12dp"
-                                android:focusable="true"
-                                android:clickable="true">
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="📺 AnimeYT"
-                                    android:textColor="#FF80AB"
-                                    android:textSize="15sp"
-                                    android:textStyle="bold" />
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="4dp"
-                                    android:text="Anime en Español"
-                                    android:textColor="#8F92A8"
-                                    android:textSize="11sp" />
-                            </LinearLayout>
-
-                            <!-- Source Card 7: JKAnime -->
-                            <LinearLayout
-                                android:id="@+id/hubCardJKAnime"
-                                android:layout_width="160dp"
-                                android:layout_height="wrap_content"
-                                android:background="@drawable/bg_favorite_card"
-                                android:orientation="vertical"
-                                android:padding="12dp"
-                                android:focusable="true"
-                                android:clickable="true">
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="⛩️ JKAnime"
-                                    android:textColor="#FFD54F"
-                                    android:textSize="15sp"
-                                    android:textStyle="bold" />
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="4dp"
-                                    android:text="Clásicos y Estrenos"
-                                    android:textColor="#8F92A8"
-                                    android:textSize="11sp" />
-                            </LinearLayout>
+                                android:focusableInTouchMode="true"
+                                android:paddingHorizontal="16dp"
+                                android:text="⭐  Mi Lista"
+                                android:textColor="#F0F0FF"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
 
                         </LinearLayout>
-                    </HorizontalScrollView>
 
-                    <!-- Section 2: Mi Lista / Continuar Viendo -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="24dp"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical">
-
-                        <TextView
-                            android:id="@+id/txtFavoritesHeaderTitle"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="⭐ Mi Lista / Continuar Viendo"
-                            android:textColor="#FFFFFF"
-                            android:textSize="18sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Mantén OK para eliminar"
-                            android:textColor="#8F92A8"
-                            android:textSize="12sp" />
                     </LinearLayout>
 
-                    <androidx.recyclerview.widget.RecyclerView
-                        android:id="@+id/favoritesRecyclerView"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:nestedScrollingEnabled="false"
-                        android:clipToPadding="false"
-                        android:scrollbars="none" />
+                </FrameLayout>
 
-                    <LinearLayout
-                        android:id="@+id/favoritesEmptyLayout"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center"
-                        android:orientation="vertical"
-                        android:padding="28dp">
+                <!-- Vertical RecyclerView for Horizontal Category Rows -->
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/recyclerCatalogRows"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:nestedScrollingEnabled="false"
+                    android:overScrollMode="never" />
 
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="⭐"
-                            android:textSize="42sp" />
+            </LinearLayout>
 
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:text="Tu lista está vacía"
-                            android:textColor="#FFFFFF"
-                            android:textSize="18sp"
-                            android:textStyle="bold" />
+        </androidx.core.widget.NestedScrollView>
 
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:text="Presiona '⭐ + Favorito' mientras ves cualquier anime para guardarlo aquí."
-                            android:textColor="#8F92A8"
-                            android:textSize="13sp"
-                            android:gravity="center" />
-                    </LinearLayout>
+        <!-- Global Progress Bar -->
+        <ProgressBar
+            android:id="@+id/progressBarHome"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
+            android:layout_gravity="center"
+            android:indeterminateTint="#E50914"
+            android:visibility="gone" />
 
-                </LinearLayout>
+    </FrameLayout>
 
-            </androidx.core.widget.NestedScrollView>
-
-            <!-- Netflix Red Loading Bar -->
-            <ProgressBar
-                android:id="@+id/pageLoadingBar"
-                style="@android:style/Widget.ProgressBar.Horizontal"
-                android:layout_width="match_parent"
-                android:layout_height="4dp"
-                android:layout_gravity="top"
-                android:indeterminate="true"
-                android:progressTint="#E50914"
-                android:visibility="gone" />
-
-            <!-- Virtual Cursor Overlay for D-Pad Remote Navigation -->
-            <com.example.animetv.tv.VirtualCursorView
-                android:id="@+id/virtualCursorView"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:elevation="30dp"
-                android:focusable="false"
-                android:clickable="false" />
-
-        </FrameLayout>
-
-    </LinearLayout>
-
-    <!-- Netflix / Prime Video Style HUD Controls Bar (Auto-hides or toggled via remote) -->
-    <LinearLayout
-        android:id="@+id/hudPlayerBar"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="24dp"
-        android:background="@drawable/bg_hud_panel"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:elevation="45dp"
-        android:visibility="gone">
-
-        <TextView
-            android:id="@+id/btnHudRewind"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:background="@drawable/bg_hud_button"
-            android:clickable="true"
-            android:focusable="true"
-            
-            android:paddingHorizontal="14dp"
-            android:paddingVertical="10dp"
-            android:text="⏪ 10s"
-            android:textColor="#FFFFFF"
-            android:textSize="15sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/btnHudPlayPause"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/bg_hud_button"
-            android:clickable="true"
-            android:focusable="true"
-            
-            android:paddingHorizontal="18dp"
-            android:paddingVertical="10dp"
-            android:text="⏯ Play/Pause"
-            android:textColor="#FFFFFF"
-            android:textSize="15sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/btnHudForward"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/bg_hud_button"
-            android:clickable="true"
-            android:focusable="true"
-            
-            android:paddingHorizontal="14dp"
-            android:paddingVertical="10dp"
-            android:text="⏩ 10s"
-            android:textColor="#FFFFFF"
-            android:textSize="15sp"
-            android:textStyle="bold" />
-
-        <!-- High-value anime feature: Skip Intro (+85s) -->
-        <TextView
-            android:id="@+id/btnHudSkipIntro"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/bg_hud_button"
-            android:clickable="true"
-            android:focusable="true"
-            
-            android:paddingHorizontal="16dp"
-            android:paddingVertical="10dp"
-            android:text="⏩ Skip Intro (+85s)"
-            android:textColor="#FFD54F"
-            android:textSize="15sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/btnHudNextEp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/bg_hud_button"
-            android:clickable="true"
-            android:focusable="true"
-            
-            android:paddingHorizontal="14dp"
-            android:paddingVertical="10dp"
-            android:text="⏭ Next Ep"
-            android:textColor="#FFFFFF"
-            android:textSize="15sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/btnHudFullscreen"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/bg_hud_button"
-            android:clickable="true"
-            android:focusable="true"
-            
-            android:paddingHorizontal="14dp"
-            android:paddingVertical="10dp"
-            android:text="⛶ Fullscreen"
-            android:textColor="#FFFFFF"
-            android:textSize="15sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/btnHudFavorite"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/bg_hud_button"
-            android:clickable="true"
-            android:focusable="true"
-            
-            android:paddingHorizontal="14dp"
-            android:paddingVertical="10dp"
-            android:text="⭐ + Favorito"
-            android:textColor="#FFD54F"
-            android:textSize="15sp"
-            android:textStyle="bold" />
-
-    </LinearLayout>
-
-    <!-- TV Center Transport OSD Badge (Seek +/-10s, Pause/Play) -->
-    <TextView
-        android:id="@+id/hudSeekBadge"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:background="@drawable/bg_osd_panel"
-        android:paddingHorizontal="24dp"
-        android:paddingVertical="14dp"
-        android:text="⏩ +10s"
-        android:textColor="#FFFFFF"
-        android:textSize="22sp"
-        android:textStyle="bold"
-        android:elevation="60dp"
-        android:visibility="gone"
-        android:focusable="false"
-        android:clickable="false" />
-
-    <!-- TV Remote Controls Guide (Auto-fades out after 5s) -->
-    <LinearLayout
-        android:id="@+id/osdControlsGuide"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="24dp"
-        android:background="@drawable/bg_osd_panel"
-        android:orientation="horizontal"
-        android:elevation="40dp"
-        android:visibility="gone"
-        android:focusable="false"
-        android:clickable="false">
-
-        <TextView
-            android:id="@+id/txtGuideText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="🎮 D-Pad: Carátula en Carátula  •  ◀ / ▶: Retroceder / Avanzar 10s  •  OK: Play / Pausa  •  Doble OK: Fullscreen"
-            android:textColor="#F0F0FF"
-            android:textSize="15sp" />
-    </LinearLayout>
-
-</FrameLayout>
+</LinearLayout>
