@@ -74,8 +74,9 @@ class MainActivity : AppCompatActivity() {
         const val URL_ANIMEYT = "https://animeyt.cc/"
         const val URL_JKANIME = "https://jkanime.net/"
 
-        const val MODE_POINTER = 0
-        const val MODE_SCROLL = 1
+        const val MODE_SPATIAL_CARDS = 0
+        const val MODE_POINTER = 1
+        const val MODE_SCROLL = 2
 
         private const val BACK_PRESS_INTERVAL = 2000L
         private const val HUD_AUTO_HIDE_DELAY_MS = 6000L
@@ -201,10 +202,23 @@ class MainActivity : AppCompatActivity() {
             .start()
     }
 
+    // TV Center OSD & Media Transport
+    private lateinit var hudSeekBadge: TextView
+    private var isVideoPlaying = false
+    private val hideSeekBadgeRunnable = Runnable {
+        hudSeekBadge.animate()
+            .alpha(0f)
+            .setDuration(250)
+            .withEndAction { hudSeekBadge.visibility = View.GONE }
+            .start()
+    }
+
     // Cached asset scripts
     private var cachedAdblockGuardJs = ""
     private var cachedNetflixCinemaCss = ""
     private var cachedFixesCss = ""
+    private var cachedSpatialNavJs = ""
+    private var cachedPlayerControllerJs = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -212,7 +226,7 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         currentSource = prefs.getString(KEY_ACTIVE_SOURCE, SOURCE_9ANIME) ?: SOURCE_9ANIME
         isCinemaMode = false
-        currentNavMode = prefs.getInt(KEY_NAV_MODE, MODE_POINTER)
+        currentNavMode = prefs.getInt(KEY_NAV_MODE, MODE_SPATIAL_CARDS)
 
         val uiModeManager = getSystemService(Context.UI_MODE_SERVICE) as? android.app.UiModeManager
         isTv = (uiModeManager?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION)
@@ -263,6 +277,16 @@ class MainActivity : AppCompatActivity() {
             cachedFixesCss = assets.open("page_patches/fixes.css").bufferedReader().use { it.readText() }
         } catch (e: Exception) {
             Log.d(TAG, "No page_patches/fixes.css found, using netflix_cinema.css")
+        }
+        try {
+            cachedSpatialNavJs = assets.open("tv_spatial_nav.js").bufferedReader().use { it.readText() }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error reading tv_spatial_nav.js", e)
+        }
+        try {
+            cachedPlayerControllerJs = assets.open("tv_player_controller.js").bufferedReader().use { it.readText() }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error reading tv_player_controller.js", e)
         }
     }
 
@@ -330,8 +354,14 @@ class MainActivity : AppCompatActivity() {
         btnHudFullscreen = findViewById(R.id.btnHudFullscreen)
         btnHudFavorite = findViewById(R.id.btnHudFavorite)
 
-        if (!isTv) {
+        // TV Center Transport OSD Badge
+        hudSeekBadge = findViewById(R.id.hudSeekBadge)
+
+        if (!isTv || currentNavMode == MODE_SPATIAL_CARDS) {
             virtualCursorView.visibility = View.GONE
+            virtualCursorView.isCursorVisible = false
+        }
+        if (!isTv) {
             osdControlsGuide.visibility = View.GONE
         }
     }
@@ -525,6 +555,16 @@ class MainActivity : AppCompatActivity() {
                     injectCss(cachedFixesCss)
                 }
 
+                // Inject TV Spatial Navigation engine
+                if (cachedSpatialNavJs.isNotEmpty()) {
+                    injectScript(cachedSpatialNavJs)
+                }
+
+                // Inject TV Player Controller & Decoy Annihilator
+                if (cachedPlayerControllerJs.isNotEmpty()) {
+                    injectScript(cachedPlayerControllerJs)
+                }
+
                 // Apply Cinema Mode state if active
                 if (isCinemaMode) {
                     injectScript("document.body.classList.add('animetv-cinema-mode');")
@@ -644,6 +684,7 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun onVideoPlay() {
             runOnUiThread {
+                isVideoPlaying = true
                 showHudPlayerBarBriefly()
             }
         }
@@ -651,6 +692,14 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun onVideoPause() {
             runOnUiThread {
+                isVideoPlaying = false
+            }
+        }
+
+        @JavascriptInterface
+        fun onSpatialTopReached() {
+            runOnUiThread {
+                moveFocusToTopBar()
             }
         }
     }
@@ -719,8 +768,16 @@ class MainActivity : AppCompatActivity() {
         btnTopBarCinema.text = if (isCinemaMode) "🍿 Cinema: ON" else "🍿 Cinema"
         btnTopBarCinema.setTextColor(if (isCinemaMode) Color.parseColor("#FF5252") else Color.parseColor("#FFD54F"))
 
-        btnTopBarMode.text = if (currentNavMode == MODE_SCROLL) "📜 Scroll" else "🖱️ Pointer"
-        btnTopBarMode.setTextColor(if (currentNavMode == MODE_SCROLL) Color.parseColor("#00E676") else Color.parseColor("#BB86FC"))
+        btnTopBarMode.text = when (currentNavMode) {
+            MODE_SPATIAL_CARDS -> "📺 Tarjetas (Netflix)"
+            MODE_POINTER -> "🖱️ Puntero"
+            else -> "📜 Scroll"
+        }
+        btnTopBarMode.setTextColor(when (currentNavMode) {
+            MODE_SPATIAL_CARDS -> Color.parseColor("#00E5FF")
+            MODE_POINTER -> Color.parseColor("#BB86FC")
+            else -> Color.parseColor("#00E676")
+        })
     }
 
     private fun switchSource(source: String) {
@@ -740,7 +797,15 @@ class MainActivity : AppCompatActivity() {
         } else {
             favoritesScreen.visibility = View.GONE
             webView.visibility = View.VISIBLE
-            if (isTv) virtualCursorView.visibility = View.VISIBLE
+            if (isTv) {
+                if (currentNavMode == MODE_SPATIAL_CARDS) {
+                    virtualCursorView.visibility = View.GONE
+                    virtualCursorView.isCursorVisible = false
+                } else {
+                    virtualCursorView.visibility = View.VISIBLE
+                    virtualCursorView.isCursorVisible = true
+                }
+            }
             webView.loadUrl(urlForSource(source))
             handler.postDelayed({ moveFocusToPage() }, 200)
         }
@@ -791,10 +856,31 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun toggleNavMode() {
-        currentNavMode = if (currentNavMode == MODE_SCROLL) MODE_POINTER else MODE_SCROLL
+        currentNavMode = when (currentNavMode) {
+            MODE_SPATIAL_CARDS -> MODE_POINTER
+            MODE_POINTER -> MODE_SCROLL
+            else -> MODE_SPATIAL_CARDS
+        }
         getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().putInt(KEY_NAV_MODE, currentNavMode).apply()
         virtualCursorView.isDirectScrollMode = (currentNavMode == MODE_SCROLL)
+        if (isTv) {
+            if (currentNavMode == MODE_SPATIAL_CARDS) {
+                virtualCursorView.visibility = View.GONE
+                virtualCursorView.isCursorVisible = false
+                injectScript("if (window.AnimeTvSpatialNav) window.AnimeTvSpatialNav.focusInitial();")
+            } else {
+                virtualCursorView.visibility = View.VISIBLE
+                virtualCursorView.isCursorVisible = true
+                injectScript("if (window.AnimeTvSpatialNav) window.AnimeTvSpatialNav.clearFocus();")
+            }
+        }
         updateTopBarUi()
+        val modeName = when (currentNavMode) {
+            MODE_SPATIAL_CARDS -> "📺 Navegación de Carátulas (Netflix / Prime)"
+            MODE_POINTER -> "🖱️ Ratón Virtual"
+            else -> "📜 Desplazamiento Directo"
+        }
+        Toast.makeText(this, modeName, Toast.LENGTH_SHORT).show()
     }
 
     // ── Netflix / Prime Style HUD Player Controls ────────────────────────────
@@ -1076,13 +1162,21 @@ class MainActivity : AppCompatActivity() {
         webView.evaluateJavascript(silentJs, null)
     }
 
+    private fun showSeekBadge(text: String) {
+        hudSeekBadge.text = text
+        hudSeekBadge.visibility = View.VISIBLE
+        hudSeekBadge.alpha = 1f
+        handler.removeCallbacks(hideSeekBadgeRunnable)
+        handler.postDelayed(hideSeekBadgeRunnable, 1200)
+    }
+
     private fun sendPlayerCommand(action: String, seconds: Int = 0) {
         val js = when (action) {
-            "toggle" -> "window.__animePlayerBridge && window.__animePlayerBridge.toggle();"
-            "play" -> "window.__animePlayerBridge && window.__animePlayerBridge.play();"
-            "pause" -> "window.__animePlayerBridge && window.__animePlayerBridge.pause();"
-            "seek" -> "window.__animePlayerBridge && window.__animePlayerBridge.seek($seconds);"
-            "skipIntro" -> "window.__animePlayerBridge && window.__animePlayerBridge.skipIntro();"
+            "toggle" -> "if (window.AnimeTvPlayer) window.AnimeTvPlayer.togglePlay(); else if (window.__animePlayerBridge) window.__animePlayerBridge.toggle();"
+            "play" -> "if (window.AnimeTvPlayer) window.AnimeTvPlayer.togglePlay(); else if (window.__animePlayerBridge) window.__animePlayerBridge.play();"
+            "pause" -> "if (window.AnimeTvPlayer) window.AnimeTvPlayer.togglePlay(); else if (window.__animePlayerBridge) window.__animePlayerBridge.pause();"
+            "seek" -> "if (window.AnimeTvPlayer) window.AnimeTvPlayer.seek($seconds); else if (window.__animePlayerBridge) window.__animePlayerBridge.seek($seconds);"
+            "skipIntro" -> "if (window.AnimeTvPlayer) window.AnimeTvPlayer.seek(85); else if (window.__animePlayerBridge) window.__animePlayerBridge.skipIntro();"
             "nextEpisode" -> "window.__animePlayerBridge && window.__animePlayerBridge.nextEpisode();"
             else -> ""
         }
@@ -1208,13 +1302,20 @@ class MainActivity : AppCompatActivity() {
         }
         webView.requestFocus()
         if (isTv) {
-            virtualCursorView.isCursorVisible = true
-            val density = resources.displayMetrics.density
-            if (virtualCursorView.cursorY < 70f * density) {
-                virtualCursorView.setCursorPosition(
-                    virtualCursorView.cursorX,
-                    90f * density
-                )
+            if (currentNavMode == MODE_SPATIAL_CARDS) {
+                virtualCursorView.visibility = View.GONE
+                virtualCursorView.isCursorVisible = false
+                injectScript("if (window.AnimeTvSpatialNav) window.AnimeTvSpatialNav.focusInitial();")
+            } else {
+                virtualCursorView.visibility = View.VISIBLE
+                virtualCursorView.isCursorVisible = true
+                val density = resources.displayMetrics.density
+                if (virtualCursorView.cursorY < 70f * density) {
+                    virtualCursorView.setCursorPosition(
+                        virtualCursorView.cursorX,
+                        90f * density
+                    )
+                }
             }
         }
     }
@@ -1356,6 +1457,95 @@ class MainActivity : AppCompatActivity() {
                 KeyEvent.KEYCODE_DPAD_RIGHT
             )
 
+            // When in Fullscreen or when video is actively playing, LEFT/RIGHT acts as Seek +/-10s
+            if (isPlayerFullscreen || customView != null || isVideoPlaying) {
+                if (action == KeyEvent.ACTION_DOWN) {
+                    when (keyCode) {
+                        KeyEvent.KEYCODE_DPAD_LEFT -> {
+                            sendPlayerCommand("seek", -10)
+                            showSeekBadge("⏪ -10s")
+                            return true
+                        }
+                        KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                            sendPlayerCommand("seek", 10)
+                            showSeekBadge("⏩ +10s")
+                            return true
+                        }
+                        KeyEvent.KEYCODE_DPAD_UP -> {
+                            showHudPlayerBarBriefly()
+                            return true
+                        }
+                        KeyEvent.KEYCODE_DPAD_DOWN -> {
+                            hideHudPlayerBar()
+                            return true
+                        }
+                    }
+                }
+            }
+
+            // Mode 0: SPATIAL CARDS (Netflix / Prime Video TV card-by-card snap)
+            if (currentNavMode == MODE_SPATIAL_CARDS) {
+                if (isDpadDirection) {
+                    if (action == KeyEvent.ACTION_DOWN) {
+                        val dirStr = when (keyCode) {
+                            KeyEvent.KEYCODE_DPAD_RIGHT -> "right"
+                            KeyEvent.KEYCODE_DPAD_LEFT -> "left"
+                            KeyEvent.KEYCODE_DPAD_DOWN -> "down"
+                            KeyEvent.KEYCODE_DPAD_UP -> "up"
+                            else -> ""
+                        }
+                        if (dirStr.isNotEmpty()) {
+                            injectScript("if (window.AnimeTvSpatialNav) window.AnimeTvSpatialNav.navigate('$dirStr');")
+                        }
+                    }
+                    return true
+                }
+
+                if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                    if (currentSource == SOURCE_FAVORITES) {
+                        return super.dispatchKeyEvent(event)
+                    }
+
+                    if (action == KeyEvent.ACTION_DOWN) {
+                        if (event.repeatCount == 0) {
+                            longPressArmed = false
+                            handler.removeCallbacks(longPressFavoriteRunnable)
+                            handler.postDelayed(longPressFavoriteRunnable, LONG_PRESS_FAVORITE_MS)
+                        }
+                        return true
+                    }
+
+                    if (action == KeyEvent.ACTION_UP) {
+                        handler.removeCallbacks(longPressFavoriteRunnable)
+                        if (longPressArmed) {
+                            longPressArmed = false
+                            return true
+                        }
+
+                        val now = System.currentTimeMillis()
+                        if (now - lastOkPressTime < DOUBLE_CLICK_TIMEOUT_MS) {
+                            lastOkPressTime = 0L
+                            handler.removeCallbacks(pendingOkClickRunnable)
+                            togglePlayerFullscreen()
+                            return true
+                        } else {
+                            lastOkPressTime = now
+                            handler.removeCallbacks(pendingOkClickRunnable)
+                            // In Spatial mode, single click activates the selected card or toggles video if in fullscreen
+                            if (isPlayerFullscreen || customView != null) {
+                                sendPlayerCommand("toggle")
+                                showSeekBadge("⏯ Play/Pausa")
+                            } else {
+                                injectScript("if (window.AnimeTvSpatialNav) window.AnimeTvSpatialNav.click();")
+                            }
+                            return true
+                        }
+                    }
+                    return true
+                }
+            }
+
+            // Fallback: Mode 1 (Virtual Pointer) and Mode 2 (Direct Scroll)
             if (isDpadDirection) {
                 // In Scroll Mode, if page is already at the very top, DPAD_UP transitions focus to top bar
                 if (action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_UP && currentNavMode == MODE_SCROLL && currentDomScrollY <= 15f) {

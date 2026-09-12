@@ -439,3 +439,42 @@ section:has(#comment-form-wrap) {
 button[data-tab-btn="comentarios"] {
     display: none !important;
 }
+
+/* ── AnimeTV Spatial Navigation (Netflix / Prime Video 10-foot TV Focus) ────── */
+.animetv-focused-card {
+    transform: scale(1.08) !important;
+    box-shadow: 0 0 25px rgba(229, 9, 20, 0.9), 0 0 10px #ffffff !important;
+    outline: 3.5px solid #ffffff !important;
+    outline-offset: 3px !important;
+    border-radius: 8px !important;
+    z-index: 1000 !important;
+    transition: transform 0.16s cubic-bezier(0.2, 0, 0.1, 1), box-shadow 0.16s ease !important;
+}
+
+.animetv-clicked-pulse {
+    transform: scale(0.95) !important;
+    box-shadow: 0 0 35px #00e676 !important;
+    outline-color: #00e676 !important;
+    transition: transform 0.08s ease !important;
+}
+
+/* ── Decoy Player & Fake Overlay Annihilator (AnimeYT, JKAnime, etc.) ───────── */
+#fake-player,
+.fake-player,
+.decoy-player,
+#decoy-player,
+.video-fake-play,
+.btn-fake-play,
+div[id*="fake_player"],
+div[class*="fake-player"],
+div[id*="fakeplayer"],
+.play-fake {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    opacity: 0 !important;
+    z-index: -9999 !important;
+}
+

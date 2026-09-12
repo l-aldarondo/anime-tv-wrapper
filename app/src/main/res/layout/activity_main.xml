@@ -526,6 +526,24 @@
 
     </LinearLayout>
 
+    <!-- TV Center Transport OSD Badge (Seek +/-10s, Pause/Play) -->
+    <TextView
+        android:id="@+id/hudSeekBadge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="@drawable/bg_osd_panel"
+        android:paddingHorizontal="24dp"
+        android:paddingVertical="14dp"
+        android:text="⏩ +10s"
+        android:textColor="#FFFFFF"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:elevation="60dp"
+        android:visibility="gone"
+        android:focusable="false"
+        android:clickable="false" />
+
     <!-- TV Remote Controls Guide (Auto-fades out after 5s) -->
     <LinearLayout
         android:id="@+id/osdControlsGuide"
@@ -544,7 +562,7 @@
             android:id="@+id/txtGuideText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="🎮 D-Pad: Scroll  •  UP at top: Sources  •  OK: Click  •  MENU: Cinema Controls"
+            android:text="🎮 D-Pad: Carátula en Carátula  •  ◀ / ▶: Retroceder / Avanzar 10s  •  OK: Play / Pausa  •  Doble OK: Fullscreen"
             android:textColor="#F0F0FF"
             android:textSize="15sp" />
     </LinearLayout>
