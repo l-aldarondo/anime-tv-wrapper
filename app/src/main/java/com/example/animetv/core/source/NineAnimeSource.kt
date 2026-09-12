@@ -221,7 +221,7 @@ class NineAnimeSource : AnimeSource {
             val html = fetchHtml(episodeUrl)
             if (html.isEmpty()) return@withContext null
 
-            // Direct m3u8 in page
+            // 1. Direct m3u8 in page
             val m3u8 = Regex("""https?://[^\s"'<>]+\.m3u8[^\s"'<>]*""").find(html)
             if (m3u8 != null) {
                 return@withContext StreamResult(
@@ -231,22 +231,66 @@ class NineAnimeSource : AnimeSource {
                 )
             }
 
-            // Look for iframe player
+            // 2. Fetch servers via 9anime AJAX endpoint: /ajax/episode/servers?id=$epId
+            val epIdMatch = Regex("""episodeId\s*:\s*(\d+)""").find(html)
+                ?: Regex("""data-id=["'](\d+)["']""").find(html)
+                ?: Regex("""data-ep-id=["'](\d+)["']""").find(html)
+
+            val epId = epIdMatch?.groupValues?.get(1)
+            if (!epId.isNullOrEmpty()) {
+                try {
+                    val ajaxUrl = "$baseUrl/ajax/episode/servers?id=$epId"
+                    val request = Request.Builder()
+                        .url(ajaxUrl)
+                        .header("User-Agent", userAgent)
+                        .header("Referer", episodeUrl)
+                        .header("X-Requested-With", "XMLHttpRequest")
+                        .build()
+
+                    client.newCall(request).execute().use { resp ->
+                        if (resp.isSuccessful) {
+                            val jsonStr = resp.body?.string() ?: ""
+                            val json = org.json.JSONObject(jsonStr)
+                            val serversHtml = json.optString("html", "")
+                            val embedMatches = Regex("""data-embed=["']([^"']+)["']""").findAll(serversHtml)
+                            for (em in embedMatches) {
+                                val b64 = em.groupValues[1]
+                                try {
+                                    val decodedUrl = String(android.util.Base64.decode(b64, android.util.Base64.DEFAULT)).trim()
+                                    if (decodedUrl.startsWith("http")) {
+                                        return@withContext StreamResult(
+                                            videoUrl = decodedUrl,
+                                            isHls = decodedUrl.contains(".m3u8"),
+                                            isEmbed = true,
+                                            serverName = "9Anime Player Embed",
+                                            headers = mapOf("Referer" to baseUrl, "User-Agent" to userAgent)
+                                        )
+                                    }
+                                } catch (e: Exception) {}
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+
+            // 3. Look for iframe player in page
             val iframes = Regex("""<iframe[^>]*src=["']([^"']+)["']""").findAll(html)
             for (ifr in iframes) {
                 val url = ifr.groupValues[1]
                 if (url.isNotEmpty() && !url.contains("google") && !url.contains("facebook")) {
                     return@withContext StreamResult(
                         videoUrl = url,
-                        isHls = false,
+                        isHls = url.contains(".m3u8"),
                         isEmbed = true,
                         serverName = "9Anime Embed",
-                        headers = mapOf("Referer" to episodeUrl)
+                        headers = mapOf("Referer" to episodeUrl, "User-Agent" to userAgent)
                     )
                 }
             }
 
-            // Return episode URL for clean embed rendering in PlayerActivity
+            // Fallback: Return episode URL for clean embed rendering in PlayerActivity
             return@withContext StreamResult(
                 videoUrl = episodeUrl,
                 isHls = false,

@@ -190,7 +190,7 @@ class AnimeYTSource : AnimeSource {
             val html = fetchHtml(episodeUrl)
             if (html.isEmpty()) return@withContext null
 
-            // Direct m3u8
+            // 1. Direct m3u8 in page
             val m3u8 = Regex("""https?://[^\s"'<>]+\.m3u8[^\s"'<>]*""").find(html)
             if (m3u8 != null) {
                 return@withContext StreamResult(
@@ -200,14 +200,79 @@ class AnimeYTSource : AnimeSource {
                 )
             }
 
-            // Look for iframe
+            // 2. Look for iframe and unpack Mytsumi containers
             val iframes = Regex("""<iframe[^>]*src=["']([^"']+)["']""").findAll(html)
             for (ifr in iframes) {
-                val ifrUrl = ifr.groupValues[1]
+                val rawUrl = ifr.groupValues[1]
+                val ifrUrl = rawUrl.replace("&amp;", "&")
+                if (ifrUrl.isEmpty() || ifrUrl.contains("google") || ifrUrl.contains("facebook")) continue
+
+                // Check for Mytsumi multi-server container
+                val cidMatch = Regex("""(?:value=|id=)([a-zA-Z0-9_-]+)""").find(ifrUrl)
+                if (cidMatch != null && (ifrUrl.contains("mytsumi") || ifrUrl.contains("options.php") || ifrUrl.contains("container.php"))) {
+                    val cid = cidMatch.groupValues[1]
+                    val containerCandidates = listOf(
+                        "https://mytsumi.com/multiplayer/contenedor.php?id=$cid",
+                        "https://mytsumi.com/container.php?id=$cid&open=1"
+                    )
+
+                    for (contUrl in containerCandidates) {
+                        try {
+                            val contHtml = fetchHtml(contUrl, ifrUrl)
+                            if (contHtml.isNotEmpty()) {
+                                // Check videoTabs JSON array
+                                val tabsMatch = Regex("""const\s+videoTabs\s*=\s*(\[.*?\]);""", RegexOption.DOT_MATCHES_ALL).find(contHtml)
+                                if (tabsMatch != null) {
+                                    val jsonArray = org.json.JSONArray(tabsMatch.groupValues[1])
+                                    for (i in 0 until jsonArray.length()) {
+                                        val tab = jsonArray.optJSONObject(i) ?: continue
+                                        val isFake = tab.optBoolean("is_fake_player", false)
+                                        val tabUrl = tab.optString("url", "").replace("\\/", "/")
+                                        val tabName = tab.optString("tab_name", "Servidor")
+                                        if (!isFake && tabUrl.startsWith("http")) {
+                                            return@withContext StreamResult(
+                                                videoUrl = tabUrl,
+                                                isHls = tabUrl.contains(".m3u8"),
+                                                isEmbed = !tabUrl.endsWith(".mp4"),
+                                                serverName = "AnimeYT ($tabName)",
+                                                headers = mapOf("Referer" to "https://mytsumi.com/", "User-Agent" to userAgent)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Check data-player-url attributes
+                                val dpUrl = Regex("""data-player-url=["']([^"']+)["']""").find(contHtml)?.groupValues?.get(1)
+                                if (!dpUrl.isNullOrEmpty() && dpUrl.startsWith("http")) {
+                                    return@withContext StreamResult(
+                                        videoUrl = dpUrl,
+                                        isHls = dpUrl.contains(".m3u8"),
+                                        isEmbed = !dpUrl.endsWith(".mp4"),
+                                        serverName = "AnimeYT Player",
+                                        headers = mapOf("Referer" to "https://mytsumi.com/", "User-Agent" to userAgent)
+                                    )
+                                }
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+
+                    // Fallback to container URL directly
+                    return@withContext StreamResult(
+                        videoUrl = "https://mytsumi.com/multiplayer/contenedor.php?id=$cid",
+                        isHls = false,
+                        isEmbed = true,
+                        serverName = "AnimeYT Contenedor",
+                        headers = mapOf("Referer" to "https://animeyt.cc/", "User-Agent" to userAgent)
+                    )
+                }
+
+                // General iframe player fallback
                 if (ifrUrl.contains("stream") || ifrUrl.contains("player") || ifrUrl.contains("embed")) {
                     return@withContext StreamResult(
                         videoUrl = ifrUrl,
-                        isHls = false,
+                        isHls = ifrUrl.contains(".m3u8"),
                         isEmbed = true,
                         serverName = "AnimeYT Player Embed",
                         headers = mapOf("Referer" to episodeUrl, "User-Agent" to userAgent)

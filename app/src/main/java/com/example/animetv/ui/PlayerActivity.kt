@@ -390,8 +390,8 @@ class PlayerActivity : AppCompatActivity() {
                     view?.loadUrl(target.replace("player.pelisserieshoy.com", "embed69.org"))
                     return true
                 }
-                // Do not allow navigating away from the player page
-                if (!target.contains("embed") && !target.contains("stream") && !target.contains("player") && !target.contains("animeyt") && !target.contains("sololatino") && !target.contains("jkanime")) {
+                // Block external app intents
+                if (target.startsWith("intent:") || target.startsWith("market:") || target.startsWith("tg:") || target.startsWith("whatsapp:")) {
                     return true
                 }
                 return false
@@ -452,8 +452,9 @@ class PlayerActivity : AppCompatActivity() {
 
                         var style = document.createElement('style');
                         style.innerHTML = 'html, body { margin: 0 !important; padding: 0 !important; background: #000 !important; overflow: hidden !important; width: 100vw !important; height: 100vh !important; }'
-                            + ' #DisplayContent, #PlayerDisplay, #player-frame, #iframeContainer.active, iframe[src*="http"], video { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; z-index: 999999 !important; border: none !important; }'
-                            + ' #tutorialOverlay, #tutorialBackdrop, .tutorial-overlay, #fakePlayer, .fake-player-container, header, footer, .banner, .ads { display: none !important; }';
+                            + ' #DisplayContent, #PlayerDisplay, #player-frame, #iframeContainer.active, #iframePlayer, #iframe-embed, .wb_-playerarea, .mytsumi-player, .mytsumi-stage, #mytsumi-media, video { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; z-index: 999999 !important; border: none !important; }'
+                            + ' .mytsumi-media iframe, #player-embed iframe, #iframe-embed, iframe[src*="stream"], iframe[src*="embed"], iframe[src*="bysesukior"], iframe[src*="megaplay"], iframe[src*="1anime"], iframe[src*="mega.nz"], iframe[src*="ok.ru"] { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; z-index: 999999 !important; border: none !important; }'
+                            + ' #tutorialOverlay, #tutorialBackdrop, .tutorial-overlay, #fakePlayer, .fake-player-container, header, footer, .banner, .ads, .wb__-cover { display: none !important; }';
                         document.head.appendChild(style);
 
                         function nukeDecoysAndPlay() {
@@ -467,19 +468,15 @@ class PlayerActivity : AppCompatActivity() {
                                 if (bd) bd.remove();
                             } catch(e) {}
 
-                            // 2. Annihilate invisible click-jacking overlays & fake players
+                            // 2. Annihilate invisible click-jacking overlays & fake players (protecting legit players)
                             try {
                                 var allElements = document.querySelectorAll('div, a, span, p');
                                 allElements.forEach(function(el) {
-                                    var txt = (el.textContent || '').trim();
-                                    // Match fake download/online play text decoy
-                                    if (txt === 'Ver online / Descargar' || txt.includes('Descargar') && el.tagName === 'A') {
-                                        el.remove();
-                                    }
+                                    if (el.id === 'mytsumi-intro-play' || el.id === 'azakuPlayButton' || el.classList.contains('mytsumi-tab')) return;
                                     var s = window.getComputedStyle(el);
                                     var z = parseInt(s.zIndex) || 0;
                                     if (z > 500 && (s.position === 'fixed' || s.position === 'absolute')) {
-                                        if (!el.querySelector('video, iframe')) {
+                                        if (!el.querySelector('video, iframe') && el.id !== 'mytsumi-player' && el.id !== 'servers-content') {
                                             var opacity = parseFloat(s.opacity) || 1;
                                             var bg = s.backgroundColor;
                                             if (opacity < 0.1 || bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent' || el.id.includes('ad') || el.className.includes('ad') || el.className.includes('overlay')) {
@@ -510,6 +507,26 @@ class PlayerActivity : AppCompatActivity() {
                                         btns[i].click();
                                         break;
                                     }
+                                }
+                            } catch(e) {}
+
+                            // 4b. Auto-click intro / container play buttons for AnimeYT / Mytsumi
+                            try {
+                                var azaku = document.getElementById('azakuPlayButton');
+                                if (azaku && !azaku.disabled) {
+                                    azaku.click();
+                                }
+                                var intro = document.getElementById('mytsumi-intro-play');
+                                if (intro) {
+                                    intro.click();
+                                }
+                                var firstTab = document.querySelector('.mytsumi-tab:not(.mytsumi-download-tab)');
+                                if (firstTab && !document.querySelector('.mytsumi-media iframe, .mytsumi-media video')) {
+                                    firstTab.click();
+                                }
+                                var firstServer = document.querySelector('#servers-content .server-item');
+                                if (firstServer) {
+                                    firstServer.click();
                                 }
                             } catch(e) {}
 
