@@ -113,6 +113,7 @@ class PlayerActivity : AppCompatActivity() {
     private var episodeTitle: String = ""
     private var episodeNumber: Int = 1
     private var hasAutoResumed: Boolean = false
+    private var currentYouTubeVideoId: String = ""
 
     inner class AndroidMediaBridge {
         @android.webkit.JavascriptInterface
@@ -404,13 +405,17 @@ class PlayerActivity : AppCompatActivity() {
             setSupportMultipleWindows(false)
         }
 
-        // Dedicated YouTube player handler (avoids Error 153 configuration failure and ad-nuker conflicts)
+        // Dedicated YouTube player handler (avoids Error 152-4 configuration failure and ad-nuker conflicts)
         if (playUrl.contains("youtube.com") || playUrl.contains("youtu.be")) {
             val videoId = if (playUrl.contains("/embed/")) {
                 playUrl.substringAfter("/embed/").substringBefore("?").substringBefore("/")
             } else {
                 Regex("""(?:v=|youtu\.be/)([\w-]+)""").find(playUrl)?.groupValues?.get(1) ?: ""
             }
+            currentYouTubeVideoId = videoId
+
+            // Crucial: Restore native Android WebView User-Agent so YouTube receives real platform integrity
+            cleanWebPlayer.settings.userAgentString = WebSettings.getDefaultUserAgent(this)
 
             val html = """
                 <!DOCTYPE html>
@@ -426,7 +431,7 @@ class PlayerActivity : AppCompatActivity() {
                 <body>
                     <iframe 
                         id="ytPlayer"
-                        src="https://www.youtube.com/embed/$videoId?autoplay=1&playsinline=1&enablejsapi=1&rel=0&modestbranding=1&origin=https://www.youtube.com" 
+                        src="https://www.youtube-nocookie.com/embed/$videoId?autoplay=1&playsinline=1&rel=0&controls=1&fs=1" 
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen" 
                         allowfullscreen>
                     </iframe>
@@ -441,7 +446,8 @@ class PlayerActivity : AppCompatActivity() {
                     playerBuffering.visibility = View.GONE
                 }
             }
-            cleanWebPlayer.loadDataWithBaseURL("https://www.youtube.com", html, "text/html", "UTF-8", null)
+            val baseUrl = if (referer.isNotEmpty()) referer else "https://sololatino.net"
+            cleanWebPlayer.loadDataWithBaseURL(baseUrl, html, "text/html", "UTF-8", null)
             return
         }
 
@@ -797,7 +803,26 @@ class PlayerActivity : AppCompatActivity() {
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (isEmbedMode) {
             when (keyCode) {
+                KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_INFO -> {
+                    if (currentYouTubeVideoId.isNotEmpty()) {
+                        openExternalYouTube(currentYouTubeVideoId)
+                        return true
+                    }
+                }
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                    if (currentYouTubeVideoId.isNotEmpty()) {
+                        cleanWebPlayer.evaluateJavascript(
+                            """
+                            (function() {
+                                var iframe = document.getElementById('ytPlayer');
+                                if (iframe && iframe.contentWindow) {
+                                    iframe.contentWindow.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
+                                }
+                            })();
+                            """.trimIndent(), null
+                        )
+                        return super.onKeyDown(keyCode, event)
+                    }
                     cleanWebPlayer.evaluateJavascript(
                         """
                         (function() {
@@ -887,6 +912,30 @@ class PlayerActivity : AppCompatActivity() {
             }
         }
         return super.onKeyDown(keyCode, event)
+    }
+
+    private fun openExternalYouTube(videoId: String) {
+        if (videoId.isEmpty()) return
+        val ytUri = Uri.parse("https://www.youtube.com/watch?v=$videoId")
+        val intents = listOf(
+            Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube:$videoId")),
+            Intent(Intent.ACTION_VIEW, ytUri).apply { setPackage("com.google.android.youtube.tv") },
+            Intent(Intent.ACTION_VIEW, ytUri).apply { setPackage("com.google.android.youtube") },
+            Intent(Intent.ACTION_VIEW, ytUri)
+        )
+        for (intent in intents) {
+            try {
+                if (intent.resolveActivity(packageManager) != null) {
+                    startActivity(intent)
+                    return
+                }
+            } catch (e: Exception) {}
+        }
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, ytUri))
+        } catch (e: Exception) {
+            Toast.makeText(this, "No se pudo abrir app de YouTube", Toast.LENGTH_SHORT).show()
+        }
     }
 
     override fun onPause() {

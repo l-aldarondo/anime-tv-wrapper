@@ -2,6 +2,7 @@ package com.example.animetv.ui
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
@@ -278,8 +279,26 @@ class DetailActivity : AppCompatActivity() {
                             videoUrl = detail.trailerUrl,
                             title = "Tráiler: ${detail.title}",
                             isHls = false,
-                            isEmbed = true
+                            isEmbed = true,
+                            referer = if (card.detailUrl.isNotEmpty()) card.detailUrl else "https://sololatino.net"
                         )
+                    }
+                    btnTrailer.setOnLongClickListener {
+                        val videoId = if (detail.trailerUrl.contains("/embed/")) {
+                            detail.trailerUrl.substringAfter("/embed/").substringBefore("?").substringBefore("/")
+                        } else {
+                            Regex("""(?:v=|youtu\.be/)([\w-]+)""").find(detail.trailerUrl)?.groupValues?.get(1) ?: ""
+                        }
+                        if (videoId.isNotEmpty()) {
+                            try {
+                                val ytUri = Uri.parse("https://www.youtube.com/watch?v=$videoId")
+                                startActivity(Intent(Intent.ACTION_VIEW, ytUri))
+                                Toast.makeText(this@DetailActivity, "Abriendo en YouTube...", Toast.LENGTH_SHORT).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(this@DetailActivity, "No se pudo abrir YouTube", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        true
                     }
                 } else {
                     btnTrailer.visibility = View.GONE
