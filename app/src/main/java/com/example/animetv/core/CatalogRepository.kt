@@ -31,16 +31,30 @@ object CatalogRepository {
     private var cachedAnimeYt: List<AnimeCard> = emptyList()
     private var cachedGogo: List<AnimeCard> = emptyList()
 
-    suspend fun loadHomeContent(forceRefresh: Boolean = false): HomeCatalogData = coroutineScope {
-        if (!forceRefresh && cachedLatinoTrending.isNotEmpty() && cachedJKRecent.isNotEmpty()) {
-            return@coroutineScope HomeCatalogData(
-                latinoTrending = cachedLatinoTrending,
-                soloStreamTrending = cachedSoloStream,
-                nineAnimeTrending = cachedNineAnime,
-                recentEpisodes = cachedJKRecent,
-                animeYtTrending = cachedAnimeYt,
-                gogoTrending = cachedGogo
-            )
+    suspend fun loadHomeContent(context: Context? = null, forceRefresh: Boolean = false): HomeCatalogData = coroutineScope {
+        if (!forceRefresh) {
+            if (cachedLatinoTrending.isNotEmpty() && cachedJKRecent.isNotEmpty()) {
+                return@coroutineScope HomeCatalogData(
+                    latinoTrending = cachedLatinoTrending,
+                    soloStreamTrending = cachedSoloStream,
+                    nineAnimeTrending = cachedNineAnime,
+                    recentEpisodes = cachedJKRecent,
+                    animeYtTrending = cachedAnimeYt,
+                    gogoTrending = cachedGogo
+                )
+            }
+            if (context != null) {
+                val diskCached = HomeCatalogCache.load(context)
+                if (diskCached != null && (diskCached.latinoTrending.isNotEmpty() || diskCached.recentEpisodes.isNotEmpty())) {
+                    cachedLatinoTrending = diskCached.latinoTrending
+                    cachedSoloStream = diskCached.soloStreamTrending
+                    cachedNineAnime = diskCached.nineAnimeTrending
+                    cachedJKRecent = diskCached.recentEpisodes
+                    cachedAnimeYt = diskCached.animeYtTrending
+                    cachedGogo = diskCached.gogoTrending
+                    return@coroutineScope diskCached
+                }
+            }
         }
 
         val latinoDeferred = async { runCatching { soloLatinoSource.getTrending() }.getOrDefault(emptyList()) }
@@ -64,7 +78,7 @@ object CatalogRepository {
         if (yt.isNotEmpty()) cachedAnimeYt = yt
         if (gogo.isNotEmpty()) cachedGogo = gogo
 
-        HomeCatalogData(
+        val freshData = HomeCatalogData(
             latinoTrending = cachedLatinoTrending,
             soloStreamTrending = cachedSoloStream,
             nineAnimeTrending = cachedNineAnime,
@@ -72,6 +86,12 @@ object CatalogRepository {
             animeYtTrending = cachedAnimeYt,
             gogoTrending = cachedGogo
         )
+
+        if (context != null && (freshData.latinoTrending.isNotEmpty() || freshData.recentEpisodes.isNotEmpty())) {
+            HomeCatalogCache.save(context, freshData)
+        }
+
+        freshData
     }
 
     suspend fun searchAll(query: String): List<AnimeCard> = coroutineScope {

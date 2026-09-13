@@ -67,7 +67,7 @@ class MainActivity : AppCompatActivity() {
         initViews()
         setupRecyclerView()
         setupListeners()
-        loadCatalog(forceRefresh = false)
+        loadInitialCatalog()
     }
 
     override fun onResume() {
@@ -129,29 +129,55 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnNavRefresh.setOnClickListener {
-            loadCatalog(forceRefresh = true)
+            fetchCatalog(forceRefresh = true, isSilent = false)
         }
     }
 
-    private fun loadCatalog(forceRefresh: Boolean) {
-        progressBarHome.visibility = View.VISIBLE
+    private fun loadInitialCatalog() {
+        // 1. Zero-latency instant cache load for the main screen
+        val cached = com.example.animetv.core.HomeCatalogCache.load(this)
+        if (cached != null && (cached.latinoTrending.isNotEmpty() || cached.recentEpisodes.isNotEmpty())) {
+            lastLoadedCatalog = cached
+            progressBarHome.visibility = View.GONE
+            val hero = cached.latinoTrending.firstOrNull() ?: cached.recentEpisodes.firstOrNull()
+            if (hero != null) {
+                bindHero(hero)
+            }
+            refreshRowsWithFavorites()
+            // 2. Silent background revalidation so new episodes update smoothly without blocking the UI
+            fetchCatalog(forceRefresh = true, isSilent = true)
+        } else {
+            // First time app launch without cache: show loading spinner
+            fetchCatalog(forceRefresh = false, isSilent = false)
+        }
+    }
+
+    private fun fetchCatalog(forceRefresh: Boolean, isSilent: Boolean) {
+        if (!isSilent) {
+            progressBarHome.visibility = View.VISIBLE
+        }
         lifecycleScope.launch {
             try {
-                val data = CatalogRepository.loadHomeContent(forceRefresh = forceRefresh)
+                val data = CatalogRepository.loadHomeContent(context = this@MainActivity, forceRefresh = forceRefresh)
                 lastLoadedCatalog = data
                 progressBarHome.visibility = View.GONE
 
-                // Set Hero Billboard
+                // Set Hero Billboard if not already bound or on manual refresh
                 val hero = data.latinoTrending.firstOrNull() ?: data.recentEpisodes.firstOrNull()
-                if (hero != null) {
+                if (hero != null && (featuredAnime == null || !isSilent)) {
                     bindHero(hero)
                 }
 
                 refreshRowsWithFavorites()
+                if (!isSilent && forceRefresh) {
+                    Toast.makeText(this@MainActivity, "Catálogo actualizado", Toast.LENGTH_SHORT).show()
+                }
             } catch (e: Exception) {
                 progressBarHome.visibility = View.GONE
                 e.printStackTrace()
-                Toast.makeText(this@MainActivity, "Error al cargar catálogo: ${e.message}", Toast.LENGTH_SHORT).show()
+                if (!isSilent) {
+                    Toast.makeText(this@MainActivity, "Error al cargar catálogo: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
