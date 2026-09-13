@@ -115,7 +115,11 @@ class NineAnimeSource : AnimeSource {
             val doc = Jsoup.parse(html, detailUrl)
 
             val title = doc.selectFirst("h1, .entry-title")?.text()?.trim() ?: "Anime"
-            val synopsis = doc.selectFirst(".description, .entry-content p, .synopsis")?.text()?.trim() ?: ""
+            val rawSynopsis = doc.selectFirst(".description, .entry-content p, .synopsis, .film-description")?.text()?.trim()
+                ?.ifEmpty { null }
+                ?: doc.selectFirst("meta[property=og:description], meta[name=description]")?.attr("content")?.trim()
+                ?: ""
+            val synopsis = android.text.Html.fromHtml(rawSynopsis, android.text.Html.FROM_HTML_MODE_LEGACY).toString().trim()
             val img = doc.selectFirst(".poster img, .cover img, img")
             val posterUrl = img?.attr("src")?.ifEmpty { img.attr("data-src") } ?: ""
 
@@ -145,10 +149,14 @@ class NineAnimeSource : AnimeSource {
                                 val rawTitle = anchor.attr("title").trim()
                                 val epTitle = if (rawTitle.isNotEmpty()) rawTitle else "Episode $epNum"
 
+                                val seasonNumMatch = Regex("""(?:season|temporada)-?(\d+)""", RegexOption.IGNORE_CASE).find(href)
+                                    ?: Regex("""(?:season|temporada)\s*(\d+)""", RegexOption.IGNORE_CASE).find(rawTitle)
+                                val seasonNum = seasonNumMatch?.groupValues?.get(1)?.toIntOrNull() ?: 1
+
                                 episodes.add(
                                     AnimeEpisode(
                                         episodeNumber = epNum,
-                                        seasonNumber = 1,
+                                        seasonNumber = seasonNum,
                                         title = epTitle,
                                         episodeUrl = href
                                     )
@@ -171,10 +179,14 @@ class NineAnimeSource : AnimeSource {
                     val epNum = numMatch?.groupValues?.get(1)?.toIntOrNull() ?: (episodes.size + 1)
                     val epTitle = if (text.isNotEmpty() && text.length < 60) text else "Episode $epNum"
 
+                    val seasonNumMatch = Regex("""(?:season|temporada)-?(\d+)""", RegexOption.IGNORE_CASE).find(href)
+                        ?: Regex("""(?:season|temporada)\s*(\d+)""", RegexOption.IGNORE_CASE).find(text)
+                    val seasonNum = seasonNumMatch?.groupValues?.get(1)?.toIntOrNull() ?: 1
+
                     episodes.add(
                         AnimeEpisode(
                             episodeNumber = epNum,
-                            seasonNumber = 1,
+                            seasonNumber = seasonNum,
                             title = epTitle,
                             episodeUrl = href
                         )

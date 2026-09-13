@@ -139,11 +139,19 @@ class JKAnimeSource : AnimeSource {
             val doc = Jsoup.parse(html, seriesUrl)
 
             val title = doc.selectFirst(".anime__details__title h3, h1, .title")?.text()?.trim() ?: "Anime"
-            val synopsis = doc.selectFirst(".anime__details__text p, .sinopsis")?.text()?.trim() ?: ""
+            val rawSynopsis = doc.selectFirst(".anime__details__text p, .sinopsis, .description")?.text()?.trim()
+                ?.ifEmpty { null }
+                ?: doc.selectFirst("meta[property=og:description], meta[name=description]")?.attr("content")?.trim()
+                ?: ""
+            val synopsis = android.text.Html.fromHtml(rawSynopsis, android.text.Html.FROM_HTML_MODE_LEGACY).toString().trim()
             val img = doc.selectFirst(".anime__details__pic, img.poster, .card-img img")
             val posterUrl = img?.attr("src")?.ifEmpty { img.attr("data-setbg") } ?: ""
 
             val genres = doc.select(".anime__details__widget ul li a, .genres a").map { it.text().trim() }
+
+            val seasonNumMatch = Regex("""(?:temporada|season)\s*(\d+)""", RegexOption.IGNORE_CASE).find(title)
+                ?: Regex("""(?:temporada|season)-?(\d+)""", RegexOption.IGNORE_CASE).find(seriesUrl)
+            val seasonNum = seasonNumMatch?.groupValues?.get(1)?.toIntOrNull() ?: 1
 
             // Extract episodes
             val episodes = mutableListOf<AnimeEpisode>()
@@ -178,6 +186,7 @@ class JKAnimeSource : AnimeSource {
                     episodes.add(
                         AnimeEpisode(
                             episodeNumber = i,
+                            seasonNumber = seasonNum,
                             title = "Episodio $i",
                             episodeUrl = "$cleanBase/$i/"
                         )

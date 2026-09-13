@@ -136,7 +136,11 @@ class AnimeYTSource : AnimeSource {
             }
 
             val title = doc.selectFirst("h1, .entry-title, .title")?.text()?.trim() ?: "Anime"
-            val synopsis = doc.selectFirst(".sinopsis, .overview, .entry-content p, .description")?.text()?.trim() ?: ""
+            val rawSynopsis = doc.selectFirst(".sinopsis, .overview, .entry-content p, .description, .film-description")?.text()?.trim()
+                ?.ifEmpty { null }
+                ?: doc.selectFirst("meta[property=og:description], meta[name=description]")?.attr("content")?.trim()
+                ?: ""
+            val synopsis = android.text.Html.fromHtml(rawSynopsis, android.text.Html.FROM_HTML_MODE_LEGACY).toString().trim()
             val img = doc.selectFirst(".poster img, .cover img, img")
             val posterUrl = img?.attr("data-src")?.ifEmpty { img.attr("src") } ?: ""
 
@@ -151,17 +155,22 @@ class AnimeYTSource : AnimeSource {
                 val epNumMatch = Regex("""(?:episodio|capitulo)-?(\d+)""", RegexOption.IGNORE_CASE).find(href)
                 val epNum = epNumMatch?.groupValues?.get(1)?.toIntOrNull() ?: (episodes.size + 1)
 
+                val seasonNumMatch = Regex("""(?:temporada|season)-?(\d+)""", RegexOption.IGNORE_CASE).find(href)
+                    ?: Regex("""(?:temporada|season)\s*(\d+)""", RegexOption.IGNORE_CASE).find(link.text())
+                val seasonNum = seasonNumMatch?.groupValues?.get(1)?.toIntOrNull() ?: 1
+
                 episodes.add(
                     AnimeEpisode(
                         episodeNumber = epNum,
-                        seasonNumber = 1,
+                        seasonNumber = seasonNum,
                         title = "Episodio $epNum",
                         episodeUrl = href
                     )
                 )
             }
 
-            val uniqueEpisodes = episodes.distinctBy { it.episodeUrl }.sortedBy { it.episodeNumber }
+            val uniqueEpisodes = episodes.distinctBy { it.episodeUrl }
+                .sortedWith(compareBy({ it.seasonNumber }, { it.episodeNumber }))
 
             AnimeDetail(
                 title = title,

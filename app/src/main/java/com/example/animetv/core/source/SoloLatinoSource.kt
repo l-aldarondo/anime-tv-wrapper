@@ -142,7 +142,11 @@ class SoloLatinoSource : AnimeSource {
             val doc = Jsoup.parse(html, detailUrl)
 
             val title = doc.selectFirst("h1, .entry-title, .title")?.text()?.trim() ?: "Anime"
-            val synopsis = doc.selectFirst(".overview, .sinopsis, .entry-content p")?.text()?.trim() ?: ""
+            val rawSynopsis = doc.selectFirst(".overview, .sinopsis, .entry-content p, .film-description, .description")?.text()?.trim()
+                ?.ifEmpty { null }
+                ?: doc.selectFirst("meta[property=og:description], meta[name=description]")?.attr("content")?.trim()
+                ?: ""
+            val synopsis = android.text.Html.fromHtml(rawSynopsis, android.text.Html.FROM_HTML_MODE_LEGACY).toString().trim()
             val img = doc.selectFirst(".poster img, .cover img, img")
             val posterUrl = img?.attr("src")?.ifEmpty { img.attr("data-src") } ?: ""
 
@@ -168,7 +172,7 @@ class SoloLatinoSource : AnimeSource {
                     AnimeEpisode(
                         episodeNumber = epNum,
                         seasonNumber = seasonNum,
-                        title = "T$seasonNum : $epTitle",
+                        title = epTitle,
                         episodeUrl = href
                     )
                 )

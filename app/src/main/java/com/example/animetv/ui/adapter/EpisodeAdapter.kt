@@ -13,10 +13,12 @@ import java.util.Locale
 class EpisodeAdapter(
     private var episodes: List<AnimeEpisode>,
     private var lastWatchedRecord: PlaybackRecord? = null,
+    private val onEpisodeFocus: ((AnimeEpisode) -> Unit)? = null,
     private val onEpisodeClick: (AnimeEpisode) -> Unit
 ) : RecyclerView.Adapter<EpisodeAdapter.ViewHolder>() {
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        val badge: TextView = view.findViewById(R.id.txtEpisodeBadge)
         val title: TextView = view.findViewById(R.id.txtEpisodeTitle)
         val progress: TextView = view.findViewById(R.id.txtEpisodeProgress)
     }
@@ -37,6 +39,7 @@ class EpisodeAdapter(
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val ep = episodes[position]
+        holder.badge.text = if (ep.seasonNumber > 1) "T${ep.seasonNumber} • E${ep.episodeNumber}" else "Episodio ${ep.episodeNumber}"
         holder.title.text = ep.title.ifEmpty { "Episodio ${ep.episodeNumber}" }
 
         val rec = lastWatchedRecord
@@ -59,6 +62,7 @@ class EpisodeAdapter(
         holder.itemView.setOnFocusChangeListener { view, hasFocus ->
             if (hasFocus) {
                 view.animate().scaleX(1.08f).scaleY(1.08f).translationZ(8f).setDuration(150).start()
+                onEpisodeFocus?.invoke(ep)
             } else {
                 view.animate().scaleX(1.0f).scaleY(1.0f).translationZ(0f).setDuration(150).start()
             }

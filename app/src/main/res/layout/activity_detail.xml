@@ -207,6 +207,47 @@
                 android:clipToPadding="false"
                 android:overScrollMode="never" />
 
+            <!-- Episode Spotlight / Description Box (Netflix-like) -->
+            <LinearLayout
+                android:id="@+id/layoutFocusedEpisodeInfo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="16dp"
+                android:padding="16dp"
+                android:background="@drawable/bg_spotlight_card"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/txtFocusedEpisodeHeader"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="#FFD54F"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/txtFocusedEpisodeTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/txtFocusedEpisodeSynopsis"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:lineSpacingExtra="3dp"
+                    android:textColor="#B0B3C6"
+                    android:textSize="13sp"
+                    android:maxLines="4"
+                    android:ellipsize="end" />
+
+            </LinearLayout>
+
         </LinearLayout>
 
     </ScrollView>

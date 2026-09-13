@@ -52,6 +52,10 @@ class DetailActivity : AppCompatActivity() {
     private lateinit var btnJumpEnd: Button
     private lateinit var recyclerEpisodes: RecyclerView
     private lateinit var progressBar: ProgressBar
+    private lateinit var layoutFocusedEpisodeInfo: View
+    private lateinit var txtFocusedEpisodeHeader: TextView
+    private lateinit var txtFocusedEpisodeTitle: TextView
+    private lateinit var txtFocusedEpisodeSynopsis: TextView
 
     private var currentCard: AnimeCard? = null
     private var currentDetail: AnimeDetail? = null
@@ -77,6 +81,10 @@ class DetailActivity : AppCompatActivity() {
         btnJumpEnd = findViewById(R.id.btnJumpEnd)
         recyclerEpisodes = findViewById(R.id.recyclerEpisodes)
         progressBar = findViewById(R.id.progressBarDetail)
+        layoutFocusedEpisodeInfo = findViewById(R.id.layoutFocusedEpisodeInfo)
+        txtFocusedEpisodeHeader = findViewById(R.id.txtFocusedEpisodeHeader)
+        txtFocusedEpisodeTitle = findViewById(R.id.txtFocusedEpisodeTitle)
+        txtFocusedEpisodeSynopsis = findViewById(R.id.txtFocusedEpisodeSynopsis)
 
         recyclerEpisodes.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
 
@@ -143,17 +151,47 @@ class DetailActivity : AppCompatActivity() {
         }
 
         episodeAdapter?.let { adapter ->
-            val list = if (isAscendingOrder) rawEpisodes.sortedBy { it.episodeNumber } else rawEpisodes.sortedByDescending { it.episodeNumber }
+            val list = getSortedEpisodes(rawEpisodes, isAscendingOrder)
             adapter.updateList(list, record)
+            if (list.isNotEmpty()) {
+                bindFocusedEpisode(list[0])
+            }
         }
+    }
+
+    private fun getSortedEpisodes(list: List<AnimeEpisode>, ascending: Boolean): List<AnimeEpisode> {
+        return if (ascending) {
+            list.sortedWith(compareBy({ it.seasonNumber }, { it.episodeNumber }))
+        } else {
+            list.sortedWith(compareByDescending<AnimeEpisode> { it.seasonNumber }.thenByDescending { it.episodeNumber })
+        }
+    }
+
+    private fun bindFocusedEpisode(ep: AnimeEpisode) {
+        layoutFocusedEpisodeInfo.visibility = View.VISIBLE
+        txtFocusedEpisodeHeader.text = if (ep.seasonNumber > 1) {
+            "TEMPORADA ${ep.seasonNumber} • EPISODIO ${ep.episodeNumber}"
+        } else {
+            "EPISODIO ${ep.episodeNumber}"
+        }
+        txtFocusedEpisodeTitle.text = ep.title.ifEmpty { "Episodio ${ep.episodeNumber}" }
+        val synopsisText = if (ep.synopsis.isNotEmpty()) {
+            ep.synopsis
+        } else {
+            currentDetail?.synopsis?.ifEmpty { "Sin descripción disponible." } ?: "Sin descripción disponible."
+        }
+        txtFocusedEpisodeSynopsis.text = synopsisText
     }
 
     private fun toggleSortOrder() {
         isAscendingOrder = !isAscendingOrder
         btnSortOrder.text = if (isAscendingOrder) "⇄ Orden: 1 ➔ N" else "⇄ Orden: N ➔ 1"
-        val sorted = if (isAscendingOrder) rawEpisodes.sortedBy { it.episodeNumber } else rawEpisodes.sortedByDescending { it.episodeNumber }
+        val sorted = getSortedEpisodes(rawEpisodes, isAscendingOrder)
         val record = currentCard?.let { com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this, it.detailUrl) }
         episodeAdapter?.updateList(sorted, record)
+        if (sorted.isNotEmpty()) {
+            bindFocusedEpisode(sorted[0])
+        }
         recyclerEpisodes.scrollToPosition(0)
     }
 
@@ -228,12 +266,20 @@ class DetailActivity : AppCompatActivity() {
 
                 if (detail.episodes.isNotEmpty()) {
                     val record = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this@DetailActivity, card.detailUrl)
-                    val sortedList = if (isAscendingOrder) detail.episodes.sortedBy { it.episodeNumber } else detail.episodes.sortedByDescending { it.episodeNumber }
-                    val adapter = EpisodeAdapter(sortedList, record) { ep ->
-                        playEpisode(detail, ep)
-                    }
+                    val sortedList = getSortedEpisodes(detail.episodes, isAscendingOrder)
+                    val adapter = EpisodeAdapter(
+                        episodes = sortedList,
+                        lastWatchedRecord = record,
+                        onEpisodeFocus = { ep ->
+                            bindFocusedEpisode(ep)
+                        },
+                        onEpisodeClick = { ep ->
+                            playEpisode(detail, ep)
+                        }
+                    )
                     episodeAdapter = adapter
                     recyclerEpisodes.adapter = adapter
+                    bindFocusedEpisode(sortedList[0])
 
                     refreshPlaybackState()
                     btnPlayFirst.requestFocus()
