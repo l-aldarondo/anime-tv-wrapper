@@ -26,6 +26,7 @@ class SoloLatinoTest {
     fun testMovieResolve() {
         val url = "https://sololatino.net/pelicula/parecido-a-un-asesinato"
         println("=== TESTING MOVIE RESOLVE: $url ===")
+
         val result = SoloLatinoStreamResolver.resolve(url)
         println("=== MOVIE RESULT: $result ===")
         org.junit.Assert.assertNotNull("StreamResult for movie should not be null", result)

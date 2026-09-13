@@ -25,11 +25,15 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.PlayerView
 import com.example.animetv.R
 import com.example.animetv.adblock.AdBlockEngine
@@ -212,9 +216,33 @@ class PlayerActivity : AppCompatActivity() {
             cleanWebPlayer.pauseTimers()
         } catch (e: Exception) {}
 
+        // Optimized load control: starts playback fast (1s buffer), rebuffers quickly (2s), and pre-buffers up to 120s
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                /* minBufferMs = */ 30_000,
+                /* maxBufferMs = */ 120_000,
+                /* bufferForPlaybackMs = */ 1_000,
+                /* bufferForPlaybackAfterRebufferMs = */ 2_000
+            )
+            .setBackBuffer(30_000, false)
+            .setPrioritizeTimeOverSizeThresholds(true)
+            .build()
+
+        // Prioritize hardware-accelerated H.264 on Android TV to eliminate decoding stutter
+        val trackSelector = DefaultTrackSelector(this).apply {
+            setParameters(
+                buildUponParameters()
+                    .setPreferredVideoMimeType(MimeTypes.VIDEO_H264)
+                    .setMaxVideoSize(1920, 1080)
+            )
+        }
+
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
             .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(25_000)
+            .setReadTimeoutMs(30_000)
+            .setKeepPostFor302Redirects(true)
 
         val reqHeaders = mutableMapOf<String, String>()
         if (referer.isNotEmpty()) {
@@ -230,22 +258,31 @@ class PlayerActivity : AppCompatActivity() {
         }
         httpDataSourceFactory.setDefaultRequestProperties(reqHeaders)
 
-        val mediaSourceFactory = DefaultMediaSourceFactory(httpDataSourceFactory)
+        val mediaSourceFactory = if (videoUrl.contains(".m3u8")) {
+            HlsMediaSource.Factory(httpDataSourceFactory)
+                .setAllowChunklessPreparation(true)
+        } else {
+            DefaultMediaSourceFactory(httpDataSourceFactory)
+        }
 
         exoPlayer = ExoPlayer.Builder(this)
+            .setLoadControl(loadControl)
+            .setTrackSelector(trackSelector)
             .setMediaSourceFactory(mediaSourceFactory)
             .build()
             .apply {
                 playerView.player = this
                 val mediaItem = MediaItem.Builder()
                     .setUri(Uri.parse(videoUrl))
-                    .setMimeType(if (videoUrl.contains(".m3u8")) androidx.media3.common.MimeTypes.APPLICATION_M3U8 else null)
+                    .setMimeType(if (videoUrl.contains(".m3u8")) MimeTypes.APPLICATION_M3U8 else null)
                     .build()
                 setMediaItem(mediaItem)
                 prepare()
                 playWhenReady = true
 
                 addListener(object : Player.Listener {
+                    private var retryCount = 0
+
                     override fun onPlaybackStateChanged(playbackState: Int) {
                         when (playbackState) {
                             Player.STATE_BUFFERING -> {
@@ -253,6 +290,7 @@ class PlayerActivity : AppCompatActivity() {
                             }
                             Player.STATE_READY -> {
                                 playerBuffering.visibility = View.GONE
+                                retryCount = 0
                                 if (!hasAutoResumed) {
                                     val saved = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForEpisode(this@PlayerActivity, episodeUrl)
                                         ?: com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this@PlayerActivity, animeDetailUrl)
@@ -280,7 +318,27 @@ class PlayerActivity : AppCompatActivity() {
 
                     override fun onPlayerError(error: PlaybackException) {
                         playerBuffering.visibility = View.GONE
-                        android.util.Log.e("PlayerActivity", "ExoPlayer error: ${error.errorCodeName} - ${error.message}", error)
+                        android.util.Log.e("PlayerActivity", "ExoPlayer error: ${error.errorCodeName} (${error.errorCode}) - ${error.message}", error)
+                        
+                        val isNetworkError = error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
+                                || error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+                                || error.errorCode == PlaybackException.ERROR_CODE_IO_UNSPECIFIED
+                                || error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
+                        if (isNetworkError && retryCount < 2) {
+                            retryCount++
+                            android.util.Log.w("PlayerActivity", "Retrying ExoPlayer playback after network hiccup (attempt $retryCount)...")
+                            playerBuffering.visibility = View.VISIBLE
+                            val currentPos = exoPlayer?.currentPosition ?: 0L
+                            mainHandler.postDelayed({
+                                exoPlayer?.prepare()
+                                if (currentPos > 1000) {
+                                    exoPlayer?.seekTo(currentPos)
+                                }
+                                exoPlayer?.play()
+                            }, 1200)
+                            return
+                        }
+
                         hasExoPlayerFailed = true
                         isInterceptingMedia = false
                         // Fallback gracefully without showing a black screen or infinite loops
@@ -365,7 +423,13 @@ class PlayerActivity : AppCompatActivity() {
                     <script>
                         var video = document.getElementById('hlsVideo');
                         if (Hls.isSupported()) {
-                            var hls = new Hls({ enableWorker: true });
+                            var hls = new Hls({
+                                enableWorker: true,
+                                maxBufferLength: 30,
+                                maxMaxBufferLength: 60,
+                                maxBufferSize: 60 * 1000 * 1000,
+                                lowLatencyMode: false
+                            });
                             hls.loadSource('$playUrl');
                             hls.attachMedia(video);
                             hls.on(Hls.Events.MANIFEST_PARSED, function() {
