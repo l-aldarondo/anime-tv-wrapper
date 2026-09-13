@@ -21,6 +21,9 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="#000000"
+        android:focusable="false"
+        android:focusableInTouchMode="false"
+        android:defaultFocusHighlightEnabled="false"
         android:visibility="gone" />
 
     <!-- Sleek Minimal TV OSD Overlay -->

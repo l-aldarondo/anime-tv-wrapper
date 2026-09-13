@@ -125,14 +125,52 @@ class PlayerActivity : AppCompatActivity() {
     private var embedDurationMs: Long = 0L
     private var isEmbedPlaying: Boolean = true
 
+    private fun updateEmbedOsdUI(currentPosMs: Long, totalDurationMs: Long) {
+        if (totalDurationMs > 0) {
+            val progress = ((currentPosMs * 1000) / totalDurationMs).toInt().coerceIn(0, 1000)
+            playerProgressBar.progress = progress
+            txtCurrentTime.text = formatTime(currentPosMs)
+            txtTotalTime.text = formatTime(totalDurationMs)
+        } else {
+            txtCurrentTime.text = formatTime(currentPosMs)
+            txtTotalTime.text = "--:--"
+        }
+    }
+
     private val embedProgressRunnable = object : Runnable {
         override fun run() {
-            if (isEmbedMode && isEmbedPlaying) {
-                embedCurrentPositionMs += 2000L
-                if (embedCurrentPositionMs > 4000L) {
-                    saveCurrentPlaybackPosition(embedCurrentPositionMs, embedDurationMs.coerceAtLeast(1440_000L))
+            if (isEmbedMode) {
+                if (isEmbedPlaying) {
+                    embedCurrentPositionMs += 1000L
+                    updateEmbedOsdUI(embedCurrentPositionMs, embedDurationMs)
+                    if (embedCurrentPositionMs > 3000L) {
+                        saveCurrentPlaybackPosition(embedCurrentPositionMs, embedDurationMs.coerceAtLeast(1440_000L))
+                    }
                 }
-                mainHandler.postDelayed(this, 2000L)
+                try {
+                    cleanWebPlayer.evaluateJavascript(
+                        """
+                        (function() {
+                            try {
+                                if (window.jwplayer && typeof window.jwplayer === 'function') {
+                                    var jw = window.jwplayer();
+                                    var pos = jw.getPosition();
+                                    var dur = jw.getDuration();
+                                    if (dur > 0 && typeof AndroidMediaBridge !== 'undefined') {
+                                        AndroidMediaBridge.onProgressUpdate(pos, dur);
+                                    }
+                                    return;
+                                }
+                                var v = document.querySelector('video');
+                                if (v && v.duration > 0 && typeof AndroidMediaBridge !== 'undefined') {
+                                    AndroidMediaBridge.onProgressUpdate(v.currentTime, v.duration);
+                                }
+                            } catch(e) {}
+                        })();
+                        """.trimIndent(), null
+                    )
+                } catch (e: Exception) {}
+                mainHandler.postDelayed(this, 1000L)
             }
         }
     }
@@ -145,6 +183,9 @@ class PlayerActivity : AppCompatActivity() {
             embedCurrentPositionMs = posMs
             embedDurationMs = durMs
             saveCurrentPlaybackPosition(posMs, durMs)
+            mainHandler.post {
+                updateEmbedOsdUI(posMs, durMs)
+            }
         }
     }
 
@@ -190,6 +231,11 @@ class PlayerActivity : AppCompatActivity() {
 
         playerView = findViewById(R.id.playerView)
         cleanWebPlayer = findViewById(R.id.cleanWebPlayer)
+        cleanWebPlayer.isFocusable = false
+        cleanWebPlayer.isFocusableInTouchMode = false
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            cleanWebPlayer.defaultFocusHighlightEnabled = false
+        }
         osdOverlay = findViewById(R.id.osdOverlay)
         txtPlayerTitle = findViewById(R.id.txtPlayerTitle)
         txtFeedback = findViewById(R.id.txtTransportFeedback)
@@ -448,8 +494,11 @@ class PlayerActivity : AppCompatActivity() {
         embedCurrentPositionMs = savedPosSec * 1000L
         embedDurationMs = saved?.durationMs ?: 0L
         isEmbedPlaying = true
+        osdOverlay.bringToFront()
+        updateEmbedOsdUI(embedCurrentPositionMs, embedDurationMs)
+        showOsdBriefly(4000L)
         mainHandler.removeCallbacks(embedProgressRunnable)
-        mainHandler.postDelayed(embedProgressRunnable, 2000L)
+        mainHandler.postDelayed(embedProgressRunnable, 1000L)
 
         cleanWebPlayer.settings.apply {
             javaScriptEnabled = true
@@ -645,10 +694,11 @@ class PlayerActivity : AppCompatActivity() {
                         }
 
                         var style = document.createElement('style');
-                        style.innerHTML = 'html, body { margin: 0 !important; padding: 0 !important; background: #000 !important; overflow: hidden !important; width: 100vw !important; height: 100vh !important; }'
-                            + ' #DisplayContent, #PlayerDisplay, #player-frame, #iframeContainer.active, #iframePlayer, #iframe-embed, .wb_-playerarea, .mytsumi-player, .mytsumi-stage, #mytsumi-media, video { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; z-index: 999999 !important; border: none !important; }'
-                            + ' .mytsumi-media iframe, #player-embed iframe, #iframe-embed, iframe[src*="stream"], iframe[src*="embed"], iframe[src*="bysesukior"], iframe[src*="megaplay"], iframe[src*="1anime"], iframe[src*="mega.nz"], iframe[src*="ok.ru"] { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; z-index: 999999 !important; border: none !important; }'
-                            + ' #tutorialOverlay, #tutorialBackdrop, .tutorial-overlay, #fakePlayer, .fake-player-container, header, footer, .banner, .ads, .wb__-cover { display: none !important; }';
+                        style.innerHTML = '*, *:focus, *:focus-visible, *:hover, *:active { outline: none !important; box-shadow: none !important; border: none !important; -webkit-tap-highlight-color: transparent !important; }'
+                            + ' html, body { margin: 0 !important; padding: 0 !important; background: #000 !important; overflow: hidden !important; width: 100vw !important; height: 100vh !important; }'
+                            + ' #DisplayContent, #PlayerDisplay, #player-frame, #iframeContainer.active, #iframePlayer, #iframe-embed, .wb_-playerarea, .mytsumi-player, .mytsumi-stage, #mytsumi-media, video { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; z-index: 10 !important; border: none !important; object-fit: contain !important; background: #000 !important; }'
+                            + ' .mytsumi-media iframe, #player-embed iframe, #iframe-embed, iframe[src*="stream"], iframe[src*="embed"], iframe[src*="bysesukior"], iframe[src*="megaplay"], iframe[src*="1anime"], iframe[src*="mega.nz"], iframe[src*="ok.ru"] { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; z-index: 10 !important; border: none !important; }'
+                            + ' .jw-controls, .jw-controlbar, .jw-display-icon-container, .jw-display-icon-display, .jw-logo, .jw-title, .jw-preview, .loading-content, .ps_-status, .server-notice, .ps_-block, .vjs-control-bar, .vjs-big-play-button, .plyr__controls, .play-button-circle, .play-btn, .fake-player-container, #servers-content, header, footer, .banner, .ads, .wb__-cover, #tutorialOverlay, #tutorialBackdrop, .tutorial-overlay, #fakePlayer { display: none !important; opacity: 0 !important; pointer-events: none !important; visibility: hidden !important; }';
                         document.head.appendChild(style);
 
                         function nukeDecoysAndPlay() {
@@ -749,12 +799,24 @@ class PlayerActivity : AppCompatActivity() {
                                 });
                             } catch(e) {}
 
-                            // 7. Auto-resume saved time
+                            // 7. Auto-resume or restart
                             try {
-                                var v = document.querySelector('video');
-                                if (v && !v.dataset.hasResumed && $savedPosSec > 5) {
-                                    v.currentTime = $savedPosSec;
-                                    v.dataset.hasResumed = 'true';
+                                if ($startOverFromBeginning) {
+                                    if (window.jwplayer && typeof window.jwplayer === 'function') {
+                                        window.jwplayer().seek(0);
+                                    }
+                                    var v = document.querySelector('video');
+                                    if (v) { v.currentTime = 0; }
+                                    try { localStorage.clear(); } catch(e) {}
+                                } else if ($savedPosSec > 5) {
+                                    if (window.jwplayer && typeof window.jwplayer === 'function') {
+                                        window.jwplayer().seek($savedPosSec);
+                                    }
+                                    var v = document.querySelector('video');
+                                    if (v && !v.dataset.hasResumed) {
+                                        v.currentTime = $savedPosSec;
+                                        v.dataset.hasResumed = 'true';
+                                    }
                                 }
                             } catch(e) {}
                         }
@@ -766,12 +828,21 @@ class PlayerActivity : AppCompatActivity() {
                         // 8. Periodic progress updates to Android
                         setInterval(function() {
                             try {
+                                if (window.jwplayer && typeof window.jwplayer === 'function') {
+                                    var jw = window.jwplayer();
+                                    var pos = jw.getPosition();
+                                    var dur = jw.getDuration();
+                                    if (dur > 0 && typeof AndroidMediaBridge !== 'undefined') {
+                                        AndroidMediaBridge.onProgressUpdate(pos, dur);
+                                    }
+                                    return;
+                                }
                                 var v = document.querySelector('video');
                                 if (v && !v.paused && v.duration > 0 && typeof AndroidMediaBridge !== 'undefined') {
                                     AndroidMediaBridge.onProgressUpdate(v.currentTime, v.duration);
                                 }
                             } catch(e) {}
-                        }, 4000);
+                        }, 1500);
                     })();
                 """.trimIndent()
                 view?.evaluateJavascript(cssScript, null)
@@ -783,6 +854,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun showOsdBriefly(delayMs: Long = 3500L) {
+        osdOverlay.bringToFront()
         osdOverlay.visibility = View.VISIBLE
         isOsdVisible = true
         mainHandler.removeCallbacks(hideOsdRunnable)
@@ -790,6 +862,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun showOsd() {
+        osdOverlay.bringToFront()
         osdOverlay.visibility = View.VISIBLE
         isOsdVisible = true
         mainHandler.removeCallbacks(hideOsdRunnable)
@@ -847,7 +920,12 @@ class PlayerActivity : AppCompatActivity() {
                         openExternalYouTube(currentYouTubeVideoId)
                         return true
                     }
-                    if (!isOsdVisible) showOsdBriefly() else hideOsd()
+                    if (!isOsdVisible) {
+                        updateEmbedOsdUI(embedCurrentPositionMs, embedDurationMs)
+                        showOsdBriefly()
+                    } else {
+                        hideOsd()
+                    }
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
@@ -862,173 +940,220 @@ class PlayerActivity : AppCompatActivity() {
                             })();
                             """.trimIndent(), null
                         )
-                        return super.onKeyDown(keyCode, event)
+                        return true
                     }
 
-                    // 1. Dispatch native hardware Space and MediaPlayPause keys directly to WebView focused element/iframe
-                    cleanWebPlayer.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SPACE))
-                    cleanWebPlayer.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_SPACE))
-                    cleanWebPlayer.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE))
-                    cleanWebPlayer.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE))
-
-                    // 2. Dispatch synthetic touch tap on the center of the video screen
-                    val now = SystemClock.uptimeMillis()
-                    val w = if (cleanWebPlayer.width > 0) cleanWebPlayer.width else 1920
-                    val h = if (cleanWebPlayer.height > 0) cleanWebPlayer.height else 1080
-                    val cx = w / 2f
-                    val cy = h / 2f
-                    cleanWebPlayer.dispatchTouchEvent(MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, cx, cy, 0))
-                    cleanWebPlayer.dispatchTouchEvent(MotionEvent.obtain(now, now + 50, MotionEvent.ACTION_UP, cx, cy, 0))
-
-                    // 3. Evaluate multi-origin postMessage and direct HTML5 JS
+                    // Deterministic toggle without synthetic touch events to prevent Android TV yellow focus glow
                     cleanWebPlayer.evaluateJavascript(
                         """
                         (function() {
                             try {
-                                if (window.player && typeof window.player.togglePlay === 'function') window.player.togglePlay();
                                 if (window.jwplayer && typeof window.jwplayer === 'function') {
-                                    var st = window.jwplayer().getState();
-                                    if (st === 'playing') window.jwplayer().pause(); else window.jwplayer().play();
+                                    var jw = window.jwplayer();
+                                    var st = jw.getState();
+                                    if (st === 'playing') {
+                                        jw.pause();
+                                    } else {
+                                        jw.play();
+                                    }
+                                    return;
                                 }
+                            } catch(e) {}
+                            try {
                                 var v = document.querySelector('video');
-                                if (v) { if (v.paused) v.play(); else v.pause(); }
-                                for (var i = 0; i < window.frames.length; i++) {
-                                    try {
-                                        window.frames[i].postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
-                                        window.frames[i].postMessage('{"event":"command","func":"playVideo","args":""}', '*');
-                                        window.frames[i].postMessage('{"action":"toggle"}', '*');
-                                        window.frames[i].postMessage('{"method":"toggle"}', '*');
-                                        window.frames[i].postMessage({ type: 'player:playPause' }, '*');
-                                    } catch(e) {}
+                                if (v) {
+                                    if (v.paused) {
+                                        v.play();
+                                    } else {
+                                        v.pause();
+                                    }
+                                    return;
                                 }
-                                var btn = document.querySelector('.plyr__control--overlaid, .play-button-overlay, #play-button, .fake-player-container, .vjs-big-play-button, .jw-display-icon-display');
-                                if (btn) btn.click();
-                            } catch(e){}
+                            } catch(e) {}
+                            try {
+                                for (var i = 0; i < window.frames.length; i++) {
+                                    window.frames[i].postMessage({ type: 'player:playPause' }, '*');
+                                    window.frames[i].postMessage('{"action":"toggle"}', '*');
+                                }
+                            } catch(e) {}
                         })();
                         """.trimIndent(), null
                     )
                     isEmbedPlaying = !isEmbedPlaying
                     if (isEmbedPlaying) {
-                        mainHandler.removeCallbacks(embedProgressRunnable)
-                        mainHandler.postDelayed(embedProgressRunnable, 2000L)
                         showFeedback("▶ Reproduciendo")
                     } else {
-                        mainHandler.removeCallbacks(embedProgressRunnable)
                         saveCurrentPlaybackPosition(embedCurrentPositionMs, embedDurationMs.coerceAtLeast(1440_000L))
                         showFeedback("⏸ Pausa")
                     }
+                    updateEmbedOsdUI(embedCurrentPositionMs, embedDurationMs)
+                    showOsdBriefly()
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
-                    // 1. Dispatch native hardware Right Arrow to web player
-                    cleanWebPlayer.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT))
-                    cleanWebPlayer.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_RIGHT))
-
-                    // 2. Cross-origin broadcast + HTML5 seek
                     cleanWebPlayer.evaluateJavascript(
                         """
                         (function() {
                             try {
-                                if (window.player && typeof window.player.forward === 'function') window.player.forward(10);
-                                if (window.jwplayer && typeof window.jwplayer === 'function') window.jwplayer().seek(window.jwplayer().getPosition() + 10);
-                                var v = document.querySelector('video');
-                                if (v) v.currentTime = Math.min(v.currentTime + 10, v.duration || 99999);
-                                for (var i = 0; i < window.frames.length; i++) {
-                                    try {
-                                        window.frames[i].postMessage('{"action":"seek","value":10}', '*');
-                                        window.frames[i].postMessage({ type: 'player:seek', offset: 10 }, '*');
-                                    } catch(e) {}
+                                if (window.jwplayer && typeof window.jwplayer === 'function') {
+                                    var jw = window.jwplayer();
+                                    jw.seek(jw.getPosition() + 10);
+                                    return;
                                 }
-                            } catch(e){}
+                            } catch(e) {}
+                            try {
+                                var v = document.querySelector('video');
+                                if (v) {
+                                    v.currentTime = Math.min((v.currentTime || 0) + 10, v.duration || 99999);
+                                    return;
+                                }
+                            } catch(e) {}
+                            try {
+                                for (var i = 0; i < window.frames.length; i++) {
+                                    window.frames[i].postMessage({ type: 'player:seek', offset: 10 }, '*');
+                                }
+                            } catch(e) {}
                         })();
                         """.trimIndent(), null
                     )
                     embedCurrentPositionMs += 10000L
+                    updateEmbedOsdUI(embedCurrentPositionMs, embedDurationMs)
                     saveCurrentPlaybackPosition(embedCurrentPositionMs, embedDurationMs.coerceAtLeast(1440_000L))
                     showFeedback("⏩ +10s")
+                    showOsdBriefly()
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_MEDIA_REWIND -> {
-                    // 1. Dispatch native hardware Left Arrow to web player
-                    cleanWebPlayer.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_LEFT))
-                    cleanWebPlayer.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_LEFT))
-
-                    // 2. Cross-origin broadcast + HTML5 seek
                     cleanWebPlayer.evaluateJavascript(
                         """
                         (function() {
                             try {
-                                if (window.player && typeof window.player.rewind === 'function') window.player.rewind(10);
-                                if (window.jwplayer && typeof window.jwplayer === 'function') window.jwplayer().seek(Math.max(0, window.jwplayer().getPosition() - 10));
-                                var v = document.querySelector('video');
-                                if (v) v.currentTime = Math.max(0, v.currentTime - 10);
-                                for (var i = 0; i < window.frames.length; i++) {
-                                    try {
-                                        window.frames[i].postMessage('{"action":"seek","value":-10}', '*');
-                                        window.frames[i].postMessage({ type: 'player:seek', offset: -10 }, '*');
-                                    } catch(e) {}
+                                if (window.jwplayer && typeof window.jwplayer === 'function') {
+                                    var jw = window.jwplayer();
+                                    jw.seek(Math.max(0, jw.getPosition() - 10));
+                                    return;
                                 }
-                            } catch(e){}
+                            } catch(e) {}
+                            try {
+                                var v = document.querySelector('video');
+                                if (v) {
+                                    v.currentTime = Math.max(0, (v.currentTime || 0) - 10);
+                                    return;
+                                }
+                            } catch(e) {}
+                            try {
+                                for (var i = 0; i < window.frames.length; i++) {
+                                    window.frames[i].postMessage({ type: 'player:seek', offset: -10 }, '*');
+                                }
+                            } catch(e) {}
                         })();
                         """.trimIndent(), null
                     )
                     embedCurrentPositionMs = (embedCurrentPositionMs - 10000L).coerceAtLeast(0L)
+                    updateEmbedOsdUI(embedCurrentPositionMs, embedDurationMs)
                     saveCurrentPlaybackPosition(embedCurrentPositionMs, embedDurationMs.coerceAtLeast(1440_000L))
                     showFeedback("⏪ -10s")
+                    showOsdBriefly()
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_UP -> {
-                    cleanWebPlayer.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT))
-                    cleanWebPlayer.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_RIGHT))
                     cleanWebPlayer.evaluateJavascript(
                         """
                         (function() {
                             try {
-                                if (window.player && typeof window.player.forward === 'function') window.player.forward(85);
-                                if (window.jwplayer && typeof window.jwplayer === 'function') window.jwplayer().seek(window.jwplayer().getPosition() + 85);
-                                var v = document.querySelector('video');
-                                if (v) v.currentTime = Math.min(v.currentTime + 85, v.duration || 99999);
-                                for (var i = 0; i < window.frames.length; i++) {
-                                    try {
-                                        window.frames[i].postMessage('{"action":"seek","value":85}', '*');
-                                        window.frames[i].postMessage({ type: 'player:seek', offset: 85 }, '*');
-                                    } catch(e) {}
+                                if (window.jwplayer && typeof window.jwplayer === 'function') {
+                                    var jw = window.jwplayer();
+                                    jw.seek(jw.getPosition() + 85);
+                                    return;
                                 }
-                            } catch(e){}
+                            } catch(e) {}
+                            try {
+                                var v = document.querySelector('video');
+                                if (v) {
+                                    v.currentTime = Math.min((v.currentTime || 0) + 85, v.duration || 99999);
+                                    return;
+                                }
+                            } catch(e) {}
+                            try {
+                                for (var i = 0; i < window.frames.length; i++) {
+                                    window.frames[i].postMessage({ type: 'player:seek', offset: 85 }, '*');
+                                }
+                            } catch(e) {}
                         })();
                         """.trimIndent(), null
                     )
                     embedCurrentPositionMs += 85000L
+                    updateEmbedOsdUI(embedCurrentPositionMs, embedDurationMs)
                     saveCurrentPlaybackPosition(embedCurrentPositionMs, embedDurationMs.coerceAtLeast(1440_000L))
                     showFeedback("⏩ Salto de Intro (+85s)")
+                    showOsdBriefly()
+                    return true
+                }
+                KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    if (!isOsdVisible) {
+                        updateEmbedOsdUI(embedCurrentPositionMs, embedDurationMs)
+                        showOsdBriefly()
+                    } else {
+                        cleanWebPlayer.evaluateJavascript(
+                            """
+                            (function() {
+                                try {
+                                    if (window.jwplayer && typeof window.jwplayer === 'function') {
+                                        var jw = window.jwplayer();
+                                        jw.seek(Math.max(0, jw.getPosition() - 30));
+                                        return;
+                                    }
+                                } catch(e) {}
+                                try {
+                                    var v = document.querySelector('video');
+                                    if (v) {
+                                        v.currentTime = Math.max(0, (v.currentTime || 0) - 30);
+                                        return;
+                                    }
+                                } catch(e) {}
+                            })();
+                            """.trimIndent(), null
+                        )
+                        embedCurrentPositionMs = (embedCurrentPositionMs - 30000L).coerceAtLeast(0L)
+                        updateEmbedOsdUI(embedCurrentPositionMs, embedDurationMs)
+                        saveCurrentPlaybackPosition(embedCurrentPositionMs, embedDurationMs.coerceAtLeast(1440_000L))
+                        showFeedback("⏪ -30s")
+                        showOsdBriefly()
+                    }
                     return true
                 }
                 KeyEvent.KEYCODE_0, KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
-                    // Restart from beginning (0:00)
                     cleanWebPlayer.evaluateJavascript(
                         """
                         (function() {
                             try {
-                                if (window.player && typeof window.player.restart === 'function') window.player.restart();
                                 if (window.jwplayer && typeof window.jwplayer === 'function') {
                                     window.jwplayer().seek(0);
                                     window.jwplayer().play();
+                                    return;
                                 }
+                            } catch(e) {}
+                            try {
                                 var v = document.querySelector('video');
-                                if (v) { v.currentTime = 0; if (v.paused) v.play(); }
-                                for (var i = 0; i < window.frames.length; i++) {
-                                    try {
-                                        window.frames[i].postMessage('{"action":"seek","value":0}', '*');
-                                        window.frames[i].postMessage({ type: 'player:seek', offset: 0 }, '*');
-                                    } catch(e) {}
+                                if (v) {
+                                    v.currentTime = 0;
+                                    if (v.paused) v.play();
+                                    return;
                                 }
-                            } catch(e){}
+                            } catch(e) {}
+                            try {
+                                for (var i = 0; i < window.frames.length; i++) {
+                                    window.frames[i].postMessage({ type: 'player:seek', offset: 0 }, '*');
+                                }
+                            } catch(e) {}
                         })();
                         """.trimIndent(), null
                     )
                     embedCurrentPositionMs = 0L
+                    updateEmbedOsdUI(0L, embedDurationMs)
                     saveCurrentPlaybackPosition(0L, embedDurationMs.coerceAtLeast(1440_000L))
                     showFeedback("↺ Reiniciando desde 00:00")
+                    showOsdBriefly()
                     return true
                 }
                 KeyEvent.KEYCODE_BACK -> {

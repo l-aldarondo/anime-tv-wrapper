@@ -130,12 +130,21 @@ object PlaybackHistoryStore {
 
     fun getRecordForAnime(context: Context, animeDetailUrl: String): PlaybackRecord? {
         if (animeDetailUrl.isEmpty()) return null
-        return loadAll(context).firstOrNull { it.animeDetailUrl == animeDetailUrl }
+        val target = animeDetailUrl.trimEnd('/')
+        return loadAll(context).firstOrNull {
+            val rAnime = it.animeDetailUrl.trimEnd('/')
+            val rEp = it.episodeUrl.trimEnd('/')
+            rAnime == target || rEp == target ||
+            (target.contains("/anime/") && rAnime.contains(target.substringAfter("/anime/").trimEnd('/'))) ||
+            (target.contains("/serie/") && rAnime.contains(target.substringAfter("/serie/").trimEnd('/'))) ||
+            (target.contains("/pelicula/") && rAnime.contains(target.substringAfter("/pelicula/").trimEnd('/')))
+        }
     }
 
     fun getRecordForEpisode(context: Context, episodeUrl: String): PlaybackRecord? {
         if (episodeUrl.isEmpty()) return null
-        return loadAll(context).firstOrNull { it.episodeUrl == episodeUrl }
+        val target = episodeUrl.trimEnd('/')
+        return loadAll(context).firstOrNull { it.episodeUrl.trimEnd('/') == target || it.animeDetailUrl.trimEnd('/') == target }
     }
 
     private fun loadAllRaw(context: Context): List<PlaybackRecord> {
