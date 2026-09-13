@@ -37,6 +37,7 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.PlayerView
 import com.example.animetv.R
 import com.example.animetv.adblock.AdBlockEngine
+import com.example.animetv.core.util.CoverUtils
 import java.util.Locale
 
 class PlayerActivity : AppCompatActivity() {
@@ -180,8 +181,14 @@ class PlayerActivity : AppCompatActivity() {
         isEmbedMode = intent.getBooleanExtra(EXTRA_IS_EMBED, false)
 
         animeDetailUrl = intent.getStringExtra(EXTRA_ANIME_URL) ?: ""
-        animeTitle = intent.getStringExtra(EXTRA_ANIME_TITLE) ?: ""
-        posterUrl = intent.getStringExtra(EXTRA_POSTER_URL) ?: ""
+        val rawPoster = intent.getStringExtra(EXTRA_POSTER_URL) ?: ""
+        posterUrl = if (CoverUtils.isValidCover(rawPoster)) {
+            rawPoster.trim()
+        } else {
+            val existing = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this, animeDetailUrl)
+                ?: com.example.animetv.core.history.PlaybackHistoryStore.getRecordForEpisode(this, episodeUrl)
+            if (existing != null && CoverUtils.isValidCover(existing.posterUrl)) existing.posterUrl else ""
+        }
         sourceName = intent.getStringExtra(EXTRA_SOURCE) ?: ""
         episodeUrl = intent.getStringExtra(EXTRA_EPISODE_URL) ?: ""
         episodeTitle = intent.getStringExtra(EXTRA_EPISODE_TITLE) ?: ""

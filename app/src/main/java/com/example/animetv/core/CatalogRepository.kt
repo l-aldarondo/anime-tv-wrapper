@@ -12,6 +12,7 @@ import com.example.animetv.core.source.JKAnimeSource
 import com.example.animetv.core.source.NineAnimeSource
 import com.example.animetv.core.source.SoloLatinoSource
 import com.example.animetv.core.source.SoloStreamSource
+import com.example.animetv.core.util.CoverUtils
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 
@@ -134,7 +135,7 @@ object CatalogRepository {
     }
 
     suspend fun getAnimeDetail(card: AnimeCard): AnimeDetail {
-        return when {
+        val detail = when {
             card.source.contains("SoloStream", ignoreCase = true) ->
                 soloStreamSource.getAnimeDetail(card.detailUrl)
             card.source.contains("9Anime", ignoreCase = true) || card.detailUrl.contains("9anime") ->
@@ -149,6 +150,8 @@ object CatalogRepository {
                 gogoAnimeSource.getAnimeDetail(card.detailUrl)
             else -> jkAnimeSource.getAnimeDetail(card.detailUrl)
         }
+        val bestPoster = CoverUtils.pickBestCover(detail.posterUrl, card.posterUrl)
+        return detail.copy(posterUrl = bestPoster)
     }
 
     suspend fun resolveStream(context: Context, episodeUrl: String, source: String): StreamResult? {

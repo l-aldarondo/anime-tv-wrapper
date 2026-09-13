@@ -23,6 +23,7 @@ import com.example.animetv.core.CatalogRepository
 import com.example.animetv.core.model.AnimeCard
 import com.example.animetv.core.model.AnimeDetail
 import com.example.animetv.core.model.AnimeEpisode
+import com.example.animetv.core.util.CoverUtils
 import com.example.animetv.ui.adapter.EpisodeAdapter
 import kotlinx.coroutines.launch
 
@@ -206,18 +207,22 @@ class DetailActivity : AppCompatActivity() {
         txtMeta.text = "${card.source}  •  ${card.episodeBadge.ifEmpty { "Serie" }}"
         txtSynopsis.text = card.synopsis.ifEmpty { "Cargando sinopsis y capítulos..." }
 
-        if (card.posterUrl.isNotEmpty()) {
+        val initPoster = if (CoverUtils.isValidCover(card.posterUrl)) card.posterUrl else ""
+        if (initPoster.isNotEmpty()) {
             Glide.with(this)
-                .load(card.posterUrl)
+                .load(initPoster)
                 .centerCrop()
+                .placeholder(R.drawable.bg_card_poster_placeholder)
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
                 .into(imgPoster)
 
             Glide.with(this)
-                .load(card.posterUrl)
+                .load(initPoster)
                 .centerCrop()
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
                 .into(imgBackdrop)
+        } else {
+            imgPoster.setImageResource(R.drawable.bg_card_poster_placeholder)
         }
 
         updateFavoriteButton(card)
@@ -241,10 +246,11 @@ class DetailActivity : AppCompatActivity() {
             FavoritesStore.remove(this, card.detailUrl)
             Toast.makeText(this, "Eliminado de Mi Lista", Toast.LENGTH_SHORT).show()
         } else {
+            val bestPoster = CoverUtils.pickBestCover(currentDetail?.posterUrl, card.posterUrl)
             val fav = FavoriteItem(
                 url = card.detailUrl,
                 title = card.title,
-                poster = card.posterUrl,
+                poster = bestPoster,
                 source = card.source
             )
             FavoritesStore.add(this, fav)
@@ -261,6 +267,22 @@ class DetailActivity : AppCompatActivity() {
                 currentDetail = detail
                 rawEpisodes = detail.episodes
                 progressBar.visibility = View.GONE
+
+                val bestPoster = CoverUtils.pickBestCover(detail.posterUrl, card.posterUrl)
+                if (bestPoster.isNotEmpty()) {
+                    Glide.with(this@DetailActivity)
+                        .load(bestPoster)
+                        .centerCrop()
+                        .placeholder(R.drawable.bg_card_poster_placeholder)
+                        .diskCacheStrategy(DiskCacheStrategy.ALL)
+                        .into(imgPoster)
+
+                    Glide.with(this@DetailActivity)
+                        .load(bestPoster)
+                        .centerCrop()
+                        .diskCacheStrategy(DiskCacheStrategy.ALL)
+                        .into(imgBackdrop)
+                }
 
                 txtTitle.text = detail.title
                 val genresStr = if (detail.genres.isNotEmpty()) detail.genres.take(3).joinToString(", ") else "Anime"
@@ -340,6 +362,7 @@ class DetailActivity : AppCompatActivity() {
             try {
                 Toast.makeText(this@DetailActivity, "Conectando al reproductor...", Toast.LENGTH_SHORT).show()
                 val stream = CatalogRepository.resolveStream(this@DetailActivity, episode.episodeUrl, detail.source)
+                val bestPoster = CoverUtils.pickBestCover(detail.posterUrl, currentCard?.posterUrl)
                 progressBar.visibility = View.GONE
 
                 if (stream != null && stream.videoUrl.isNotEmpty()) {
@@ -352,7 +375,7 @@ class DetailActivity : AppCompatActivity() {
                         referer = stream.headers["Referer"] ?: "",
                         animeDetailUrl = detail.detailUrl,
                         animeTitle = detail.title,
-                        posterUrl = detail.posterUrl,
+                        posterUrl = bestPoster,
                         source = detail.source,
                         episodeUrl = episode.episodeUrl,
                         episodeTitle = episode.title,
@@ -369,7 +392,7 @@ class DetailActivity : AppCompatActivity() {
                         referer = detail.detailUrl,
                         animeDetailUrl = detail.detailUrl,
                         animeTitle = detail.title,
-                        posterUrl = detail.posterUrl,
+                        posterUrl = bestPoster,
                         source = detail.source,
                         episodeUrl = episode.episodeUrl,
                         episodeTitle = episode.title,
@@ -398,6 +421,7 @@ class DetailActivity : AppCompatActivity() {
     private fun playDirectUrl(url: String, title: String) {
         progressBar.visibility = View.VISIBLE
         lifecycleScope.launch {
+            val bestPoster = CoverUtils.pickBestCover(currentDetail?.posterUrl, currentCard?.posterUrl)
             try {
                 val sourceName = currentCard?.source ?: currentDetail?.source ?: ""
                 val stream = if (sourceName.isNotEmpty()) {
@@ -414,7 +438,7 @@ class DetailActivity : AppCompatActivity() {
                         referer = stream.headers["Referer"] ?: "",
                         animeDetailUrl = currentCard?.detailUrl ?: url,
                         animeTitle = currentCard?.title ?: title,
-                        posterUrl = currentCard?.posterUrl ?: "",
+                        posterUrl = bestPoster,
                         source = sourceName,
                         episodeUrl = url,
                         episodeTitle = title,
@@ -435,7 +459,7 @@ class DetailActivity : AppCompatActivity() {
                 referer = "",
                 animeDetailUrl = currentCard?.detailUrl ?: url,
                 animeTitle = currentCard?.title ?: title,
-                posterUrl = currentCard?.posterUrl ?: "",
+                posterUrl = bestPoster,
                 source = currentCard?.source ?: "",
                 episodeUrl = url,
                 episodeTitle = title,

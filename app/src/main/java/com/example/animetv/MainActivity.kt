@@ -28,12 +28,16 @@ import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions
 import com.example.animetv.core.CatalogRepository
 import com.example.animetv.core.HomeCatalogData
 import com.example.animetv.core.history.PlaybackHistoryStore
+import com.example.animetv.core.history.PlaybackRecord
 import com.example.animetv.core.model.AnimeCard
 import com.example.animetv.core.model.CatalogRow
+import com.example.animetv.core.util.CoverUtils
 import com.example.animetv.ui.DetailActivity
 import com.example.animetv.ui.adapter.AnimeCardAdapter
 import com.example.animetv.ui.adapter.CatalogRowAdapter
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 100% Native Android TV application entry point (Netflix / Stremio Architecture).
@@ -285,6 +289,7 @@ class MainActivity : AppCompatActivity() {
         // 1. "Continuar Viendo" Row (Always First, dynamic chronological order of what was watched last)
         val historyRecords = PlaybackHistoryStore.loadAll(this)
         if (historyRecords.isNotEmpty()) {
+            val missingCovers = mutableListOf<PlaybackRecord>()
             val continueCards = historyRecords.map { rec ->
                 val progressPct = if (rec.durationMs > 0) ((rec.positionMs * 100) / rec.durationMs).toInt() else 0
                 val badge = when {
@@ -293,11 +298,30 @@ class MainActivity : AppCompatActivity() {
                     progressPct > 0 -> "$progressPct%"
                     else -> "Viendo"
                 }
+
+                var resolvedPoster = if (CoverUtils.isValidCover(rec.posterUrl)) rec.posterUrl.trim() else ""
+                if (resolvedPoster.isEmpty()) {
+                    val catalogPoster = findCoverInCatalog(data, rec.animeDetailUrl, rec.animeTitle)
+                    if (catalogPoster.isNotEmpty()) {
+                        resolvedPoster = catalogPoster
+                        PlaybackHistoryStore.updatePoster(this, rec.animeDetailUrl, rec.episodeUrl, catalogPoster)
+                    } else {
+                        missingCovers.add(rec)
+                    }
+                }
+
+                val cleanDetailUrl = when {
+                    rec.animeDetailUrl.isNotEmpty() && !rec.animeDetailUrl.contains("/temporada-") -> rec.animeDetailUrl
+                    rec.animeDetailUrl.contains("/temporada-") -> rec.animeDetailUrl.substringBefore("/temporada-")
+                    rec.episodeUrl.contains("/temporada-") -> rec.episodeUrl.substringBefore("/temporada-")
+                    else -> rec.animeDetailUrl.ifEmpty { rec.episodeUrl }
+                }
+
                 AnimeCard(
-                    id = rec.animeDetailUrl.ifEmpty { rec.episodeUrl },
+                    id = cleanDetailUrl,
                     title = rec.animeTitle.ifEmpty { rec.episodeTitle },
-                    posterUrl = rec.posterUrl,
-                    detailUrl = rec.animeDetailUrl.ifEmpty { rec.episodeUrl },
+                    posterUrl = resolvedPoster,
+                    detailUrl = cleanDetailUrl,
                     source = rec.source.ifEmpty { "Continuar" },
                     episodeBadge = badge
                 )
@@ -305,6 +329,10 @@ class MainActivity : AppCompatActivity() {
 
             if (continueCards.isNotEmpty()) {
                 allRows.add(CatalogRow(title = "▶ Continuar Viendo", cards = continueCards))
+            }
+
+            if (missingCovers.isNotEmpty()) {
+                resolveMissingCoversAsync(missingCovers)
             }
         }
 
@@ -450,5 +478,66 @@ class MainActivity : AppCompatActivity() {
 
         dialog.show()
         editInput.requestFocus()
+    }
+
+    private fun findCoverInCatalog(data: HomeCatalogData, detailUrl: String, title: String): String {
+        val cleanDetail = detailUrl.substringBefore("/temporada-").trim()
+        val allCards = sequence {
+            yieldAll(heroSuggestions)
+            yieldAll(data.latinoTrending)
+            yieldAll(data.soloLatinoSections.flatMap { it.cards })
+            yieldAll(data.recentEpisodes)
+            yieldAll(data.soloStreamTrending)
+            yieldAll(data.nineAnimeTrending)
+            yieldAll(data.animeYtTrending)
+            yieldAll(data.gogoTrending)
+        }
+        val match = allCards.firstOrNull { card ->
+            (cleanDetail.isNotEmpty() && (card.detailUrl.equals(cleanDetail, ignoreCase = true) || card.id.equals(cleanDetail, ignoreCase = true))) ||
+            (title.isNotEmpty() && card.title.equals(title, ignoreCase = true))
+        }
+        return if (match != null && CoverUtils.isValidCover(match.posterUrl)) match.posterUrl.trim() else ""
+    }
+
+    private var isResolvingCovers = false
+    private fun resolveMissingCoversAsync(records: List<PlaybackRecord>) {
+        if (isResolvingCovers) return
+        isResolvingCovers = true
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                var anyUpdated = false
+                for (rec in records.take(8)) {
+                    val targetUrl = when {
+                        rec.animeDetailUrl.contains("/temporada-") -> rec.animeDetailUrl.substringBefore("/temporada-")
+                        rec.episodeUrl.contains("/temporada-") -> rec.episodeUrl.substringBefore("/temporada-")
+                        else -> rec.animeDetailUrl.ifEmpty { rec.episodeUrl }
+                    }
+                    if (targetUrl.isEmpty()) continue
+                    try {
+                        val dummyCard = AnimeCard(
+                            id = targetUrl,
+                            title = rec.animeTitle,
+                            posterUrl = "",
+                            detailUrl = targetUrl,
+                            source = rec.source
+                        )
+                        val detail = CatalogRepository.getAnimeDetail(dummyCard)
+                        if (CoverUtils.isValidCover(detail.posterUrl)) {
+                            PlaybackHistoryStore.updatePoster(this@MainActivity, rec.animeDetailUrl, rec.episodeUrl, detail.posterUrl)
+                            anyUpdated = true
+                        }
+                    } catch (e: Exception) {
+                        // Ignore individual network resolution errors
+                    }
+                }
+                if (anyUpdated) {
+                    withContext(Dispatchers.Main) {
+                        refreshRowsWithFavorites()
+                    }
+                }
+            } finally {
+                isResolvingCovers = false
+            }
+        }
     }
 }

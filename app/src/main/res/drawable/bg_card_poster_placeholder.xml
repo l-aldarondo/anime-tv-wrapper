@@ -1,0 +1,34 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="160dp"
+    android:height="240dp"
+    android:viewportWidth="160"
+    android:viewportHeight="240">
+
+    <!-- Dark sleek cinema background -->
+    <path
+        android:pathData="M0,0h160v240h-160z"
+        android:fillColor="#151722" />
+
+    <!-- Subtle darker contrast frame -->
+    <path
+        android:pathData="M0,0h160v240h-160z"
+        android:fillColor="#0E1017"
+        android:fillAlpha="0.45" />
+
+    <!-- Film clapperboard / play symbol in the center, perfectly proportioned -->
+    <!-- Film frame top slate -->
+    <path
+        android:pathData="M62,96 h36 a3,3 0 0 1 3,3 v5 h-42 v-5 a3,3 0 0 1 3,-3 z"
+        android:fillColor="#2A2E3D" />
+
+    <!-- Film frame bottom card -->
+    <path
+        android:pathData="M59,106 h42 v24 a3,3 0 0 1 -3,3 h-36 a3,3 0 0 1 -3,-3 z"
+        android:fillColor="#222533" />
+
+    <!-- Subtle play triangle inside slate -->
+    <path
+        android:pathData="M77,113 L87,119 L77,125 Z"
+        android:fillColor="#3E445B" />
+
+</vector>

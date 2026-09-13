@@ -1,6 +1,7 @@
 package com.example.animetv.core.history
 
 import android.content.Context
+import com.example.animetv.core.util.CoverUtils
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -71,7 +72,15 @@ object PlaybackHistoryStore {
     ) {
         if (episodeUrl.isEmpty()) return
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val all = loadAll(context).toMutableList()
+        val all = loadAllRaw(context).toMutableList()
+
+        // Find if we already had a record with a valid cover poster
+        val existing = all.firstOrNull { it.animeDetailUrl == animeDetailUrl || it.episodeUrl == episodeUrl }
+        val finalPoster = when {
+            CoverUtils.isValidCover(posterUrl) -> posterUrl.trim()
+            existing != null && CoverUtils.isValidCover(existing.posterUrl) -> existing.posterUrl.trim()
+            else -> ""
+        }
 
         // Remove previous entry for this anime or episode
         all.removeAll { it.animeDetailUrl == animeDetailUrl || it.episodeUrl == episodeUrl }
@@ -79,7 +88,7 @@ object PlaybackHistoryStore {
         all.add(0, PlaybackRecord(
             animeDetailUrl = animeDetailUrl,
             animeTitle = animeTitle,
-            posterUrl = posterUrl,
+            posterUrl = finalPoster,
             source = source,
             episodeUrl = episodeUrl,
             episodeTitle = episodeTitle,
@@ -89,7 +98,31 @@ object PlaybackHistoryStore {
             timestamp = System.currentTimeMillis()
         ))
 
-        val trimmed = all.take(MAX_RECORDS)
+        saveAll(prefs, all)
+    }
+
+    fun updatePoster(context: Context, animeDetailUrl: String, episodeUrl: String, newPosterUrl: String) {
+        if (!CoverUtils.isValidCover(newPosterUrl)) return
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val all = loadAllRaw(context).toMutableList()
+        var updated = false
+
+        for (i in 0 until all.size) {
+            val r = all[i]
+            if ((animeDetailUrl.isNotEmpty() && r.animeDetailUrl == animeDetailUrl) ||
+                (episodeUrl.isNotEmpty() && r.episodeUrl == episodeUrl)) {
+                all[i] = r.copy(posterUrl = newPosterUrl.trim())
+                updated = true
+            }
+        }
+
+        if (updated) {
+            saveAll(prefs, all)
+        }
+    }
+
+    private fun saveAll(prefs: android.content.SharedPreferences, list: List<PlaybackRecord>) {
+        val trimmed = list.take(MAX_RECORDS)
         val arr = JSONArray()
         trimmed.forEach { arr.put(it.toJson()) }
         prefs.edit().putString(KEY_RECORDS, arr.toString()).apply()
@@ -105,7 +138,7 @@ object PlaybackHistoryStore {
         return loadAll(context).firstOrNull { it.episodeUrl == episodeUrl }
     }
 
-    fun loadAll(context: Context): List<PlaybackRecord> {
+    private fun loadAllRaw(context: Context): List<PlaybackRecord> {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val raw = prefs.getString(KEY_RECORDS, null) ?: return emptyList()
         val list = mutableListOf<PlaybackRecord>()
@@ -118,5 +151,15 @@ object PlaybackHistoryStore {
             e.printStackTrace()
         }
         return list.sortedByDescending { it.timestamp }
+    }
+
+    fun loadAll(context: Context): List<PlaybackRecord> {
+        return loadAllRaw(context).map { rec ->
+            if (CoverUtils.isLogoOrInvalidCover(rec.posterUrl)) {
+                rec.copy(posterUrl = "")
+            } else {
+                rec
+            }
+        }
     }
 }

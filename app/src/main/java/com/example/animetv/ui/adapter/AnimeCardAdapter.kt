@@ -10,6 +10,7 @@ import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.example.animetv.R
 import com.example.animetv.core.model.AnimeCard
+import com.example.animetv.core.util.CoverUtils
 
 class AnimeCardAdapter(
     private val items: MutableList<AnimeCard>,
@@ -45,15 +46,17 @@ class AnimeCardAdapter(
             holder.badge.visibility = View.GONE
         }
 
-        if (item.posterUrl.isNotEmpty()) {
+        val validPoster = if (CoverUtils.isValidCover(item.posterUrl)) item.posterUrl.trim() else ""
+        if (validPoster.isNotEmpty()) {
             Glide.with(holder.poster.context)
-                .load(item.posterUrl)
+                .load(validPoster)
                 .centerCrop()
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
-                .placeholder(R.drawable.tv_banner)
+                .placeholder(R.drawable.bg_card_poster_placeholder)
+                .error(R.drawable.bg_card_poster_placeholder)
                 .into(holder.poster)
         } else {
-            holder.poster.setImageResource(R.drawable.tv_banner)
+            holder.poster.setImageResource(R.drawable.bg_card_poster_placeholder)
         }
 
         // Native 10-foot TV smooth hardware scaling on remote focus

@@ -4,6 +4,7 @@ import com.example.animetv.core.model.AnimeCard
 import com.example.animetv.core.model.AnimeDetail
 import com.example.animetv.core.model.AnimeEpisode
 import com.example.animetv.core.model.StreamResult
+import com.example.animetv.core.util.CoverUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Cookie
@@ -143,8 +144,15 @@ class SoloStreamSource : AnimeSource {
                 ?: doc.selectFirst("meta[property=og:description], meta[name=description]")?.attr("content")?.trim()
                 ?: ""
             val synopsis = android.text.Html.fromHtml(rawSynopsis, android.text.Html.FROM_HTML_MODE_LEGACY).toString().trim()
-            val img = doc.selectFirst(".poster img, .cover img, img")
-            val posterUrl = img?.attr("src")?.ifEmpty { img.attr("data-src") } ?: ""
+            val metaImg = doc.selectFirst("meta[property=og:image], meta[name=twitter:image]")?.attr("content")?.trim() ?: ""
+            val domImg = doc.selectFirst(".card__poster, .poster img, .cover img, .film-poster img")?.let {
+                it.attr("src").ifEmpty { it.attr("data-src") }
+            }?.trim() ?: ""
+            val posterUrl = when {
+                CoverUtils.isValidCover(metaImg) -> metaImg
+                CoverUtils.isValidCover(domImg) -> domImg
+                else -> ""
+            }
             val genres = doc.select(".genres a, .genre a").map { it.text().trim() }
 
             val episodes = mutableListOf<AnimeEpisode>()

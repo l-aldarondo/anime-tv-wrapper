@@ -8,6 +8,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
+import com.example.animetv.core.util.CoverUtils
 
 /**
  * RecyclerView Adapter for displaying saved anime in the Netflix/Prime-style "Mi Lista" grid.
@@ -35,14 +36,17 @@ class FavoritesAdapter(
         holder.title.text = item.title
         holder.source.text = item.source.ifEmpty { "Anime" }
 
-        if (item.poster.isNotEmpty()) {
+        val validPoster = if (CoverUtils.isValidCover(item.poster)) item.poster.trim() else ""
+        if (validPoster.isNotEmpty()) {
             Glide.with(holder.poster.context)
-                .load(item.poster)
+                .load(validPoster)
                 .centerCrop()
+                .placeholder(R.drawable.bg_card_poster_placeholder)
+                .error(R.drawable.bg_card_poster_placeholder)
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
                 .into(holder.poster)
         } else {
-            holder.poster.setImageResource(R.drawable.tv_banner)
+            holder.poster.setImageResource(R.drawable.bg_card_poster_placeholder)
         }
 
         holder.itemView.setOnClickListener {
