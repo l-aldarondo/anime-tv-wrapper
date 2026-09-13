@@ -97,7 +97,7 @@
                     android:id="@+id/txtGuideTip"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="◄/►: ±10s  •  ▲: Saltar Intro (+85s)  •  OK: Pausa"
+                    android:text="◄/►: ±10s  •  ▲: Saltar Intro (+85s)  •  OK: Pausa  •  0/↺: Reiniciar"
                     android:textColor="#B0B3C6"
                     android:textSize="13sp" />
 

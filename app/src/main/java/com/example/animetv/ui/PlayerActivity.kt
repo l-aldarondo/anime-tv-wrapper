@@ -55,6 +55,7 @@ class PlayerActivity : AppCompatActivity() {
         const val EXTRA_EPISODE_URL = "extra_episode_url"
         const val EXTRA_EPISODE_TITLE = "extra_episode_title"
         const val EXTRA_EPISODE_NUMBER = "extra_episode_number"
+        const val EXTRA_START_OVER = "extra_start_over"
 
         fun start(
             context: Context,
@@ -69,7 +70,8 @@ class PlayerActivity : AppCompatActivity() {
             source: String = "",
             episodeUrl: String = "",
             episodeTitle: String = "",
-            episodeNumber: Int = 1
+            episodeNumber: Int = 1,
+            startOver: Boolean = false
         ) {
             val intent = Intent(context, PlayerActivity::class.java).apply {
                 putExtra(EXTRA_VIDEO_URL, videoUrl)
@@ -84,6 +86,7 @@ class PlayerActivity : AppCompatActivity() {
                 putExtra(EXTRA_EPISODE_URL, episodeUrl)
                 putExtra(EXTRA_EPISODE_TITLE, episodeTitle)
                 putExtra(EXTRA_EPISODE_NUMBER, episodeNumber)
+                putExtra(EXTRA_START_OVER, startOver)
             }
             context.startActivity(intent)
         }
@@ -114,6 +117,7 @@ class PlayerActivity : AppCompatActivity() {
     private var episodeTitle: String = ""
     private var episodeNumber: Int = 1
     private var hasAutoResumed: Boolean = false
+    private var startOverFromBeginning: Boolean = false
     private var currentYouTubeVideoId: String = ""
 
     inner class AndroidMediaBridge {
@@ -179,6 +183,7 @@ class PlayerActivity : AppCompatActivity() {
         val title = intent.getStringExtra(EXTRA_TITLE) ?: "Reproductor"
         val referer = intent.getStringExtra(EXTRA_REFERER) ?: ""
         isEmbedMode = intent.getBooleanExtra(EXTRA_IS_EMBED, false)
+        startOverFromBeginning = intent.getBooleanExtra(EXTRA_START_OVER, false)
 
         animeDetailUrl = intent.getStringExtra(EXTRA_ANIME_URL) ?: ""
         val rawPoster = intent.getStringExtra(EXTRA_POSTER_URL) ?: ""
@@ -300,13 +305,20 @@ class PlayerActivity : AppCompatActivity() {
                                 playerBuffering.visibility = View.GONE
                                 retryCount = 0
                                 if (!hasAutoResumed) {
-                                    val saved = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForEpisode(this@PlayerActivity, episodeUrl)
-                                        ?: com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this@PlayerActivity, animeDetailUrl)
-                                    if (saved != null && (saved.episodeUrl == episodeUrl || saved.episodeNumber == episodeNumber)) {
-                                        val dur = this@apply.duration
-                                        if (saved.positionMs > 5000 && (dur <= 0 || saved.positionMs < dur - 15000)) {
-                                            this@apply.seekTo(saved.positionMs)
-                                            showFeedback("▶ Reanudando en ${formatTime(saved.positionMs)}")
+                                    if (startOverFromBeginning) {
+                                        showFeedback("↺ Reproduciendo desde el inicio")
+                                    } else {
+                                        val saved = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForEpisode(this@PlayerActivity, episodeUrl)
+                                            ?: com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this@PlayerActivity, animeDetailUrl)
+                                        if (saved != null && (saved.episodeUrl == episodeUrl || saved.episodeNumber == episodeNumber)) {
+                                            val dur = this@apply.duration
+                                            val isFinished = dur > 0 && (saved.positionMs >= (dur - 25_000) || saved.positionMs >= (dur * 0.92))
+                                            if (saved.positionMs > 5000 && !isFinished) {
+                                                this@apply.seekTo(saved.positionMs)
+                                                showFeedback("▶ Reanudando en ${formatTime(saved.positionMs)}")
+                                            } else if (isFinished) {
+                                                showFeedback("↺ Reproduciendo desde el inicio")
+                                            }
                                         }
                                     }
                                     hasAutoResumed = true
@@ -399,8 +411,9 @@ class PlayerActivity : AppCompatActivity() {
 
         val saved = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForEpisode(this, episodeUrl)
             ?: com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this, animeDetailUrl)
-        val savedPosSec = if (saved != null && (saved.episodeUrl == episodeUrl || saved.episodeNumber == episodeNumber) && saved.positionMs > 5000) {
-            saved.positionMs / 1000
+        val savedPosSec = if (!startOverFromBeginning && saved != null && (saved.episodeUrl == episodeUrl || saved.episodeNumber == episodeNumber) && saved.positionMs > 5000) {
+            val isFinished = saved.durationMs > 0 && (saved.positionMs >= (saved.durationMs - 25_000) || saved.positionMs >= (saved.durationMs * 0.92))
+            if (!isFinished) saved.positionMs / 1000 else 0
         } else 0
 
         cleanWebPlayer.settings.apply {
@@ -635,13 +648,15 @@ class PlayerActivity : AppCompatActivity() {
                                 var allElements = document.querySelectorAll('div, a, span, p');
                                 allElements.forEach(function(el) {
                                     if (el.id === 'mytsumi-intro-play' || el.id === 'azakuPlayButton' || el.classList.contains('mytsumi-tab')) return;
+                                    var cls = (el.className || '').toString().toLowerCase();
+                                    if (cls.includes('plyr') || cls.includes('jw-') || cls.includes('vjs-') || cls.includes('player-control')) return;
                                     var s = window.getComputedStyle(el);
                                     var z = parseInt(s.zIndex) || 0;
                                     if (z > 500 && (s.position === 'fixed' || s.position === 'absolute')) {
                                         if (!el.querySelector('video, iframe') && el.id !== 'mytsumi-player' && el.id !== 'servers-content') {
                                             var opacity = parseFloat(s.opacity) || 1;
                                             var bg = s.backgroundColor;
-                                            if (opacity < 0.1 || bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent' || el.id.includes('ad') || el.className.includes('ad') || el.className.includes('overlay')) {
+                                            if (opacity < 0.1 || bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent' || el.id.includes('ad') || cls.includes('ad') || (cls.includes('overlay') && !cls.includes('plyr'))) {
                                                 el.style.pointerEvents = 'none';
                                                 el.remove();
                                             }
@@ -749,7 +764,6 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun showOsdBriefly(delayMs: Long = 3500L) {
-        if (isEmbedMode) return
         osdOverlay.visibility = View.VISIBLE
         isOsdVisible = true
         mainHandler.removeCallbacks(hideOsdRunnable)
@@ -757,7 +771,6 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun showOsd() {
-        if (isEmbedMode) return
         osdOverlay.visibility = View.VISIBLE
         isOsdVisible = true
         mainHandler.removeCallbacks(hideOsdRunnable)
@@ -815,6 +828,8 @@ class PlayerActivity : AppCompatActivity() {
                         openExternalYouTube(currentYouTubeVideoId)
                         return true
                     }
+                    if (!isOsdVisible) showOsdBriefly() else hideOsd()
+                    return true
                 }
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
                     if (currentYouTubeVideoId.isNotEmpty()) {
@@ -833,30 +848,162 @@ class PlayerActivity : AppCompatActivity() {
                     cleanWebPlayer.evaluateJavascript(
                         """
                         (function() {
-                            var v = document.querySelector('video');
-                            if (v) { v.paused ? v.play() : v.pause(); }
-                            else {
-                                var btn = document.querySelector('.play-button-overlay, #play-button, .fake-player-container');
-                                if (btn) btn.click();
+                            function toggleVideo(doc) {
+                                try {
+                                    if (window.player && typeof window.player.togglePlay === 'function') {
+                                        window.player.togglePlay();
+                                        return true;
+                                    }
+                                    if (window.jwplayer && typeof window.jwplayer === 'function') {
+                                        window.jwplayer().pause();
+                                        return true;
+                                    }
+                                    var v = doc.querySelector('video');
+                                    if (v) {
+                                        if (v.paused) v.play(); else v.pause();
+                                        return true;
+                                    }
+                                    var iframes = doc.querySelectorAll('iframe');
+                                    for (var i = 0; i < iframes.length; i++) {
+                                        try {
+                                            var idoc = iframes[i].contentDocument || iframes[i].contentWindow.document;
+                                            if (idoc && toggleVideo(idoc)) return true;
+                                        } catch(e){}
+                                    }
+                                    var btn = doc.querySelector('.plyr__control--overlaid, .play-button-overlay, #play-button, .fake-player-container, .vjs-big-play-button');
+                                    if (btn) { btn.click(); return true; }
+                                } catch(e){}
+                                return false;
                             }
+                            toggleVideo(document);
                         })();
                         """.trimIndent(), null
                     )
+                    showFeedback("⏯ Play / Pausa")
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
                     cleanWebPlayer.evaluateJavascript(
-                        "try { var v = document.querySelector('video'); if (v) v.currentTime += 10; } catch(e){}", null
+                        """
+                        (function() {
+                            function ff(doc) {
+                                try {
+                                    if (window.player && typeof window.player.forward === 'function') {
+                                        window.player.forward(10);
+                                        return true;
+                                    }
+                                    var v = doc.querySelector('video');
+                                    if (v) { v.currentTime = Math.min(v.currentTime + 10, v.duration || 99999); return true; }
+                                    var iframes = doc.querySelectorAll('iframe');
+                                    for (var i = 0; i < iframes.length; i++) {
+                                        try {
+                                            var idoc = iframes[i].contentDocument || iframes[i].contentWindow.document;
+                                            if (idoc && ff(idoc)) return true;
+                                        } catch(e){}
+                                    }
+                                } catch(e){}
+                                return false;
+                            }
+                            ff(document);
+                        })();
+                        """.trimIndent(), null
                     )
+                    showFeedback("⏩ +10s")
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_MEDIA_REWIND -> {
                     cleanWebPlayer.evaluateJavascript(
-                        "try { var v = document.querySelector('video'); if (v) v.currentTime -= 10; } catch(e){}", null
+                        """
+                        (function() {
+                            function rew(doc) {
+                                try {
+                                    if (window.player && typeof window.player.rewind === 'function') {
+                                        window.player.rewind(10);
+                                        return true;
+                                    }
+                                    var v = doc.querySelector('video');
+                                    if (v) { v.currentTime = Math.max(v.currentTime - 10, 0); return true; }
+                                    var iframes = doc.querySelectorAll('iframe');
+                                    for (var i = 0; i < iframes.length; i++) {
+                                        try {
+                                            var idoc = iframes[i].contentDocument || iframes[i].contentWindow.document;
+                                            if (idoc && rew(idoc)) return true;
+                                        } catch(e){}
+                                    }
+                                } catch(e){}
+                                return false;
+                            }
+                            rew(document);
+                        })();
+                        """.trimIndent(), null
                     )
+                    showFeedback("⏪ -10s")
+                    return true
+                }
+                KeyEvent.KEYCODE_DPAD_UP -> {
+                    cleanWebPlayer.evaluateJavascript(
+                        """
+                        (function() {
+                            function skipIntro(doc) {
+                                try {
+                                    if (window.player && typeof window.player.forward === 'function') {
+                                        window.player.forward(85);
+                                        return true;
+                                    }
+                                    var v = doc.querySelector('video');
+                                    if (v) { v.currentTime = Math.min(v.currentTime + 85, v.duration || 99999); return true; }
+                                    var iframes = doc.querySelectorAll('iframe');
+                                    for (var i = 0; i < iframes.length; i++) {
+                                        try {
+                                            var idoc = iframes[i].contentDocument || iframes[i].contentWindow.document;
+                                            if (idoc && skipIntro(idoc)) return true;
+                                        } catch(e){}
+                                    }
+                                } catch(e){}
+                                return false;
+                            }
+                            skipIntro(document);
+                        })();
+                        """.trimIndent(), null
+                    )
+                    showFeedback("⏩ Salto de Intro (+85s)")
+                    return true
+                }
+                KeyEvent.KEYCODE_0, KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
+                    // Restart from beginning (0:00)
+                    cleanWebPlayer.evaluateJavascript(
+                        """
+                        (function() {
+                            function restart(doc) {
+                                try {
+                                    if (window.player && typeof window.player.restart === 'function') {
+                                        window.player.restart();
+                                        return true;
+                                    }
+                                    var v = doc.querySelector('video');
+                                    if (v) { v.currentTime = 0; if (v.paused) v.play(); return true; }
+                                    var iframes = doc.querySelectorAll('iframe');
+                                    for (var i = 0; i < iframes.length; i++) {
+                                        try {
+                                            var idoc = iframes[i].contentDocument || iframes[i].contentWindow.document;
+                                            if (idoc && restart(idoc)) return true;
+                                        } catch(e){}
+                                    }
+                                } catch(e){}
+                                return false;
+                            }
+                            restart(document);
+                        })();
+                        """.trimIndent(), null
+                    )
+                    showFeedback("↺ Reiniciando desde 00:00")
                     return true
                 }
                 KeyEvent.KEYCODE_BACK -> {
+                    if (isOsdVisible) {
+                        hideOsd()
+                        return true
+                    }
                     finish()
                     return true
                 }
@@ -907,6 +1054,13 @@ class PlayerActivity : AppCompatActivity() {
                     showFeedback("⏪ -30s")
                     updateProgress()
                 }
+                return true
+            }
+            KeyEvent.KEYCODE_0, KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
+                player.seekTo(0)
+                player.play()
+                showFeedback("↺ Reiniciando desde 00:00")
+                updateProgress()
                 return true
             }
             KeyEvent.KEYCODE_BACK -> {

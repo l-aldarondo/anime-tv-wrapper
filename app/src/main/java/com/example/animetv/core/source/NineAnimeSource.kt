@@ -270,6 +270,34 @@ class NineAnimeSource : AnimeSource {
                                 try {
                                     val decodedUrl = String(android.util.Base64.decode(b64, android.util.Base64.DEFAULT)).trim()
                                     if (decodedUrl.startsWith("http")) {
+                                        // Attempt to fetch direct stream (.mp4 / .m3u8) from embed page so ExoPlayer can run it natively with TV remote controls
+                                        try {
+                                            val streamReq = Request.Builder()
+                                                .url(decodedUrl)
+                                                .header("User-Agent", userAgent)
+                                                .header("Referer", episodeUrl)
+                                                .build()
+                                            client.newCall(streamReq).execute().use { streamResp ->
+                                                if (streamResp.isSuccessful) {
+                                                    val streamHtml = streamResp.body?.string() ?: ""
+                                                    val directMatch = Regex("""<source[^>]+src=["']([^"']+\.(?:mp4|m3u8)[^"']*)["']""").find(streamHtml)
+                                                        ?: Regex("""https?://[^\s"'<>]+\.(?:mp4|m3u8)[^\s"'<>]*""").find(streamHtml)
+                                                    if (directMatch != null) {
+                                                        val directUrl = directMatch.groupValues.getOrNull(1) ?: directMatch.value
+                                                        return@withContext StreamResult(
+                                                            videoUrl = directUrl,
+                                                            isHls = directUrl.contains(".m3u8"),
+                                                            isEmbed = false,
+                                                            serverName = "9Anime Direct Stream",
+                                                            headers = mapOf("Referer" to decodedUrl, "User-Agent" to userAgent)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        } catch (e: Exception) {
+                                            // Fallback to embed
+                                        }
+
                                         return@withContext StreamResult(
                                             videoUrl = decodedUrl,
                                             isHls = decodedUrl.contains(".m3u8"),

@@ -46,6 +46,7 @@ class DetailActivity : AppCompatActivity() {
     private lateinit var txtMeta: TextView
     private lateinit var txtSynopsis: TextView
     private lateinit var btnPlayFirst: Button
+    private lateinit var btnRestartEpisode: Button
     private lateinit var btnTrailer: Button
     private lateinit var btnToggleFavorite: Button
     private lateinit var btnBack: Button
@@ -76,6 +77,7 @@ class DetailActivity : AppCompatActivity() {
         txtMeta = findViewById(R.id.txtDetailMeta)
         txtSynopsis = findViewById(R.id.txtDetailSynopsis)
         btnPlayFirst = findViewById(R.id.btnPlayFirst)
+        btnRestartEpisode = findViewById(R.id.btnRestartEpisode)
         btnTrailer = findViewById(R.id.btnTrailer)
         btnToggleFavorite = findViewById(R.id.btnToggleFavorite)
         btnBack = findViewById(R.id.btnBack)
@@ -136,22 +138,59 @@ class DetailActivity : AppCompatActivity() {
             val timeStr = if (record.positionMs > 5000) " (${formatTime(record.positionMs)})" else ""
             btnPlayFirst.text = "▶  Continuar: ${record.episodeTitle}$timeStr"
             btnPlayFirst.setOnClickListener {
-                // Play last watched episode
+                // Play last watched episode with auto-resume
                 val detail = currentDetail
                 val ep = rawEpisodes.firstOrNull { it.episodeUrl == record.episodeUrl || it.episodeNumber == record.episodeNumber }
                     ?: AnimeEpisode(record.episodeNumber, 1, record.episodeTitle, record.episodeUrl)
                 if (detail != null) {
-                    playEpisode(detail, ep)
+                    playEpisode(detail, ep, startOver = false)
                 } else {
-                    playEpisodeDirect(card, ep)
+                    playEpisodeDirect(card, ep, startOver = false)
                 }
+            }
+
+            // Long-click on Continuar to restart from beginning
+            btnPlayFirst.setOnLongClickListener {
+                val detail = currentDetail
+                val ep = rawEpisodes.firstOrNull { it.episodeUrl == record.episodeUrl || it.episodeNumber == record.episodeNumber }
+                    ?: AnimeEpisode(record.episodeNumber, 1, record.episodeTitle, record.episodeUrl)
+                Toast.makeText(this, "↺ Reiniciando ${ep.title} desde el inicio...", Toast.LENGTH_SHORT).show()
+                if (detail != null) {
+                    playEpisode(detail, ep, startOver = true)
+                } else {
+                    playEpisodeDirect(card, ep, startOver = true)
+                }
+                true
+            }
+
+            // Show dedicated Restart button if user has watched more than 5s
+            if (record.positionMs > 5000) {
+                btnRestartEpisode.visibility = View.VISIBLE
+                btnRestartEpisode.text = "↺  Reiniciar Ep"
+                btnRestartEpisode.setOnClickListener {
+                    val detail = currentDetail
+                    val ep = rawEpisodes.firstOrNull { it.episodeUrl == record.episodeUrl || it.episodeNumber == record.episodeNumber }
+                        ?: AnimeEpisode(record.episodeNumber, 1, record.episodeTitle, record.episodeUrl)
+                    Toast.makeText(this, "↺ Reiniciando ${ep.title} desde el inicio...", Toast.LENGTH_SHORT).show()
+                    if (detail != null) {
+                        playEpisode(detail, ep, startOver = true)
+                    } else {
+                        playEpisodeDirect(card, ep, startOver = true)
+                    }
+                }
+            } else {
+                btnRestartEpisode.visibility = View.GONE
             }
         } else if (rawEpisodes.isNotEmpty()) {
             val firstEp = rawEpisodes.first()
             btnPlayFirst.text = "▶  ${firstEp.title}"
+            btnPlayFirst.setOnLongClickListener(null)
             btnPlayFirst.setOnClickListener {
-                currentDetail?.let { playEpisode(it, firstEp) }
+                currentDetail?.let { playEpisode(it, firstEp, startOver = false) }
             }
+            btnRestartEpisode.visibility = View.GONE
+        } else {
+            btnRestartEpisode.visibility = View.GONE
         }
 
         episodeAdapter?.let { adapter ->
@@ -356,7 +395,7 @@ class DetailActivity : AppCompatActivity() {
         }
     }
 
-    private fun playEpisode(detail: AnimeDetail, episode: AnimeEpisode) {
+    private fun playEpisode(detail: AnimeDetail, episode: AnimeEpisode, startOver: Boolean = false) {
         progressBar.visibility = View.VISIBLE
         lifecycleScope.launch {
             try {
@@ -379,7 +418,8 @@ class DetailActivity : AppCompatActivity() {
                         source = detail.source,
                         episodeUrl = episode.episodeUrl,
                         episodeTitle = episode.title,
-                        episodeNumber = episode.episodeNumber
+                        episodeNumber = episode.episodeNumber,
+                        startOver = startOver
                     )
                 } else {
                     // Fallback to clean embedded player, NEVER raw HTML in ExoPlayer
@@ -396,7 +436,8 @@ class DetailActivity : AppCompatActivity() {
                         source = detail.source,
                         episodeUrl = episode.episodeUrl,
                         episodeTitle = episode.title,
-                        episodeNumber = episode.episodeNumber
+                        episodeNumber = episode.episodeNumber,
+                        startOver = startOver
                     )
                 }
             } catch (e: Exception) {
@@ -406,7 +447,7 @@ class DetailActivity : AppCompatActivity() {
         }
     }
 
-    private fun playEpisodeDirect(card: AnimeCard, episode: AnimeEpisode) {
+    private fun playEpisodeDirect(card: AnimeCard, episode: AnimeEpisode, startOver: Boolean = false) {
         val dummyDetail = AnimeDetail(
             title = card.title,
             posterUrl = card.posterUrl,
@@ -415,7 +456,7 @@ class DetailActivity : AppCompatActivity() {
             detailUrl = card.detailUrl,
             episodes = rawEpisodes
         )
-        playEpisode(dummyDetail, episode)
+        playEpisode(dummyDetail, episode, startOver)
     }
 
     private fun playDirectUrl(url: String, title: String) {
