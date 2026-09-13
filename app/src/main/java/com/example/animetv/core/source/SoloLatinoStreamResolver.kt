@@ -1,6 +1,5 @@
 package com.example.animetv.core.source
 
-import android.util.Base64
 import com.example.animetv.core.model.StreamResult
 import okhttp3.Cookie
 import okhttp3.CookieJar
@@ -14,6 +13,7 @@ import org.json.JSONObject
 import org.jsoup.Jsoup
 import java.net.URLDecoder
 import java.security.MessageDigest
+import java.util.Base64
 import java.util.concurrent.TimeUnit
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
@@ -299,7 +299,12 @@ object SoloLatinoStreamResolver {
 
     private fun decryptAes(encBase64: String, key: ByteArray): String {
         val cleanBase64 = encBase64.replace("\\", "").trim()
-        val raw = Base64.decode(cleanBase64, Base64.DEFAULT)
+        val raw = try {
+            Base64.getDecoder().decode(cleanBase64)
+        } catch (e: Exception) {
+            println("Base64 decode failed for: $cleanBase64: ${e.message}")
+            return ""
+        }
         val iv = raw.copyOfRange(0, 16)
         val ciphertext = raw.copyOfRange(16, raw.size)
         val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")

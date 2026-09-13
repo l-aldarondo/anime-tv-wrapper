@@ -279,7 +279,7 @@ class PlayerActivity : AppCompatActivity() {
                         hasExoPlayerFailed = true
                         // Fallback gracefully without showing a black screen or infinite loops
                         Toast.makeText(this@PlayerActivity, "Cargando en reproductor alternativo...", Toast.LENGTH_SHORT).show()
-                        val fallbackUrl = if (episodeUrl.isNotEmpty()) episodeUrl else videoUrl
+                        val fallbackUrl = if (videoUrl.isNotEmpty()) videoUrl else episodeUrl
                         startCleanWebPlayer(fallbackUrl, referer)
                     }
 
