@@ -241,36 +241,41 @@ class MainActivity : AppCompatActivity() {
             allRows.add(CatalogRow(title = "⭐ Mi Lista / Continuar Viendo", cards = favCards))
         }
 
-        // 2. SoloAnime Trending (Audio Latino)
+        // 2. SoloLatino Categorías principales (Películas, Series, Recién Añadidos, Netflix, Prime, Disney+, Apple TV+)
+        val tokyoSections = mutableListOf<CatalogRow>()
+        for (sec in data.soloLatinoSections) {
+            if (sec.title.contains("Tokyo", ignoreCase = true)) {
+                tokyoSections.add(sec)
+            } else if (sec.cards.isNotEmpty()) {
+                allRows.add(sec)
+            }
+        }
+
+        // 3. SoloAnime (Audio Latino) - colocado justo antes de Tokyo MX
         if (data.latinoTrending.isNotEmpty()) {
             allRows.add(CatalogRow(title = "🔥 SoloAnime (Audio Latino)", cards = data.latinoTrending))
         }
 
-        // 3. SoloLatino Categorías (Películas, Series, Recién Añadidos, Netflix, Prime, Disney+, etc.)
-        for (sec in data.soloLatinoSections) {
+        // 4. Tokyo MX y TV Tokyo (después de Disney+ y SoloAnime)
+        for (sec in tokyoSections) {
             if (sec.cards.isNotEmpty()) {
                 allRows.add(sec)
             }
         }
 
-        // 4. SoloStream (Películas y Series Populares)
-        if (data.soloStreamTrending.isNotEmpty()) {
-            allRows.add(CatalogRow(title = "🎬 SoloStream (Películas y Series Populares)", cards = data.soloStreamTrending))
-        }
-
-        // 5. 9Anime (Catálogo Global HD)
+        // 5. 9Anime HD (Renombrado según solicitud #5)
         if (data.nineAnimeTrending.isNotEmpty()) {
-            allRows.add(CatalogRow(title = "● 9Anime (Catálogo Global en HD)", cards = data.nineAnimeTrending))
+            allRows.add(CatalogRow(title = "● 9Anime HD", cards = data.nineAnimeTrending))
         }
 
-        // 6. JKAnime Recent Episodes (Estrenos)
+        // 6. JKAnime (Renombrado según solicitud #6)
         if (data.recentEpisodes.isNotEmpty()) {
-            allRows.add(CatalogRow(title = "⚡ Últimos Capítulos Estrenados (JKAnime)", cards = data.recentEpisodes))
+            allRows.add(CatalogRow(title = "⚡ JKAnime", cards = data.recentEpisodes))
         }
 
-        // 7. GogoAnime (Catálogo Global Subtitulado)
+        // 7. GogoAnime (Renombrado según solicitud #7)
         if (data.gogoTrending.isNotEmpty()) {
-            allRows.add(CatalogRow(title = "🌐 Catálogo Global Subtitulado (GogoAnime)", cards = data.gogoTrending))
+            allRows.add(CatalogRow(title = "🌐 GogoAnime", cards = data.gogoTrending))
         }
 
         // 8. Populares / Recomendados

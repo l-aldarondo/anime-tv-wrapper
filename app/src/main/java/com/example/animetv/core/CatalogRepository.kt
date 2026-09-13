@@ -62,7 +62,7 @@ object CatalogRepository {
 
         val latinoDeferred = async { runCatching { soloLatinoSource.getTrending() }.getOrDefault(emptyList()) }
         val latinoSectionsDeferred = async { runCatching { soloLatinoSource.getHomeSections() }.getOrDefault(emptyList()) }
-        val streamDeferred = async { runCatching { soloStreamSource.getTrending() }.getOrDefault(emptyList()) }
+        // SoloStream hidden from home catalog
         val nineDeferred = async { runCatching { nineAnimeSource.getTrending() }.getOrDefault(emptyList()) }
         val jkDeferred = async { runCatching { jkAnimeSource.getRecentEpisodes() }.getOrDefault(emptyList()) }
         // AnimeYT disabled for now
@@ -70,21 +70,19 @@ object CatalogRepository {
 
         val latino = latinoDeferred.await()
         val latinoSections = latinoSectionsDeferred.await()
-        val stream = streamDeferred.await()
         val nine = nineDeferred.await()
         val jk = jkDeferred.await()
         val gogo = gogoDeferred.await()
 
         if (latino.isNotEmpty()) cachedLatinoTrending = latino
         if (latinoSections.isNotEmpty()) cachedSoloLatinoSections = latinoSections
-        if (stream.isNotEmpty()) cachedSoloStream = stream
         if (nine.isNotEmpty()) cachedNineAnime = nine
         if (jk.isNotEmpty()) cachedJKRecent = jk
         if (gogo.isNotEmpty()) cachedGogo = gogo
 
         val freshData = HomeCatalogData(
             latinoTrending = cachedLatinoTrending,
-            soloStreamTrending = cachedSoloStream,
+            soloStreamTrending = emptyList(),
             nineAnimeTrending = cachedNineAnime,
             recentEpisodes = cachedJKRecent,
             animeYtTrending = emptyList(),

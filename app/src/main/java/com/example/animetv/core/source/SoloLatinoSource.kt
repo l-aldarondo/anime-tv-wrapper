@@ -249,8 +249,12 @@ class SoloLatinoSource : AnimeSource {
 
                 val cleanTitle = cleanSectionTitle(rawTitle)
 
-                // Skip Anime section (has its own dedicated "SoloAnime" row) and episodic updates
-                if (cleanTitle.contains("anime", ignoreCase = true) || cleanTitle.contains("episodio", ignoreCase = true)) {
+                // Skip Anime section (has its own dedicated "SoloAnime" row), episodic updates, and genre rows
+                if (cleanTitle.contains("anime", ignoreCase = true) ||
+                    cleanTitle.contains("episodio", ignoreCase = true) ||
+                    cleanTitle.contains("género", ignoreCase = true) ||
+                    cleanTitle.contains("genero", ignoreCase = true) ||
+                    cleanTitle.contains("gacnero", ignoreCase = true)) {
                     continue
                 }
 
@@ -297,27 +301,48 @@ class SoloLatinoSource : AnimeSource {
                     rows.add(CatalogRow(title = cleanTitle, cards = distinctCards))
                 }
             }
+            // Sort sections so Tokyo MX comes after Disney+ and before TV Tokyo
+            rows.sortBy { getSectionPriority(it.title) }
         } catch (e: Exception) {
             e.printStackTrace()
         }
         rows
     }
 
+    private fun getSectionPriority(title: String): Int {
+        return when {
+            title.contains("Películas", ignoreCase = true) -> 1
+            title.contains("Series", ignoreCase = true) -> 2
+            title.contains("Añadidos", ignoreCase = true) || title.contains("Recien", ignoreCase = true) -> 3
+            title.contains("Netflix", ignoreCase = true) -> 4
+            title.contains("Prime", ignoreCase = true) -> 5
+            title.contains("Disney", ignoreCase = true) -> 6
+            title.contains("Apple", ignoreCase = true) -> 7
+            title.contains("Tokyo Mx", ignoreCase = true) -> 8
+            title.contains("Tv Tokyo", ignoreCase = true) -> 9
+            else -> 100
+        }
+    }
+
     private fun cleanSectionTitle(raw: String): String {
         var t = raw
             .replace("PelA-culas", "Películas")
+            .replace("Pelculas", "Películas")
             .replace("ReciAcn AAadidos", "Recién Añadidos")
+            .replace("Recin Aadidos", "Recién Añadidos")
             .replace("A\u00A0", " ")
             .trim()
 
         return when {
-            t.contains("Películas", ignoreCase = true) -> "🎬 Películas Recientes"
+            t.contains("Películas", ignoreCase = true) || t.contains("Pelicula", ignoreCase = true) -> "🎬 Películas Recientes"
             t.contains("Series", ignoreCase = true) -> "📺 Series Recientes"
             t.contains("Añadidos", ignoreCase = true) || t.contains("Recien", ignoreCase = true) -> "✨ Recién Añadidos"
-            t.equals("Netflix", ignoreCase = true) -> "🔴 Netflix"
+            t.equals("Netflix", ignoreCase = true) || t.contains("Netflix", ignoreCase = true) -> "🔴 Netflix"
             t.contains("Prime", ignoreCase = true) -> "📦 Amazon Prime Video"
             t.contains("Disney", ignoreCase = true) -> "🏰 Disney+"
             t.contains("Apple", ignoreCase = true) -> "🍏 Apple TV+"
+            t.contains("Tokyo Mx", ignoreCase = true) -> "🗼 Tokyo MX"
+            t.contains("Tv Tokyo", ignoreCase = true) -> "🗼 TV Tokyo"
             t.contains("Tokyo", ignoreCase = true) -> "🗼 $t"
             else -> t
         }

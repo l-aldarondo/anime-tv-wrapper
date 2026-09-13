@@ -252,6 +252,14 @@ object AdBlockEngine {
             return false
         }
 
+        // Never block YouTube, Googlevideo, or YTImg assets (prevents YouTube Error 153 player config error)
+        if (host == "youtube.com" || host.endsWith(".youtube.com") ||
+            host == "youtube-nocookie.com" || host.endsWith(".youtube-nocookie.com") ||
+            host == "googlevideo.com" || host.endsWith(".googlevideo.com") ||
+            host == "ytimg.com" || host.endsWith(".ytimg.com")) {
+            return false
+        }
+
         // Fast host matching with subdomain stripping (e.g. s1.ads.monetag.com -> monetag.com)
         if (isHostBlocked(host)) {
             Log.d(TAG, "BLOCKED (Host): $host -> $url")

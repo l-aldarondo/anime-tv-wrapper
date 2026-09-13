@@ -404,6 +404,47 @@ class PlayerActivity : AppCompatActivity() {
             setSupportMultipleWindows(false)
         }
 
+        // Dedicated YouTube player handler (avoids Error 153 configuration failure and ad-nuker conflicts)
+        if (playUrl.contains("youtube.com") || playUrl.contains("youtu.be")) {
+            val videoId = if (playUrl.contains("/embed/")) {
+                playUrl.substringAfter("/embed/").substringBefore("?").substringBefore("/")
+            } else {
+                Regex("""(?:v=|youtu\.be/)([\w-]+)""").find(playUrl)?.groupValues?.get(1) ?: ""
+            }
+
+            val html = """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+                    <style>
+                        * { margin: 0; padding: 0; box-sizing: border-box; }
+                        html, body { width: 100vw; height: 100vh; background: #000; overflow: hidden; display: flex; justify-content: center; align-items: center; }
+                        iframe { width: 100vw; height: 100vh; border: none; }
+                    </style>
+                </head>
+                <body>
+                    <iframe 
+                        id="ytPlayer"
+                        src="https://www.youtube.com/embed/$videoId?autoplay=1&playsinline=1&enablejsapi=1&rel=0&modestbranding=1&origin=https://www.youtube.com" 
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen" 
+                        allowfullscreen>
+                    </iframe>
+                </body>
+                </html>
+            """.trimIndent()
+
+            cleanWebPlayer.webChromeClient = object : WebChromeClient() {}
+            cleanWebPlayer.webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    playerBuffering.visibility = View.GONE
+                }
+            }
+            cleanWebPlayer.loadDataWithBaseURL("https://www.youtube.com", html, "text/html", "UTF-8", null)
+            return
+        }
+
         // If URL is an .m3u8, Android WebView cannot load it raw via loadUrl(). We must load an HTML5 player!
         if (playUrl.contains(".m3u8")) {
             val html = """
