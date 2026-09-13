@@ -94,21 +94,41 @@ object CatalogRepository {
         freshData
     }
 
-    suspend fun searchAll(query: String): List<AnimeCard> = coroutineScope {
-        val latinoDef = async { runCatching { soloLatinoSource.search(query) }.getOrDefault(emptyList()) }
-        val streamDef = async { runCatching { soloStreamSource.search(query) }.getOrDefault(emptyList()) }
-        val nineDef = async { runCatching { nineAnimeSource.search(query) }.getOrDefault(emptyList()) }
-        val jkDef = async { runCatching { jkAnimeSource.search(query) }.getOrDefault(emptyList()) }
-        val ytDef = async { runCatching { animeYtSource.search(query) }.getOrDefault(emptyList()) }
-        val gogoDef = async { runCatching { gogoAnimeSource.search(query) }.getOrDefault(emptyList()) }
+    private val TITLE_ALIASES: Map<String, List<String>> = mapOf(
+        "hidden murder" to listOf("Parecido a un asesinato"),
+        "parecido a un asesinato" to listOf("Hidden Murder")
+    )
 
+    private fun getSearchQueries(query: String): List<String> {
+        val qClean = query.trim().lowercase()
+        val list = mutableListOf(query.trim())
+        for ((k, aliases) in TITLE_ALIASES) {
+            if (qClean.contains(k) || k.contains(qClean)) {
+                list.addAll(aliases)
+            }
+        }
+        return list.distinct()
+    }
+
+    suspend fun searchAll(query: String): List<AnimeCard> = coroutineScope {
+        val queries = getSearchQueries(query)
         val list = mutableListOf<AnimeCard>()
-        list.addAll(latinoDef.await())
-        list.addAll(streamDef.await())
-        list.addAll(nineDef.await())
-        list.addAll(jkDef.await())
-        list.addAll(ytDef.await())
-        list.addAll(gogoDef.await())
+
+        for (q in queries) {
+            val latinoDef = async { runCatching { soloLatinoSource.search(q) }.getOrDefault(emptyList()) }
+            val streamDef = async { runCatching { soloStreamSource.search(q) }.getOrDefault(emptyList()) }
+            val nineDef = async { runCatching { nineAnimeSource.search(q) }.getOrDefault(emptyList()) }
+            val jkDef = async { runCatching { jkAnimeSource.search(q) }.getOrDefault(emptyList()) }
+            val ytDef = async { runCatching { animeYtSource.search(q) }.getOrDefault(emptyList()) }
+            val gogoDef = async { runCatching { gogoAnimeSource.search(q) }.getOrDefault(emptyList()) }
+
+            list.addAll(latinoDef.await())
+            list.addAll(streamDef.await())
+            list.addAll(nineDef.await())
+            list.addAll(jkDef.await())
+            list.addAll(ytDef.await())
+            list.addAll(gogoDef.await())
+        }
         list.distinctBy { it.detailUrl }
     }
 

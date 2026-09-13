@@ -99,6 +99,7 @@ class PlayerActivity : AppCompatActivity() {
     private var isOsdVisible = false
     private var isEmbedMode = false
     private var hasExoPlayerFailed = false
+    private var isInterceptingMedia = false
 
     private var animeDetailUrl: String = ""
     private var animeTitle: String = ""
@@ -206,6 +207,10 @@ class PlayerActivity : AppCompatActivity() {
     private fun initializeExoPlayer(videoUrl: String, referer: String) {
         playerView.visibility = View.VISIBLE
         cleanWebPlayer.visibility = View.GONE
+        try {
+            cleanWebPlayer.onPause()
+            cleanWebPlayer.pauseTimers()
+        } catch (e: Exception) {}
 
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
@@ -277,10 +282,22 @@ class PlayerActivity : AppCompatActivity() {
                         playerBuffering.visibility = View.GONE
                         android.util.Log.e("PlayerActivity", "ExoPlayer error: ${error.errorCodeName} - ${error.message}", error)
                         hasExoPlayerFailed = true
+                        isInterceptingMedia = false
                         // Fallback gracefully without showing a black screen or infinite loops
                         Toast.makeText(this@PlayerActivity, "Cargando en reproductor alternativo...", Toast.LENGTH_SHORT).show()
-                        val fallbackUrl = if (videoUrl.isNotEmpty()) videoUrl else episodeUrl
-                        startCleanWebPlayer(fallbackUrl, referer)
+                        if (cleanWebPlayer.url != null && cleanWebPlayer.url!!.isNotEmpty() && cleanWebPlayer.url != "about:blank") {
+                            exoPlayer?.release()
+                            exoPlayer = null
+                            playerView.visibility = View.GONE
+                            cleanWebPlayer.visibility = View.VISIBLE
+                            try {
+                                cleanWebPlayer.onResume()
+                                cleanWebPlayer.resumeTimers()
+                            } catch (e: Exception) {}
+                        } else {
+                            val fallbackUrl = if (videoUrl.isNotEmpty()) videoUrl else episodeUrl
+                            startCleanWebPlayer(fallbackUrl, referer)
+                        }
                     }
 
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -302,6 +319,10 @@ class PlayerActivity : AppCompatActivity() {
         playerView.visibility = View.GONE
         cleanWebPlayer.visibility = View.VISIBLE
         playerBuffering.visibility = View.VISIBLE
+        try {
+            cleanWebPlayer.onResume()
+            cleanWebPlayer.resumeTimers()
+        } catch (e: Exception) {}
 
         val playUrl = if (url.contains("player.pelisserieshoy.com/f/")) {
             url.replace("player.pelisserieshoy.com", "embed69.org")
@@ -406,14 +427,17 @@ class PlayerActivity : AppCompatActivity() {
                     return AdBlockEngine.EMPTY_RESPONSE
                 }
 
-                // Direct video stream detected inside embed (only if ExoPlayer hasn't failed)!
-                if (!hasExoPlayerFailed && (reqUrl.contains(".m3u8") || (reqUrl.contains(".mp4") && !reqUrl.contains("favicon") && !reqUrl.contains(".xml")))) {
+                // Direct video stream detected inside embed (only if ExoPlayer hasn't failed and not currently intercepting)!
+                if (!hasExoPlayerFailed && !isInterceptingMedia && (reqUrl.contains(".m3u8") || (reqUrl.contains(".mp4") && !reqUrl.contains("favicon") && !reqUrl.contains(".xml")))) {
+                    isInterceptingMedia = true
                     android.util.Log.d("PlayerActivityNet", "INTERCEPTED STREAM IN EMBED: $reqUrl")
                     val currentWebUrl = view?.url ?: ""
                     val refererToUse = request?.requestHeaders?.get("Referer") ?: currentWebUrl
                     mainHandler.post {
                         if (exoPlayer == null && !hasExoPlayerFailed) {
                             initializeExoPlayer(reqUrl, refererToUse)
+                        } else {
+                            isInterceptingMedia = false
                         }
                     }
                 }

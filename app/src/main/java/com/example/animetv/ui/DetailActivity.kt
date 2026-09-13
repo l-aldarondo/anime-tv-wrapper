@@ -287,7 +287,7 @@ class DetailActivity : AppCompatActivity() {
                     refreshPlaybackState()
                     btnPlayFirst.requestFocus()
                 } else {
-                    btnPlayFirst.text = "▶  Ver en Web"
+                    btnPlayFirst.text = if (detail.detailUrl.contains("/pelicula/")) "▶  Reproducir Película" else "▶  Ver en Web"
                     btnPlayFirst.setOnClickListener {
                         playDirectUrl(detail.detailUrl, detail.title)
                     }
@@ -361,21 +361,52 @@ class DetailActivity : AppCompatActivity() {
     }
 
     private fun playDirectUrl(url: String, title: String) {
-        PlayerActivity.start(
-            this,
-            videoUrl = url,
-            title = title,
-            isHls = false,
-            isEmbed = true,
-            referer = "",
-            animeDetailUrl = currentCard?.detailUrl ?: "",
-            animeTitle = currentCard?.title ?: title,
-            posterUrl = currentCard?.posterUrl ?: "",
-            source = currentCard?.source ?: "",
-            episodeUrl = url,
-            episodeTitle = title,
-            episodeNumber = 1
-        )
+        progressBar.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            try {
+                val sourceName = currentCard?.source ?: currentDetail?.source ?: ""
+                val stream = if (sourceName.isNotEmpty()) {
+                    CatalogRepository.resolveStream(this@DetailActivity, url, sourceName)
+                } else null
+                progressBar.visibility = View.GONE
+                if (stream != null && stream.videoUrl.isNotEmpty()) {
+                    PlayerActivity.start(
+                        this@DetailActivity,
+                        videoUrl = stream.videoUrl,
+                        title = title,
+                        isHls = stream.isHls,
+                        isEmbed = stream.isEmbed,
+                        referer = stream.headers["Referer"] ?: "",
+                        animeDetailUrl = currentCard?.detailUrl ?: url,
+                        animeTitle = currentCard?.title ?: title,
+                        posterUrl = currentCard?.posterUrl ?: "",
+                        source = sourceName,
+                        episodeUrl = url,
+                        episodeTitle = title,
+                        episodeNumber = 1
+                    )
+                    return@launch
+                }
+            } catch (e: Exception) {
+                progressBar.visibility = View.GONE
+                e.printStackTrace()
+            }
+            PlayerActivity.start(
+                this@DetailActivity,
+                videoUrl = url,
+                title = title,
+                isHls = false,
+                isEmbed = true,
+                referer = "",
+                animeDetailUrl = currentCard?.detailUrl ?: url,
+                animeTitle = currentCard?.title ?: title,
+                posterUrl = currentCard?.posterUrl ?: "",
+                source = currentCard?.source ?: "",
+                episodeUrl = url,
+                episodeTitle = title,
+                episodeNumber = 1
+            )
+        }
     }
 
     private fun formatTime(ms: Long): String {

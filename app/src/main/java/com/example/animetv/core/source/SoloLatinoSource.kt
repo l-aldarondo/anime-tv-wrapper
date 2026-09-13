@@ -125,7 +125,8 @@ class SoloLatinoSource : AnimeSource {
                             title = title,
                             posterUrl = posterUrl,
                             detailUrl = href,
-                            source = name
+                            source = name,
+                            episodeBadge = if (href.contains("/pelicula/")) "Película" else "Serie"
                         )
                     )
                 }
@@ -190,6 +191,19 @@ class SoloLatinoSource : AnimeSource {
                         episodeUrl = href,
                         releaseDate = releaseDate,
                         synopsis = epSynopsis
+                    )
+                )
+            }
+
+            // For movies (/pelicula/) or standalone titles without episodic links, treat the movie itself as the single playable episode
+            if (episodes.isEmpty() || detailUrl.contains("/pelicula/")) {
+                episodes.add(
+                    AnimeEpisode(
+                        episodeNumber = 1,
+                        seasonNumber = 1,
+                        title = "Película Completa",
+                        episodeUrl = detailUrl,
+                        synopsis = synopsis
                     )
                 )
             }

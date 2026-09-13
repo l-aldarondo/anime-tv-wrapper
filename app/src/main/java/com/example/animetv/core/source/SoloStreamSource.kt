@@ -186,14 +186,15 @@ class SoloStreamSource : AnimeSource {
                 )
             }
 
-            if (episodes.isEmpty()) {
-                // If it's a Movie (película) or single-stream page
+            // For movies (/pelicula/) or standalone titles without episodic links, treat the movie itself as the single playable episode
+            if (episodes.isEmpty() || detailUrl.contains("/pelicula/")) {
                 episodes.add(
                     AnimeEpisode(
                         episodeNumber = 1,
                         seasonNumber = 1,
-                        title = "Ver Película Completa",
-                        episodeUrl = detailUrl
+                        title = "Película Completa",
+                        episodeUrl = detailUrl,
+                        synopsis = synopsis
                     )
                 )
             }
