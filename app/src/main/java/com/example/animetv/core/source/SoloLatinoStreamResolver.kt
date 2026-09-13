@@ -238,16 +238,54 @@ object SoloLatinoStreamResolver {
                 // Fetch VidHide page and unpack packed JavaScript
                 val vhHtml = fetch(vidhideUrl, referer = "https://embed69.org/")
                 val unpacked = DeanEdwardsUnpacker.unpack(vhHtml)
-                val m3u8Match = Regex("""https?://[^\s"'<>]+\.m3u8[^\s"'<>]*""").find(unpacked)
-                if (m3u8Match != null) {
+                
+                var resolvedStreamUrl = ""
+                // 1. Prioritize hls4 (TikTok CDN high-speed stream without speed throttling)
+                val hls4Match = Regex(""""hls4"\s*:\s*"([^"]+)"""").find(unpacked)
+                if (hls4Match != null) {
+                    val rawHls4 = hls4Match.groupValues[1].replace("\\/", "/")
+                    if (rawHls4.isNotEmpty() && rawHls4 != "null") {
+                        resolvedStreamUrl = if (rawHls4.startsWith("http")) {
+                            rawHls4
+                        } else {
+                            val uri = android.net.Uri.parse(vidhideUrl)
+                            val scheme = uri.scheme ?: "https"
+                            val host = uri.host ?: "morencius.com"
+                            "$scheme://$host$rawHls4"
+                        }
+                    }
+                }
+
+                // 2. Fallback to hls3
+                if (resolvedStreamUrl.isEmpty()) {
+                    val hls3Match = Regex(""""hls3"\s*:\s*"([^"]+)"""").find(unpacked)
+                    if (hls3Match != null) {
+                        val rawHls3 = hls3Match.groupValues[1].replace("\\/", "/")
+                        if (rawHls3.isNotEmpty() && rawHls3 != "null") {
+                            resolvedStreamUrl = rawHls3
+                        }
+                    }
+                }
+
+                // 3. Fallback to hls2 or any direct .m3u8 URL
+                if (resolvedStreamUrl.isEmpty()) {
+                    val m3u8Match = Regex("""https?://[^\s"'<>]+\.m3u8[^\s"'<>]*""").find(unpacked)
+                    if (m3u8Match != null) {
+                        resolvedStreamUrl = m3u8Match.value
+                    }
+                }
+
+                if (resolvedStreamUrl.isNotEmpty()) {
+                    val uri = android.net.Uri.parse(vidhideUrl)
+                    val origin = "${uri.scheme ?: "https"}://${uri.host ?: "morencius.com"}"
                     return StreamResult(
-                        videoUrl = m3u8Match.value,
+                        videoUrl = resolvedStreamUrl,
                         isHls = true,
                         isEmbed = false,
                         serverName = "SoloLatino Direct HLS (Servidor 1)",
                         headers = mapOf(
                             "Referer" to vidhideUrl,
-                            "Origin" to "https://morencius.com",
+                            "Origin" to origin,
                             "User-Agent" to USER_AGENT
                         )
                     )

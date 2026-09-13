@@ -8,7 +8,9 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -119,12 +121,29 @@ class PlayerActivity : AppCompatActivity() {
     private var hasAutoResumed: Boolean = false
     private var startOverFromBeginning: Boolean = false
     private var currentYouTubeVideoId: String = ""
+    private var embedCurrentPositionMs: Long = 0L
+    private var embedDurationMs: Long = 0L
+    private var isEmbedPlaying: Boolean = true
+
+    private val embedProgressRunnable = object : Runnable {
+        override fun run() {
+            if (isEmbedMode && isEmbedPlaying) {
+                embedCurrentPositionMs += 2000L
+                if (embedCurrentPositionMs > 4000L) {
+                    saveCurrentPlaybackPosition(embedCurrentPositionMs, embedDurationMs.coerceAtLeast(1440_000L))
+                }
+                mainHandler.postDelayed(this, 2000L)
+            }
+        }
+    }
 
     inner class AndroidMediaBridge {
         @android.webkit.JavascriptInterface
         fun onProgressUpdate(currentTimeSec: Float, durationSec: Float) {
             val posMs = (currentTimeSec * 1000).toLong()
             val durMs = (durationSec * 1000).toLong()
+            embedCurrentPositionMs = posMs
+            embedDurationMs = durMs
             saveCurrentPlaybackPosition(posMs, durMs)
         }
     }
@@ -229,11 +248,11 @@ class PlayerActivity : AppCompatActivity() {
             cleanWebPlayer.pauseTimers()
         } catch (e: Exception) {}
 
-        // Optimized load control: starts playback fast (1s buffer), rebuffers quickly (2s), and pre-buffers up to 120s
+        // Optimized load control: starts playback fast (1s buffer), rebuffers quickly (2s), and pre-buffers up to 60s
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                /* minBufferMs = */ 30_000,
-                /* maxBufferMs = */ 120_000,
+                /* minBufferMs = */ 15_000,
+                /* maxBufferMs = */ 60_000,
                 /* bufferForPlaybackMs = */ 1_000,
                 /* bufferForPlaybackAfterRebufferMs = */ 2_000
             )
@@ -310,7 +329,12 @@ class PlayerActivity : AppCompatActivity() {
                                     } else {
                                         val saved = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForEpisode(this@PlayerActivity, episodeUrl)
                                             ?: com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this@PlayerActivity, animeDetailUrl)
-                                        if (saved != null && (saved.episodeUrl == episodeUrl || saved.episodeNumber == episodeNumber)) {
+                                        val matchesEp = saved != null && (
+                                            saved.episodeUrl.trimEnd('/') == episodeUrl.trimEnd('/') ||
+                                            (saved.episodeNumber > 0 && saved.episodeNumber == episodeNumber) ||
+                                            episodeUrl.isEmpty()
+                                        )
+                                        if (matchesEp && saved != null) {
                                             val dur = this@apply.duration
                                             val isFinished = dur > 0 && (saved.positionMs >= (dur - 25_000) || saved.positionMs >= (dur * 0.92))
                                             if (saved.positionMs > 5000 && !isFinished) {
@@ -411,10 +435,21 @@ class PlayerActivity : AppCompatActivity() {
 
         val saved = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForEpisode(this, episodeUrl)
             ?: com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this, animeDetailUrl)
-        val savedPosSec = if (!startOverFromBeginning && saved != null && (saved.episodeUrl == episodeUrl || saved.episodeNumber == episodeNumber) && saved.positionMs > 5000) {
+        val matchesSaved = saved != null && (
+            saved.episodeUrl.trimEnd('/') == episodeUrl.trimEnd('/') ||
+            (saved.episodeNumber > 0 && saved.episodeNumber == episodeNumber) ||
+            episodeUrl.isEmpty()
+        )
+        val savedPosSec = if (!startOverFromBeginning && matchesSaved && saved!!.positionMs > 5000) {
             val isFinished = saved.durationMs > 0 && (saved.positionMs >= (saved.durationMs - 25_000) || saved.positionMs >= (saved.durationMs * 0.92))
             if (!isFinished) saved.positionMs / 1000 else 0
         } else 0
+
+        embedCurrentPositionMs = savedPosSec * 1000L
+        embedDurationMs = saved?.durationMs ?: 0L
+        isEmbedPlaying = true
+        mainHandler.removeCallbacks(embedProgressRunnable)
+        mainHandler.postDelayed(embedProgressRunnable, 2000L)
 
         cleanWebPlayer.settings.apply {
             javaScriptEnabled = true
@@ -557,22 +592,6 @@ class PlayerActivity : AppCompatActivity() {
                 if (AdBlockEngine.shouldBlock(reqUrl)) {
                     return AdBlockEngine.EMPTY_RESPONSE
                 }
-
-                // Direct video stream detected inside embed (only if ExoPlayer hasn't failed and not currently intercepting)!
-                if (!hasExoPlayerFailed && !isInterceptingMedia && (reqUrl.contains(".m3u8") || (reqUrl.contains(".mp4") && !reqUrl.contains("favicon") && !reqUrl.contains(".xml")))) {
-                    isInterceptingMedia = true
-                    android.util.Log.d("PlayerActivityNet", "INTERCEPTED STREAM IN EMBED: $reqUrl")
-                    val currentWebUrl = view?.url ?: ""
-                    val refererToUse = request?.requestHeaders?.get("Referer") ?: currentWebUrl
-                    mainHandler.post {
-                        if (exoPlayer == null && !hasExoPlayerFailed) {
-                            initializeExoPlayer(reqUrl, refererToUse)
-                        } else {
-                            isInterceptingMedia = false
-                        }
-                    }
-                }
-
                 return super.shouldInterceptRequest(view, request)
             }
 
@@ -845,127 +864,142 @@ class PlayerActivity : AppCompatActivity() {
                         )
                         return super.onKeyDown(keyCode, event)
                     }
+
+                    // 1. Dispatch native hardware Space and MediaPlayPause keys directly to WebView focused element/iframe
+                    cleanWebPlayer.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SPACE))
+                    cleanWebPlayer.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_SPACE))
+                    cleanWebPlayer.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE))
+                    cleanWebPlayer.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE))
+
+                    // 2. Dispatch synthetic touch tap on the center of the video screen
+                    val now = SystemClock.uptimeMillis()
+                    val w = if (cleanWebPlayer.width > 0) cleanWebPlayer.width else 1920
+                    val h = if (cleanWebPlayer.height > 0) cleanWebPlayer.height else 1080
+                    val cx = w / 2f
+                    val cy = h / 2f
+                    cleanWebPlayer.dispatchTouchEvent(MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, cx, cy, 0))
+                    cleanWebPlayer.dispatchTouchEvent(MotionEvent.obtain(now, now + 50, MotionEvent.ACTION_UP, cx, cy, 0))
+
+                    // 3. Evaluate multi-origin postMessage and direct HTML5 JS
                     cleanWebPlayer.evaluateJavascript(
                         """
                         (function() {
-                            function toggleVideo(doc) {
-                                try {
-                                    if (window.player && typeof window.player.togglePlay === 'function') {
-                                        window.player.togglePlay();
-                                        return true;
-                                    }
-                                    if (window.jwplayer && typeof window.jwplayer === 'function') {
-                                        window.jwplayer().pause();
-                                        return true;
-                                    }
-                                    var v = doc.querySelector('video');
-                                    if (v) {
-                                        if (v.paused) v.play(); else v.pause();
-                                        return true;
-                                    }
-                                    var iframes = doc.querySelectorAll('iframe');
-                                    for (var i = 0; i < iframes.length; i++) {
-                                        try {
-                                            var idoc = iframes[i].contentDocument || iframes[i].contentWindow.document;
-                                            if (idoc && toggleVideo(idoc)) return true;
-                                        } catch(e){}
-                                    }
-                                    var btn = doc.querySelector('.plyr__control--overlaid, .play-button-overlay, #play-button, .fake-player-container, .vjs-big-play-button');
-                                    if (btn) { btn.click(); return true; }
-                                } catch(e){}
-                                return false;
-                            }
-                            toggleVideo(document);
+                            try {
+                                if (window.player && typeof window.player.togglePlay === 'function') window.player.togglePlay();
+                                if (window.jwplayer && typeof window.jwplayer === 'function') {
+                                    var st = window.jwplayer().getState();
+                                    if (st === 'playing') window.jwplayer().pause(); else window.jwplayer().play();
+                                }
+                                var v = document.querySelector('video');
+                                if (v) { if (v.paused) v.play(); else v.pause(); }
+                                for (var i = 0; i < window.frames.length; i++) {
+                                    try {
+                                        window.frames[i].postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
+                                        window.frames[i].postMessage('{"event":"command","func":"playVideo","args":""}', '*');
+                                        window.frames[i].postMessage('{"action":"toggle"}', '*');
+                                        window.frames[i].postMessage('{"method":"toggle"}', '*');
+                                        window.frames[i].postMessage({ type: 'player:playPause' }, '*');
+                                    } catch(e) {}
+                                }
+                                var btn = document.querySelector('.plyr__control--overlaid, .play-button-overlay, #play-button, .fake-player-container, .vjs-big-play-button, .jw-display-icon-display');
+                                if (btn) btn.click();
+                            } catch(e){}
                         })();
                         """.trimIndent(), null
                     )
-                    showFeedback("⏯ Play / Pausa")
+                    isEmbedPlaying = !isEmbedPlaying
+                    if (isEmbedPlaying) {
+                        mainHandler.removeCallbacks(embedProgressRunnable)
+                        mainHandler.postDelayed(embedProgressRunnable, 2000L)
+                        showFeedback("▶ Reproduciendo")
+                    } else {
+                        mainHandler.removeCallbacks(embedProgressRunnable)
+                        saveCurrentPlaybackPosition(embedCurrentPositionMs, embedDurationMs.coerceAtLeast(1440_000L))
+                        showFeedback("⏸ Pausa")
+                    }
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
+                    // 1. Dispatch native hardware Right Arrow to web player
+                    cleanWebPlayer.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT))
+                    cleanWebPlayer.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_RIGHT))
+
+                    // 2. Cross-origin broadcast + HTML5 seek
                     cleanWebPlayer.evaluateJavascript(
                         """
                         (function() {
-                            function ff(doc) {
-                                try {
-                                    if (window.player && typeof window.player.forward === 'function') {
-                                        window.player.forward(10);
-                                        return true;
-                                    }
-                                    var v = doc.querySelector('video');
-                                    if (v) { v.currentTime = Math.min(v.currentTime + 10, v.duration || 99999); return true; }
-                                    var iframes = doc.querySelectorAll('iframe');
-                                    for (var i = 0; i < iframes.length; i++) {
-                                        try {
-                                            var idoc = iframes[i].contentDocument || iframes[i].contentWindow.document;
-                                            if (idoc && ff(idoc)) return true;
-                                        } catch(e){}
-                                    }
-                                } catch(e){}
-                                return false;
-                            }
-                            ff(document);
+                            try {
+                                if (window.player && typeof window.player.forward === 'function') window.player.forward(10);
+                                if (window.jwplayer && typeof window.jwplayer === 'function') window.jwplayer().seek(window.jwplayer().getPosition() + 10);
+                                var v = document.querySelector('video');
+                                if (v) v.currentTime = Math.min(v.currentTime + 10, v.duration || 99999);
+                                for (var i = 0; i < window.frames.length; i++) {
+                                    try {
+                                        window.frames[i].postMessage('{"action":"seek","value":10}', '*');
+                                        window.frames[i].postMessage({ type: 'player:seek', offset: 10 }, '*');
+                                    } catch(e) {}
+                                }
+                            } catch(e){}
                         })();
                         """.trimIndent(), null
                     )
+                    embedCurrentPositionMs += 10000L
+                    saveCurrentPlaybackPosition(embedCurrentPositionMs, embedDurationMs.coerceAtLeast(1440_000L))
                     showFeedback("⏩ +10s")
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_MEDIA_REWIND -> {
+                    // 1. Dispatch native hardware Left Arrow to web player
+                    cleanWebPlayer.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_LEFT))
+                    cleanWebPlayer.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_LEFT))
+
+                    // 2. Cross-origin broadcast + HTML5 seek
                     cleanWebPlayer.evaluateJavascript(
                         """
                         (function() {
-                            function rew(doc) {
-                                try {
-                                    if (window.player && typeof window.player.rewind === 'function') {
-                                        window.player.rewind(10);
-                                        return true;
-                                    }
-                                    var v = doc.querySelector('video');
-                                    if (v) { v.currentTime = Math.max(v.currentTime - 10, 0); return true; }
-                                    var iframes = doc.querySelectorAll('iframe');
-                                    for (var i = 0; i < iframes.length; i++) {
-                                        try {
-                                            var idoc = iframes[i].contentDocument || iframes[i].contentWindow.document;
-                                            if (idoc && rew(idoc)) return true;
-                                        } catch(e){}
-                                    }
-                                } catch(e){}
-                                return false;
-                            }
-                            rew(document);
+                            try {
+                                if (window.player && typeof window.player.rewind === 'function') window.player.rewind(10);
+                                if (window.jwplayer && typeof window.jwplayer === 'function') window.jwplayer().seek(Math.max(0, window.jwplayer().getPosition() - 10));
+                                var v = document.querySelector('video');
+                                if (v) v.currentTime = Math.max(0, v.currentTime - 10);
+                                for (var i = 0; i < window.frames.length; i++) {
+                                    try {
+                                        window.frames[i].postMessage('{"action":"seek","value":-10}', '*');
+                                        window.frames[i].postMessage({ type: 'player:seek', offset: -10 }, '*');
+                                    } catch(e) {}
+                                }
+                            } catch(e){}
                         })();
                         """.trimIndent(), null
                     )
+                    embedCurrentPositionMs = (embedCurrentPositionMs - 10000L).coerceAtLeast(0L)
+                    saveCurrentPlaybackPosition(embedCurrentPositionMs, embedDurationMs.coerceAtLeast(1440_000L))
                     showFeedback("⏪ -10s")
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_UP -> {
+                    cleanWebPlayer.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT))
+                    cleanWebPlayer.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DPAD_RIGHT))
                     cleanWebPlayer.evaluateJavascript(
                         """
                         (function() {
-                            function skipIntro(doc) {
-                                try {
-                                    if (window.player && typeof window.player.forward === 'function') {
-                                        window.player.forward(85);
-                                        return true;
-                                    }
-                                    var v = doc.querySelector('video');
-                                    if (v) { v.currentTime = Math.min(v.currentTime + 85, v.duration || 99999); return true; }
-                                    var iframes = doc.querySelectorAll('iframe');
-                                    for (var i = 0; i < iframes.length; i++) {
-                                        try {
-                                            var idoc = iframes[i].contentDocument || iframes[i].contentWindow.document;
-                                            if (idoc && skipIntro(idoc)) return true;
-                                        } catch(e){}
-                                    }
-                                } catch(e){}
-                                return false;
-                            }
-                            skipIntro(document);
+                            try {
+                                if (window.player && typeof window.player.forward === 'function') window.player.forward(85);
+                                if (window.jwplayer && typeof window.jwplayer === 'function') window.jwplayer().seek(window.jwplayer().getPosition() + 85);
+                                var v = document.querySelector('video');
+                                if (v) v.currentTime = Math.min(v.currentTime + 85, v.duration || 99999);
+                                for (var i = 0; i < window.frames.length; i++) {
+                                    try {
+                                        window.frames[i].postMessage('{"action":"seek","value":85}', '*');
+                                        window.frames[i].postMessage({ type: 'player:seek', offset: 85 }, '*');
+                                    } catch(e) {}
+                                }
+                            } catch(e){}
                         })();
                         """.trimIndent(), null
                     )
+                    embedCurrentPositionMs += 85000L
+                    saveCurrentPlaybackPosition(embedCurrentPositionMs, embedDurationMs.coerceAtLeast(1440_000L))
                     showFeedback("⏩ Salto de Intro (+85s)")
                     return true
                 }
@@ -974,28 +1008,26 @@ class PlayerActivity : AppCompatActivity() {
                     cleanWebPlayer.evaluateJavascript(
                         """
                         (function() {
-                            function restart(doc) {
-                                try {
-                                    if (window.player && typeof window.player.restart === 'function') {
-                                        window.player.restart();
-                                        return true;
-                                    }
-                                    var v = doc.querySelector('video');
-                                    if (v) { v.currentTime = 0; if (v.paused) v.play(); return true; }
-                                    var iframes = doc.querySelectorAll('iframe');
-                                    for (var i = 0; i < iframes.length; i++) {
-                                        try {
-                                            var idoc = iframes[i].contentDocument || iframes[i].contentWindow.document;
-                                            if (idoc && restart(idoc)) return true;
-                                        } catch(e){}
-                                    }
-                                } catch(e){}
-                                return false;
-                            }
-                            restart(document);
+                            try {
+                                if (window.player && typeof window.player.restart === 'function') window.player.restart();
+                                if (window.jwplayer && typeof window.jwplayer === 'function') {
+                                    window.jwplayer().seek(0);
+                                    window.jwplayer().play();
+                                }
+                                var v = document.querySelector('video');
+                                if (v) { v.currentTime = 0; if (v.paused) v.play(); }
+                                for (var i = 0; i < window.frames.length; i++) {
+                                    try {
+                                        window.frames[i].postMessage('{"action":"seek","value":0}', '*');
+                                        window.frames[i].postMessage({ type: 'player:seek', offset: 0 }, '*');
+                                    } catch(e) {}
+                                }
+                            } catch(e){}
                         })();
                         """.trimIndent(), null
                     )
+                    embedCurrentPositionMs = 0L
+                    saveCurrentPlaybackPosition(0L, embedDurationMs.coerceAtLeast(1440_000L))
                     showFeedback("↺ Reiniciando desde 00:00")
                     return true
                 }
@@ -1101,6 +1133,9 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        if (isEmbedMode && embedCurrentPositionMs > 2000L) {
+            saveCurrentPlaybackPosition(embedCurrentPositionMs, embedDurationMs.coerceAtLeast(1440_000L))
+        }
         exoPlayer?.let {
             saveCurrentPlaybackPosition(it.currentPosition, it.duration)
             it.pause()
@@ -1109,6 +1144,10 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (isEmbedMode && embedCurrentPositionMs > 2000L) {
+            saveCurrentPlaybackPosition(embedCurrentPositionMs, embedDurationMs.coerceAtLeast(1440_000L))
+        }
+        mainHandler.removeCallbacks(embedProgressRunnable)
         exoPlayer?.let {
             saveCurrentPlaybackPosition(it.currentPosition, it.duration)
         }
