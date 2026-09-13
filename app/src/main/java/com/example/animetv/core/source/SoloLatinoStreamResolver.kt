@@ -217,11 +217,18 @@ object SoloLatinoStreamResolver {
                 for (j in 0 until embeds.length()) {
                     val emb = embeds.getJSONObject(j)
                     val encLink = emb.optString("link")
-                    val decrypted = decryptAes(encLink, aesKey)
-                    if (decrypted.contains("morencius.com") || decrypted.contains("vidhide")) {
-                        vidhideUrl = decrypted
-                    } else if (alternativeEmbedUrl.isEmpty() && (decrypted.contains("streamwish") || decrypted.contains("hglink") || decrypted.contains("voe") || decrypted.contains("filemoon"))) {
-                        alternativeEmbedUrl = decrypted
+                    val decrypted = try {
+                        decryptAes(encLink, aesKey)
+                    } catch (e: Exception) {
+                        ""
+                    }
+                    if (decrypted.isNotEmpty()) {
+                        if (decrypted.contains("morencius.com") || decrypted.contains("vidhide")) {
+                            vidhideUrl = decrypted
+                            break
+                        } else if (alternativeEmbedUrl.isEmpty() && (decrypted.contains("streamwish") || decrypted.contains("hglink") || decrypted.contains("voe") || decrypted.contains("filemoon"))) {
+                            alternativeEmbedUrl = decrypted
+                        }
                     }
                 }
                 if (vidhideUrl.isNotEmpty()) break
@@ -238,23 +245,27 @@ object SoloLatinoStreamResolver {
                         isHls = true,
                         isEmbed = false,
                         serverName = "SoloLatino Direct HLS (Servidor 1)",
-                        headers = mapOf("Referer" to vidhideUrl, "User-Agent" to USER_AGENT)
+                        headers = mapOf(
+                            "Referer" to vidhideUrl,
+                            "Origin" to "https://morencius.com",
+                            "User-Agent" to USER_AGENT
+                        )
                     )
                 }
             }
 
-            // If direct m3u8 extraction was not applicable, return the working alternative embed
+            // If direct m3u8 extraction was not applicable, return the working alternative embed (never embed69 which blocks webviews)
             val chosenEmbed = when {
                 alternativeEmbedUrl.isNotEmpty() -> alternativeEmbedUrl
                 vidhideUrl.isNotEmpty() -> vidhideUrl
-                else -> embedUrl
+                else -> episodeUrl
             }
             return StreamResult(
                 videoUrl = chosenEmbed,
                 isHls = false,
                 isEmbed = true,
                 serverName = "SoloLatino Embed (Servidor 1)",
-                headers = mapOf("Referer" to if (chosenEmbed == embedUrl) episodeUrl else "https://embed69.org/")
+                headers = mapOf("Referer" to if (chosenEmbed == episodeUrl) "https://sololatino.net/" else "https://embed69.org/")
             )
         } catch (e: Exception) {
             e.printStackTrace()
@@ -287,7 +298,8 @@ object SoloLatinoStreamResolver {
     }
 
     private fun decryptAes(encBase64: String, key: ByteArray): String {
-        val raw = Base64.decode(encBase64, Base64.DEFAULT)
+        val cleanBase64 = encBase64.replace("\\", "").trim()
+        val raw = Base64.decode(cleanBase64, Base64.DEFAULT)
         val iv = raw.copyOfRange(0, 16)
         val ciphertext = raw.copyOfRange(16, raw.size)
         val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")

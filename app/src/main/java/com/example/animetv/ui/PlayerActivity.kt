@@ -424,6 +424,16 @@ class PlayerActivity : AppCompatActivity() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
                 playerBuffering.visibility = View.VISIBLE
+                try {
+                    view?.evaluateJavascript("""
+                        try {
+                            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                            window.chrome = { runtime: {} };
+                            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+                            Object.defineProperty(navigator, 'languages', { get: () => ['es-ES', 'es', 'en-US', 'en'] });
+                        } catch(e) {}
+                    """.trimIndent(), null)
+                } catch(e: Exception) {}
             }
 
             override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: android.webkit.WebResourceError?) {
@@ -447,6 +457,13 @@ class PlayerActivity : AppCompatActivity() {
                 // Inject CSS and JavaScript Decoy Annihilator
                 val cssScript = """
                     (function() {
+                        try {
+                            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                            window.chrome = { runtime: {} };
+                            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+                            Object.defineProperty(navigator, 'languages', { get: () => ['es-ES', 'es', 'en-US', 'en'] });
+                        } catch(e) {}
+
                         // 0. Auto-redirect away from pelisserieshoy paywall to embed69
                         if (location.hostname.includes('pelisserieshoy.com') && location.pathname.includes('/f/')) {
                             location.href = location.href.replace('pelisserieshoy.com', 'embed69.org');
