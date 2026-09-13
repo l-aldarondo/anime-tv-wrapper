@@ -152,19 +152,36 @@ class SoloStreamSource : AnimeSource {
 
             for (link in epLinks) {
                 val href = link.absUrl("href")
-                val epText = link.text().trim()
                 val epNumMatch = Regex("""episodio-(\d+)""").find(href)
                 val epNum = epNumMatch?.groupValues?.get(1)?.toIntOrNull() ?: episodes.size + 1
                 val seasonNumMatch = Regex("""temporada-(\d+)""").find(href)
                 val seasonNum = seasonNumMatch?.groupValues?.get(1)?.toIntOrNull() ?: 1
-                val epTitle = if (epText.isNotEmpty() && epText.length < 80) epText else "Episodio $epNum"
+
+                // Extract individual episode title (e.g. "Hora de empresarios")
+                val titleEl = link.selectFirst(".text-sm, .font-semibold, h4, h3, .ep-title")
+                val parsedTitle = titleEl?.text()?.trim()
+                    ?.takeIf { it.isNotEmpty() && !it.startsWith("E", ignoreCase = true) }
+                    ?: link.selectFirst("p:not(.ep-num):not(.line-clamp-2)")?.text()?.trim()
+                val epTitle = if (!parsedTitle.isNullOrEmpty() && parsedTitle.length < 90) parsedTitle else "Episodio $epNum"
+
+                // Extract individual episode synopsis
+                val synopsisEl = link.selectFirst(".line-clamp-2, .ep-desc, .overview, .synopsis")
+                val epSynopsis = synopsisEl?.text()?.trim()
+                    ?: link.select("p.text-xs").firstOrNull { it.text().length > 20 }?.text()?.trim()
+                    ?: ""
+
+                // Extract air date if present (e.g. 26/04/2010)
+                val dateEl = link.select("p.text-xs").lastOrNull()
+                val releaseDate = dateEl?.text()?.trim()?.takeIf { it.contains("/") } ?: ""
 
                 episodes.add(
                     AnimeEpisode(
                         episodeNumber = epNum,
                         seasonNumber = seasonNum,
                         title = epTitle,
-                        episodeUrl = href
+                        episodeUrl = href,
+                        releaseDate = releaseDate,
+                        synopsis = epSynopsis
                     )
                 )
             }

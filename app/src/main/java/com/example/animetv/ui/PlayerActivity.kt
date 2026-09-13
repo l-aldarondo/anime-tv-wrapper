@@ -98,6 +98,7 @@ class PlayerActivity : AppCompatActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var isOsdVisible = false
     private var isEmbedMode = false
+    private var hasExoPlayerFailed = false
 
     private var animeDetailUrl: String = ""
     private var animeTitle: String = ""
@@ -275,9 +276,11 @@ class PlayerActivity : AppCompatActivity() {
                     override fun onPlayerError(error: PlaybackException) {
                         playerBuffering.visibility = View.GONE
                         android.util.Log.e("PlayerActivity", "ExoPlayer error: ${error.errorCodeName} - ${error.message}", error)
-                        // Fallback gracefully without showing a black screen
+                        hasExoPlayerFailed = true
+                        // Fallback gracefully without showing a black screen or infinite loops
                         Toast.makeText(this@PlayerActivity, "Cargando en reproductor alternativo...", Toast.LENGTH_SHORT).show()
-                        startCleanWebPlayer(videoUrl, referer)
+                        val fallbackUrl = if (episodeUrl.isNotEmpty()) episodeUrl else videoUrl
+                        startCleanWebPlayer(fallbackUrl, referer)
                     }
 
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -403,13 +406,13 @@ class PlayerActivity : AppCompatActivity() {
                     return AdBlockEngine.EMPTY_RESPONSE
                 }
 
-                // Direct video stream detected inside embed!
-                if (reqUrl.contains(".m3u8") || (reqUrl.contains(".mp4") && !reqUrl.contains("favicon") && !reqUrl.contains(".xml"))) {
+                // Direct video stream detected inside embed (only if ExoPlayer hasn't failed)!
+                if (!hasExoPlayerFailed && (reqUrl.contains(".m3u8") || (reqUrl.contains(".mp4") && !reqUrl.contains("favicon") && !reqUrl.contains(".xml")))) {
                     android.util.Log.d("PlayerActivityNet", "INTERCEPTED STREAM IN EMBED: $reqUrl")
                     val currentWebUrl = view?.url ?: ""
                     val refererToUse = request?.requestHeaders?.get("Referer") ?: currentWebUrl
                     mainHandler.post {
-                        if (exoPlayer == null) {
+                        if (exoPlayer == null && !hasExoPlayerFailed) {
                             initializeExoPlayer(reqUrl, refererToUse)
                         }
                     }
@@ -498,12 +501,12 @@ class PlayerActivity : AppCompatActivity() {
                                 }
                             } catch(e) {}
 
-                            // 4. Select Servidor 1 on SoloLatino if present
+                            // 4. Select Servidor 1 or LATINO on SoloLatino if present
                             try {
-                                var btns = document.querySelectorAll('[data-server-btn]');
+                                var btns = document.querySelectorAll('[data-server-btn], button.server-btn');
                                 for (var i = 0; i < btns.length; i++) {
                                     var t = (btns[i].textContent || '').toUpperCase();
-                                    if (t.includes('SERVIDOR 1') || (!t.includes('PREMIUM') && btns.length > 1)) {
+                                    if ((t.includes('LATINO') || t.includes('SERVIDOR 1') || btns.length > 1) && !t.includes('PREMIUM') && !t.includes('VIP')) {
                                         btns[i].click();
                                         break;
                                     }

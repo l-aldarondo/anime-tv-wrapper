@@ -33,7 +33,15 @@ object SoloLatinoStreamResolver {
             }
         }
         override fun loadForRequest(url: HttpUrl): List<Cookie> {
-            return cookieStore[url.host] ?: emptyList()
+            val list = mutableListOf<Cookie>()
+            cookieStore.values.forEach { cookieList ->
+                cookieList.forEach { c ->
+                    if (c.matches(url) && !list.any { it.name == c.name }) {
+                        list.add(c)
+                    }
+                }
+            }
+            return list
         }
     }
 
@@ -57,6 +65,14 @@ object SoloLatinoStreamResolver {
         }
     }
 
+    private fun ensureFreshCsrf() {
+        try {
+            fetch("https://sololatino.net/sanctum/csrf-cookie", "https://sololatino.net")
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     /**
      * Resolves a SoloLatino episode URL into a direct .m3u8 stream or clean embed URL
      * completely bypassing the "Prueba con Servidor 1" paywall screen.
@@ -64,54 +80,83 @@ object SoloLatinoStreamResolver {
     fun resolve(episodeUrl: String): StreamResult? {
         try {
             // 1. Ensure sanctum CSRF cookie exists
-            val hasXsrf = cookieStore["sololatino.net"]?.any { it.name == "XSRF-TOKEN" } == true
+            val hasXsrf = cookieStore.values.flatten().any { it.name == "XSRF-TOKEN" }
             if (!hasXsrf) {
-                fetch("https://sololatino.net/sanctum/csrf-cookie", "https://sololatino.net")
+                ensureFreshCsrf()
             }
 
             // 2. Fetch episode page
             val epHtml = fetch(episodeUrl, "https://sololatino.net")
             if (epHtml.isEmpty()) return null
 
-            // 3. Find Servidor 1 button token (avoid PREMIUM VIP paywall)
+            // 3. Find server candidate tokens (prioritizing LATINO / SERVIDOR 1 over PREMIUM/VIP)
             val doc = Jsoup.parse(epHtml, episodeUrl)
-            val serverBtns = doc.select("[data-server-btn]")
-            var targetToken = ""
+            val serverBtns = doc.select("[data-server-btn], [data-player-token]")
+            val candidateTokens = mutableListOf<String>()
+
             for (btn in serverBtns) {
                 val text = btn.text().uppercase()
                 val token = btn.attr("data-player-token")
-                if (token.isNotEmpty() && (text.contains("SERVIDOR 1") || (!text.contains("PREMIUM") && serverBtns.size > 1))) {
-                    targetToken = token
-                    break
+                if (token.isNotEmpty()) {
+                    if (text.contains("LATINO") || text.contains("SERVIDOR 1") || (!text.contains("PREMIUM") && !text.contains("VIP"))) {
+                        candidateTokens.add(0, token)
+                    } else {
+                        candidateTokens.add(token)
+                    }
                 }
             }
-            if (targetToken.isEmpty() && serverBtns.isNotEmpty()) {
-                targetToken = serverBtns.last()?.attr("data-player-token") ?: ""
-            }
-            if (targetToken.isEmpty()) return null
 
-            // 4. Request /api/player-url
-            val rawXsrf = cookieStore["sololatino.net"]?.find { it.name == "XSRF-TOKEN" }?.value ?: ""
-            val decodedXsrf = try { URLDecoder.decode(rawXsrf, "UTF-8") } catch (e: Exception) { rawXsrf }
+            if (candidateTokens.isEmpty()) return null
 
-            val jsonBody = """{"t":"$targetToken"}""".toRequestBody("application/json; charset=utf-8".toMediaType())
-            val apiReq = Request.Builder()
-                .url("https://sololatino.net/api/player-url")
-                .post(jsonBody)
-                .header("User-Agent", USER_AGENT)
-                .header("Accept", "application/json")
-                .header("Content-Type", "application/json")
-                .header("X-XSRF-TOKEN", decodedXsrf)
-                .header("X-Requested-With", "XMLHttpRequest")
-                .header("Referer", episodeUrl)
-                .build()
-
+            // 4. Request /api/player-url trying candidate tokens
             var embedUrl = ""
-            client.newCall(apiReq).execute().use { resp ->
-                if (resp.isSuccessful) {
-                    val body = resp.body?.string() ?: ""
-                    val json = JSONObject(body)
-                    embedUrl = json.optString("url")
+            for (targetToken in candidateTokens.distinct()) {
+                var rawXsrf = cookieStore.values.flatten().find { it.name == "XSRF-TOKEN" }?.value ?: ""
+                if (rawXsrf.isEmpty()) {
+                    ensureFreshCsrf()
+                    rawXsrf = cookieStore.values.flatten().find { it.name == "XSRF-TOKEN" }?.value ?: ""
+                }
+                val decodedXsrf = try { URLDecoder.decode(rawXsrf, "UTF-8") } catch (e: Exception) { rawXsrf }
+
+                val jsonBody = """{"t":"$targetToken"}""".toRequestBody("application/json; charset=utf-8".toMediaType())
+                val apiReq = Request.Builder()
+                    .url("https://sololatino.net/api/player-url")
+                    .post(jsonBody)
+                    .header("User-Agent", USER_AGENT)
+                    .header("Accept", "application/json")
+                    .header("Content-Type", "application/json")
+                    .header("X-XSRF-TOKEN", decodedXsrf)
+                    .header("X-Requested-With", "XMLHttpRequest")
+                    .header("Referer", episodeUrl)
+                    .build()
+
+                var resBody = ""
+                client.newCall(apiReq).execute().use { resp ->
+                    if (resp.code == 419) {
+                        // Stale CSRF, re-fetch and retry once
+                        ensureFreshCsrf()
+                        val retryXsrf = cookieStore.values.flatten().find { it.name == "XSRF-TOKEN" }?.value ?: ""
+                        val retryDecoded = try { URLDecoder.decode(retryXsrf, "UTF-8") } catch (e: Exception) { retryXsrf }
+                        val retryReq = apiReq.newBuilder().header("X-XSRF-TOKEN", retryDecoded).build()
+                        client.newCall(retryReq).execute().use { retryResp ->
+                            if (retryResp.isSuccessful) {
+                                resBody = retryResp.body?.string() ?: ""
+                            }
+                        }
+                    } else if (resp.isSuccessful) {
+                        resBody = resp.body?.string() ?: ""
+                    }
+                }
+
+                if (resBody.isNotEmpty()) {
+                    val json = JSONObject(resBody)
+                    val url = json.optString("url")
+                    if (url.isNotEmpty() && !url.contains("premium") && !url.contains("vip")) {
+                        embedUrl = url
+                        break
+                    } else if (url.isNotEmpty() && embedUrl.isEmpty()) {
+                        embedUrl = url
+                    }
                 }
             }
 
@@ -120,7 +165,7 @@ object SoloLatinoStreamResolver {
                 embedUrl = embedUrl.replace("player.pelisserieshoy.com", "embed69.org")
             }
 
-            // 5. Fetch and decrypt embed69 to obtain direct VidHide stream
+            // 5. Fetch and decrypt embed69 to obtain direct VidHide stream or alternative embeds
             if (embedUrl.contains("embed69.org/f/")) {
                 val directStream = resolveEmbed69(embedUrl, episodeUrl)
                 if (directStream != null) {
@@ -165,6 +210,7 @@ object SoloLatinoStreamResolver {
             val dataLinkJson = JSONArray(dataLinkMatch.groupValues[1])
 
             var vidhideUrl = ""
+            var alternativeEmbedUrl = ""
             for (i in 0 until dataLinkJson.length()) {
                 val fileObj = dataLinkJson.getJSONObject(i)
                 val embeds = fileObj.optJSONArray("sortedEmbeds") ?: continue
@@ -174,7 +220,8 @@ object SoloLatinoStreamResolver {
                     val decrypted = decryptAes(encLink, aesKey)
                     if (decrypted.contains("morencius.com") || decrypted.contains("vidhide")) {
                         vidhideUrl = decrypted
-                        break
+                    } else if (alternativeEmbedUrl.isEmpty() && (decrypted.contains("streamwish") || decrypted.contains("hglink") || decrypted.contains("voe") || decrypted.contains("filemoon"))) {
+                        alternativeEmbedUrl = decrypted
                     }
                 }
                 if (vidhideUrl.isNotEmpty()) break
@@ -195,6 +242,20 @@ object SoloLatinoStreamResolver {
                     )
                 }
             }
+
+            // If direct m3u8 extraction was not applicable, return the working alternative embed
+            val chosenEmbed = when {
+                alternativeEmbedUrl.isNotEmpty() -> alternativeEmbedUrl
+                vidhideUrl.isNotEmpty() -> vidhideUrl
+                else -> embedUrl
+            }
+            return StreamResult(
+                videoUrl = chosenEmbed,
+                isHls = false,
+                isEmbed = true,
+                serverName = "SoloLatino Embed (Servidor 1)",
+                headers = mapOf("Referer" to if (chosenEmbed == embedUrl) episodeUrl else "https://embed69.org/")
+            )
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -240,8 +301,10 @@ object SoloLatinoStreamResolver {
 
 object DeanEdwardsUnpacker {
     fun unpack(html: String): String {
-        val regex = Regex("""\}\('(.+)',(\d+),(\d+),'([^']+)'\.split\('\|'\)""")
-        val match = regex.find(html) ?: return ""
+        val regex = Regex("""eval\(function\(p,a,c,k,e,[rd]\)\{.*?return p\}\('(.+?)'\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*'([^']+)'\.split\('\|'\)""", RegexOption.DOT_MATCHES_ALL)
+        val match = regex.find(html)
+            ?: Regex("""\}\('(.+)',(\d+),(\d+),'([^']+)'\.split\('\|'\)""").find(html)
+            ?: return ""
         val p = match.groupValues[1]
         val a = match.groupValues[2].toInt()
         val c = match.groupValues[3].toInt()
@@ -249,9 +312,9 @@ object DeanEdwardsUnpacker {
 
         fun baseN(num: Int, base: Int): String {
             return if (num < base) {
-                if (num > 35) (num + 29).toChar().toString() else Integer.toString(num, 36)
+                if (num > 35) (num + 29).toChar().toString() else Integer.toString(num, base)
             } else {
-                baseN(num / base, base) + (if (num % base > 35) (num % base + 29).toChar().toString() else Integer.toString(num % base, 36))
+                baseN(num / base, base) + (if (num % base > 35) (num % base + 29).toChar().toString() else Integer.toString(num % base, base))
             }
         }
 
