@@ -145,11 +145,14 @@ class GogoAnimeSource : AnimeSource {
                     ?: Regex("""(?:season|temporada|s)[-\s]?(\d+)""", RegexOption.IGNORE_CASE).find(title)
                 val seasonNum = seasonNumMatch?.groupValues?.get(1)?.toIntOrNull() ?: 1
 
+                val rawTitle = link.attr("title").trim().ifEmpty { epText }
+                val epTitle = if (rawTitle.isNotEmpty() && rawTitle.length < 80) rawTitle else "Episodio $epNum"
+
                 episodes.add(
                     AnimeEpisode(
                         episodeNumber = epNum,
                         seasonNumber = seasonNum,
-                        title = if (epText.isNotEmpty() && epText.length < 50) epText else "Episodio $epNum",
+                        title = epTitle,
                         episodeUrl = href
                     )
                 )

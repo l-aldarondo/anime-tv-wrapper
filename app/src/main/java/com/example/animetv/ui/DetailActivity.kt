@@ -169,16 +169,19 @@ class DetailActivity : AppCompatActivity() {
 
     private fun bindFocusedEpisode(ep: AnimeEpisode) {
         layoutFocusedEpisodeInfo.visibility = View.VISIBLE
-        txtFocusedEpisodeHeader.text = if (ep.seasonNumber > 1) {
+        val baseHeader = if (ep.seasonNumber > 1) {
             "TEMPORADA ${ep.seasonNumber} • EPISODIO ${ep.episodeNumber}"
         } else {
             "EPISODIO ${ep.episodeNumber}"
         }
+        txtFocusedEpisodeHeader.text = if (ep.releaseDate.isNotEmpty()) "$baseHeader  •  ${ep.releaseDate}" else baseHeader
         txtFocusedEpisodeTitle.text = ep.title.ifEmpty { "Episodio ${ep.episodeNumber}" }
+
         val synopsisText = if (ep.synopsis.isNotEmpty()) {
             ep.synopsis
         } else {
-            currentDetail?.synopsis?.ifEmpty { "Sin descripción disponible." } ?: "Sin descripción disponible."
+            val showTitle = currentDetail?.title ?: "esta serie"
+            "Episodio ${ep.episodeNumber} de $showTitle.\n(Esta fuente no incluye sinopsis individual para cada capítulo)."
         }
         txtFocusedEpisodeSynopsis.text = synopsisText
     }

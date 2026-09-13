@@ -147,26 +147,54 @@ class AnimeYTSource : AnimeSource {
             val genres = doc.select(".genres a, .genre a").map { it.text().trim() }
 
             val episodes = mutableListOf<AnimeEpisode>()
-            val epLinks = doc.select("a[href*=/anime/], a[href*=/ver/], a[href*=-episodio-], a[href*=-capitulo-]")
+            val cards = doc.select(".aniyt-episode-card")
+            if (cards.isNotEmpty()) {
+                for (card in cards) {
+                    val link = card.selectFirst("a.aniyt-episode-media, a[href*=-capitulo-], a[href*=-episodio-], a") ?: continue
+                    val href = link.absUrl("href")
+                    val epNumMatch = Regex("""(?:episodio|capitulo)-?(\d+)""", RegexOption.IGNORE_CASE).find(href)
+                    val epNum = epNumMatch?.groupValues?.get(1)?.toIntOrNull() ?: (episodes.size + 1)
 
-            for (link in epLinks) {
-                val href = link.absUrl("href")
-                if (!href.contains("-capitulo-") && !href.contains("-episodio-") && !href.contains("/anime/")) continue
-                val epNumMatch = Regex("""(?:episodio|capitulo)-?(\d+)""", RegexOption.IGNORE_CASE).find(href)
-                val epNum = epNumMatch?.groupValues?.get(1)?.toIntOrNull() ?: (episodes.size + 1)
+                    val seasonNumMatch = Regex("""(?:temporada|season)-?(\d+)""", RegexOption.IGNORE_CASE).find(href)
+                    val seasonNum = seasonNumMatch?.groupValues?.get(1)?.toIntOrNull() ?: 1
 
-                val seasonNumMatch = Regex("""(?:temporada|season)-?(\d+)""", RegexOption.IGNORE_CASE).find(href)
-                    ?: Regex("""(?:temporada|season)\s*(\d+)""", RegexOption.IGNORE_CASE).find(link.text())
-                val seasonNum = seasonNumMatch?.groupValues?.get(1)?.toIntOrNull() ?: 1
+                    val badge = card.selectFirst(".aniyt-card-code")?.text()?.trim() ?: ""
+                    val date = card.selectFirst("time")?.text()?.trim() ?: ""
+                    val epTitle = if (badge.isNotEmpty()) badge else "Episodio $epNum"
 
-                episodes.add(
-                    AnimeEpisode(
-                        episodeNumber = epNum,
-                        seasonNumber = seasonNum,
-                        title = "Episodio $epNum",
-                        episodeUrl = href
+                    episodes.add(
+                        AnimeEpisode(
+                            episodeNumber = epNum,
+                            seasonNumber = seasonNum,
+                            title = epTitle,
+                            episodeUrl = href,
+                            releaseDate = date
+                        )
                     )
-                )
+                }
+            }
+
+            if (episodes.isEmpty()) {
+                val epLinks = doc.select("a[href*=/anime/], a[href*=/ver/], a[href*=-episodio-], a[href*=-capitulo-]")
+                for (link in epLinks) {
+                    val href = link.absUrl("href")
+                    if (!href.contains("-capitulo-") && !href.contains("-episodio-") && !href.contains("/anime/")) continue
+                    val epNumMatch = Regex("""(?:episodio|capitulo)-?(\d+)""", RegexOption.IGNORE_CASE).find(href)
+                    val epNum = epNumMatch?.groupValues?.get(1)?.toIntOrNull() ?: (episodes.size + 1)
+
+                    val seasonNumMatch = Regex("""(?:temporada|season)-?(\d+)""", RegexOption.IGNORE_CASE).find(href)
+                        ?: Regex("""(?:temporada|season)\s*(\d+)""", RegexOption.IGNORE_CASE).find(link.text())
+                    val seasonNum = seasonNumMatch?.groupValues?.get(1)?.toIntOrNull() ?: 1
+
+                    episodes.add(
+                        AnimeEpisode(
+                            episodeNumber = epNum,
+                            seasonNumber = seasonNum,
+                            title = "Episodio $epNum",
+                            episodeUrl = href
+                        )
+                    )
+                }
             }
 
             val uniqueEpisodes = episodes.distinctBy { it.episodeUrl }

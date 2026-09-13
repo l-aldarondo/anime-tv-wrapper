@@ -9,8 +9,8 @@ android {
         applicationId = "com.example.animetv.lite"
         minSdk = 26
         targetSdk = 35
-        versionCode = 13
-        versionName = "2.8.4-lite"
+        versionCode = 14
+        versionName = "2.8.5-lite"
     }
 
     buildTypes {
