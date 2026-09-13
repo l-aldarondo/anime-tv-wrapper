@@ -15,6 +15,8 @@ import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import android.os.Handler
+import android.os.Looper
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.NestedScrollView
 import androidx.lifecycle.lifecycleScope
@@ -22,8 +24,10 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
+import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions
 import com.example.animetv.core.CatalogRepository
 import com.example.animetv.core.HomeCatalogData
+import com.example.animetv.core.history.PlaybackHistoryStore
 import com.example.animetv.core.model.AnimeCard
 import com.example.animetv.core.model.CatalogRow
 import com.example.animetv.ui.DetailActivity
@@ -59,6 +63,20 @@ class MainActivity : AppCompatActivity() {
     private var featuredAnime: AnimeCard? = null
     private var lastLoadedCatalog: HomeCatalogData? = null
 
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var heroSuggestions = listOf<AnimeCard>()
+    private var heroIndex = 0
+
+    private val heroRotateRunnable = object : Runnable {
+        override fun run() {
+            if (heroSuggestions.isNotEmpty() && !isFinishing && !isDestroyed) {
+                heroIndex = (heroIndex + 1) % heroSuggestions.size
+                bindHero(heroSuggestions[heroIndex], animate = true)
+            }
+            mainHandler.postDelayed(this, 12000L)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -72,9 +90,31 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Refresh Favorites row when returning to MainActivity
+        // Refresh Continuar Viendo & Mi Lista rows dynamically
         refreshRowsWithFavorites()
         featuredAnime?.let { updateHeroFavoriteButton(it) }
+        startHeroRotation()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        stopHeroRotation()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        stopHeroRotation()
+    }
+
+    private fun startHeroRotation() {
+        mainHandler.removeCallbacks(heroRotateRunnable)
+        if (heroSuggestions.size > 1) {
+            mainHandler.postDelayed(heroRotateRunnable, 12000L)
+        }
+    }
+
+    private fun stopHeroRotation() {
+        mainHandler.removeCallbacks(heroRotateRunnable)
     }
 
     private fun initViews() {
@@ -110,7 +150,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
-        btnNavCatalog.setBackgroundResource(R.drawable.bg_topbar_active_source)
+        // Red highlight dynamically follows focus; default focus on Catálogo
         btnNavCatalog.requestFocus()
 
         btnNavCatalog.setOnClickListener {
@@ -119,8 +159,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnNavMyList.setOnClickListener {
-            // Scroll down to catalog rows
-            scrollMain.smoothScrollTo(0, 400)
+            // Scroll down to catalog rows (Continuar Viendo & Mi Lista)
+            scrollMain.smoothScrollTo(0, 350)
             recyclerCatalogRows.requestFocus()
         }
 
@@ -139,10 +179,7 @@ class MainActivity : AppCompatActivity() {
         if (cached != null && (cached.latinoTrending.isNotEmpty() || cached.recentEpisodes.isNotEmpty())) {
             lastLoadedCatalog = cached
             progressBarHome.visibility = View.GONE
-            val hero = cached.latinoTrending.firstOrNull() ?: cached.recentEpisodes.firstOrNull()
-            if (hero != null) {
-                bindHero(hero)
-            }
+            updateHeroSuggestions(cached)
             refreshRowsWithFavorites()
             // 2. Silent background revalidation so new episodes update smoothly without blocking the UI
             fetchCatalog(forceRefresh = true, isSilent = true)
@@ -162,12 +199,7 @@ class MainActivity : AppCompatActivity() {
                 lastLoadedCatalog = data
                 progressBarHome.visibility = View.GONE
 
-                // Set Hero Billboard if not already bound or on manual refresh
-                val hero = data.latinoTrending.firstOrNull() ?: data.recentEpisodes.firstOrNull()
-                if (hero != null && (featuredAnime == null || !isSilent)) {
-                    bindHero(hero)
-                }
-
+                updateHeroSuggestions(data)
                 refreshRowsWithFavorites()
                 if (!isSilent && forceRefresh) {
                     Toast.makeText(this@MainActivity, "Catálogo actualizado", Toast.LENGTH_SHORT).show()
@@ -182,18 +214,43 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun bindHero(anime: AnimeCard) {
+    private fun updateHeroSuggestions(data: HomeCatalogData) {
+        // Candidate pool from SoloLatino sections + Latino trending
+        val pool = mutableListOf<AnimeCard>()
+        for (sec in data.soloLatinoSections) {
+            pool.addAll(sec.cards)
+        }
+        pool.addAll(data.latinoTrending)
+
+        val distinct = pool.filter { it.title.isNotEmpty() && (it.backdropUrl.isNotEmpty() || it.posterUrl.isNotEmpty()) }
+            .distinctBy { it.detailUrl }
+
+        if (distinct.isNotEmpty()) {
+            heroSuggestions = distinct.shuffled().take(20)
+            if (featuredAnime == null) {
+                heroIndex = 0
+                bindHero(heroSuggestions[0], animate = false)
+            }
+            startHeroRotation()
+        }
+    }
+
+    private fun bindHero(anime: AnimeCard, animate: Boolean = false) {
         featuredAnime = anime
         txtHeroTitle.text = anime.title
-        txtHeroSynopsis.text = anime.synopsis.ifEmpty { "Serie anime disponible en alta definición y audio latino." }
+        txtHeroSynopsis.text = anime.synopsis.ifEmpty { "Contenido disponible en SoloLatino en alta definición y audio latino." }
+        txtHeroBadge.text = "★ DESTACADO DE LA SEMANA"
 
         val imageToLoad = anime.backdropUrl.ifEmpty { anime.posterUrl }
         if (imageToLoad.isNotEmpty()) {
-            Glide.with(this)
+            val req = Glide.with(this)
                 .load(imageToLoad)
                 .centerCrop()
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
-                .into(imgHeroBackdrop)
+            if (animate) {
+                req.transition(DrawableTransitionOptions.withCrossFade(700))
+            }
+            req.into(imgHeroBackdrop)
         }
 
         btnHeroPlay.setOnClickListener {
@@ -206,18 +263,18 @@ class MainActivity : AppCompatActivity() {
             updateHeroFavoriteButton(anime)
         }
 
-        // Give initial TV remote focus to the Hero Play button
-        btnHeroPlay.requestFocus()
+        if (!animate) {
+            // Give initial TV remote focus to the Hero Play button on first load
+            btnHeroPlay.requestFocus()
+        }
     }
 
     private fun updateHeroFavoriteButton(anime: AnimeCard) {
         val isFav = FavoritesStore.isFavorite(this, anime.detailUrl)
         if (isFav) {
             btnHeroFavorite.text = "✓  En Mi Lista"
-            btnHeroFavorite.setBackgroundResource(R.drawable.bg_topbar_active_source)
         } else {
-            btnHeroFavorite.text = "⭐  Mi Lista"
-            btnHeroFavorite.setBackgroundResource(R.drawable.bg_topbar_item)
+            btnHeroFavorite.text = "+  Mi Lista"
         }
     }
 
@@ -225,7 +282,33 @@ class MainActivity : AppCompatActivity() {
         val data = lastLoadedCatalog ?: return
         val allRows = mutableListOf<CatalogRow>()
 
-        // 1. Favorites / Continue Watching Row
+        // 1. "Continuar Viendo" Row (Always First, dynamic chronological order of what was watched last)
+        val historyRecords = PlaybackHistoryStore.loadAll(this)
+        if (historyRecords.isNotEmpty()) {
+            val continueCards = historyRecords.map { rec ->
+                val progressPct = if (rec.durationMs > 0) ((rec.positionMs * 100) / rec.durationMs).toInt() else 0
+                val badge = when {
+                    rec.episodeNumber > 0 && progressPct > 0 -> "Ep ${rec.episodeNumber} • $progressPct%"
+                    rec.episodeNumber > 0 -> "Ep ${rec.episodeNumber}"
+                    progressPct > 0 -> "$progressPct%"
+                    else -> "Viendo"
+                }
+                AnimeCard(
+                    id = rec.animeDetailUrl.ifEmpty { rec.episodeUrl },
+                    title = rec.animeTitle.ifEmpty { rec.episodeTitle },
+                    posterUrl = rec.posterUrl,
+                    detailUrl = rec.animeDetailUrl.ifEmpty { rec.episodeUrl },
+                    source = rec.source.ifEmpty { "Continuar" },
+                    episodeBadge = badge
+                )
+            }.distinctBy { it.detailUrl }
+
+            if (continueCards.isNotEmpty()) {
+                allRows.add(CatalogRow(title = "▶ Continuar Viendo", cards = continueCards))
+            }
+        }
+
+        // 2. "Mi Lista" Row (Always Second)
         val storedFavorites = FavoritesStore.getFavorites(this)
         if (storedFavorites.isNotEmpty()) {
             val favCards = storedFavorites.map { fav ->
@@ -234,14 +317,14 @@ class MainActivity : AppCompatActivity() {
                     title = fav.title,
                     posterUrl = fav.poster,
                     detailUrl = fav.url,
-                    source = if (fav.source.isNotEmpty()) fav.source else "Favoritos",
+                    source = if (fav.source.isNotEmpty()) fav.source else "Mi Lista",
                     episodeBadge = "Guardado"
                 )
             }
-            allRows.add(CatalogRow(title = "⭐ Mi Lista / Continuar Viendo", cards = favCards))
+            allRows.add(CatalogRow(title = "⭐ Mi Lista", cards = favCards))
         }
 
-        // 2. SoloLatino Categorías principales (Películas, Series, Recién Añadidos, Netflix, Prime, Disney+, Apple TV+)
+        // 3. SoloLatino Categorías principales (Películas, Series, Recién Añadidos, Netflix, Prime, Disney+, Apple TV+)
         val tokyoSections = mutableListOf<CatalogRow>()
         for (sec in data.soloLatinoSections) {
             if (sec.title.contains("Tokyo", ignoreCase = true)) {
@@ -251,34 +334,34 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 3. SoloAnime (Audio Latino) - colocado justo antes de Tokyo MX
+        // 4. SoloAnime (Audio Latino) - colocado justo antes de Tokyo MX
         if (data.latinoTrending.isNotEmpty()) {
             allRows.add(CatalogRow(title = "🔥 SoloAnime (Audio Latino)", cards = data.latinoTrending))
         }
 
-        // 4. Tokyo MX y TV Tokyo (después de Disney+ y SoloAnime)
+        // 5. Tokyo MX y TV Tokyo (después de Disney+ y SoloAnime)
         for (sec in tokyoSections) {
             if (sec.cards.isNotEmpty()) {
                 allRows.add(sec)
             }
         }
 
-        // 5. 9Anime HD (Renombrado según solicitud #5)
+        // 6. 9Anime HD (Renombrado según solicitud #5)
         if (data.nineAnimeTrending.isNotEmpty()) {
             allRows.add(CatalogRow(title = "● 9Anime HD", cards = data.nineAnimeTrending))
         }
 
-        // 6. JKAnime (Renombrado según solicitud #6)
+        // 7. JKAnime (Renombrado según solicitud #6)
         if (data.recentEpisodes.isNotEmpty()) {
             allRows.add(CatalogRow(title = "⚡ JKAnime", cards = data.recentEpisodes))
         }
 
-        // 7. GogoAnime (Renombrado según solicitud #7)
+        // 8. GogoAnime (Renombrado según solicitud #7)
         if (data.gogoTrending.isNotEmpty()) {
             allRows.add(CatalogRow(title = "🌐 GogoAnime", cards = data.gogoTrending))
         }
 
-        // 8. Populares / Recomendados
+        // 9. Populares / Recomendados
         if (data.latinoTrending.size > 6) {
             allRows.add(CatalogRow(title = "🌟 Series Populares Recomendadas", cards = data.latinoTrending.reversed()))
         }

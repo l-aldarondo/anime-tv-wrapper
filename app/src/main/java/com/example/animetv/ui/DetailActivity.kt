@@ -230,10 +230,8 @@ class DetailActivity : AppCompatActivity() {
         val isFav = FavoritesStore.isFavorite(this, card.detailUrl)
         if (isFav) {
             btnToggleFavorite.text = "✓  En Mi Lista"
-            btnToggleFavorite.setBackgroundResource(R.drawable.bg_topbar_active_source)
         } else {
-            btnToggleFavorite.text = "⭐  Añadir a Mi Lista"
-            btnToggleFavorite.setBackgroundResource(R.drawable.bg_topbar_item)
+            btnToggleFavorite.text = "+  Mi Lista"
         }
     }
 

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Focused state: clean dark gray capsule with crisp 2dp white stroke -->
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#262626" />
+            <stroke android:width="2dp" android:color="#FFFFFF" />
+            <corners android:radius="12dp" />
+        </shape>
+    </item>
+    <!-- Idle state: matching background dark capsule -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#1A1A1A" />
+            <stroke android:width="1dp" android:color="#404040" />
+            <corners android:radius="12dp" />
+        </shape>
+    </item>
+</selector>

@@ -48,7 +48,7 @@
             android:id="@+id/btnNavCatalog"
             android:layout_width="wrap_content"
             android:layout_height="38dp"
-            android:background="@drawable/bg_topbar_active_source"
+            android:background="@drawable/bg_topbar_item"
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:paddingHorizontal="14dp"
@@ -196,12 +196,12 @@
                                 android:id="@+id/btnHeroPlay"
                                 android:layout_width="wrap_content"
                                 android:layout_height="40dp"
-                                android:background="@drawable/bg_topbar_active_source"
+                                android:background="@drawable/bg_netflix_btn_play"
                                 android:focusable="true"
                                 android:focusableInTouchMode="true"
                                 android:paddingHorizontal="20dp"
                                 android:text="▶  Ver Ahora"
-                                android:textColor="#FFFFFF"
+                                android:textColor="@color/color_netflix_btn_play"
                                 android:textSize="13sp"
                                 android:textStyle="bold" />
 
@@ -210,12 +210,12 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="40dp"
                                 android:layout_marginStart="12dp"
-                                android:background="@drawable/bg_topbar_item"
+                                android:background="@drawable/bg_netflix_btn_secondary"
                                 android:focusable="true"
                                 android:focusableInTouchMode="true"
                                 android:paddingHorizontal="16dp"
                                 android:text="⭐  Mi Lista"
-                                android:textColor="#F0F0FF"
+                                android:textColor="#FFFFFF"
                                 android:textSize="13sp"
                                 android:textStyle="bold" />
 

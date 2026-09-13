@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Unwatched background track: translucent white -->
+    <item android:id="@android:id/background">
+        <shape android:shape="rectangle">
+            <solid android:color="#40FFFFFF" />
+            <corners android:radius="4dp" />
+        </shape>
+    </item>
+    <!-- Secondary/buffer progress: subtle white -->
+    <item android:id="@android:id/secondaryProgress">
+        <clip>
+            <shape android:shape="rectangle">
+                <solid android:color="#80FFFFFF" />
+                <corners android:radius="4dp" />
+            </shape>
+        </clip>
+    </item>
+    <!-- Watched progress: Netflix Red filling from left to right -->
+    <item android:id="@android:id/progress">
+        <clip>
+            <shape android:shape="rectangle">
+                <solid android:color="#E50914" />
+                <corners android:radius="4dp" />
+            </shape>
+        </clip>
+    </item>
+</layer-list>

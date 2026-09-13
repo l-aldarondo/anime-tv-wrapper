@@ -70,7 +70,7 @@
                 style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="match_parent"
                 android:layout_height="8dp"
-                android:progressDrawable="@drawable/bg_topbar_active_source"
+                android:progressDrawable="@drawable/player_progress_netflix"
                 android:progress="0"
                 android:max="1000" />
 
