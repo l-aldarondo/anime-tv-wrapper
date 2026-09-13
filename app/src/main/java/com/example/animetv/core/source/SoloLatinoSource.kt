@@ -3,6 +3,7 @@ package com.example.animetv.core.source
 import com.example.animetv.core.model.AnimeCard
 import com.example.animetv.core.model.AnimeDetail
 import com.example.animetv.core.model.AnimeEpisode
+import com.example.animetv.core.model.CatalogRow
 import com.example.animetv.core.model.StreamResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -208,6 +209,9 @@ class SoloLatinoSource : AnimeSource {
                 )
             }
 
+            val trailerId = doc.selectFirst("[data-trailer]")?.attr("data-trailer")?.trim() ?: ""
+            val trailerUrl = if (trailerId.isNotEmpty()) "https://www.youtube.com/embed/$trailerId?autoplay=1" else ""
+
             AnimeDetail(
                 title = title,
                 posterUrl = posterUrl,
@@ -215,6 +219,7 @@ class SoloLatinoSource : AnimeSource {
                 genres = genres,
                 source = name,
                 detailUrl = detailUrl,
+                trailerUrl = trailerUrl,
                 episodes = episodes.sortedWith(compareBy({ it.seasonNumber }, { it.episodeNumber }))
             )
         } catch (e: Exception) {
@@ -227,6 +232,94 @@ class SoloLatinoSource : AnimeSource {
                 detailUrl = detailUrl,
                 episodes = emptyList()
             )
+        }
+    }
+
+    suspend fun getHomeSections(): List<CatalogRow> = withContext(Dispatchers.IO) {
+        val rows = mutableListOf<CatalogRow>()
+        try {
+            val html = fetchHtml(baseUrl)
+            if (html.isEmpty()) return@withContext rows
+            val doc = Jsoup.parse(html, baseUrl)
+
+            val headings = doc.select("h2")
+            for (h2 in headings) {
+                val rawTitle = h2.text().trim()
+                if (rawTitle.isEmpty()) continue
+
+                val cleanTitle = cleanSectionTitle(rawTitle)
+
+                // Skip Anime section (has its own dedicated "SoloAnime" row) and episodic updates
+                if (cleanTitle.contains("anime", ignoreCase = true) || cleanTitle.contains("episodio", ignoreCase = true)) {
+                    continue
+                }
+
+                val container = h2.parents().firstOrNull { parent ->
+                    parent.select("article, .item, .poster, .card, .item-pelicula").size >= 3
+                } ?: continue
+
+                val items = container.select("article, .item, .poster, .card, .item-pelicula")
+                val cards = mutableListOf<AnimeCard>()
+
+                for (it in items) {
+                    val a = it.selectFirst("a[href*=/serie/], a[href*=/pelicula/]") ?: it.selectFirst("a") ?: continue
+                    val href = a.absUrl("href")
+                    if (!href.contains("/serie/") && !href.contains("/pelicula/")) continue
+
+                    val img = it.selectFirst("img")
+                    val posterUrl = img?.attr("src")?.ifEmpty { img.attr("data-src") } ?: ""
+                    val title = img?.attr("alt")?.trim()
+                        ?: it.selectFirst(".title, h2, h3, h4, .entry-title")?.text()?.trim()
+                        ?: ""
+
+                    val ratingEl = it.selectFirst(".rating, .vote, .stars")
+                    val rating = ratingEl?.text()?.trim() ?: ""
+
+                    val badge = if (href.contains("/pelicula/")) "Película" else "Serie"
+
+                    if (title.isNotEmpty() && href.isNotEmpty()) {
+                        cards.add(
+                            AnimeCard(
+                                id = href,
+                                title = title,
+                                posterUrl = posterUrl,
+                                detailUrl = href,
+                                source = name,
+                                episodeBadge = badge,
+                                rating = rating
+                            )
+                        )
+                    }
+                }
+
+                val distinctCards = cards.distinctBy { it.detailUrl }
+                if (distinctCards.isNotEmpty()) {
+                    rows.add(CatalogRow(title = cleanTitle, cards = distinctCards))
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        rows
+    }
+
+    private fun cleanSectionTitle(raw: String): String {
+        var t = raw
+            .replace("PelA-culas", "Películas")
+            .replace("ReciAcn AAadidos", "Recién Añadidos")
+            .replace("A\u00A0", " ")
+            .trim()
+
+        return when {
+            t.contains("Películas", ignoreCase = true) -> "🎬 Películas Recientes"
+            t.contains("Series", ignoreCase = true) -> "📺 Series Recientes"
+            t.contains("Añadidos", ignoreCase = true) || t.contains("Recien", ignoreCase = true) -> "✨ Recién Añadidos"
+            t.equals("Netflix", ignoreCase = true) -> "🔴 Netflix"
+            t.contains("Prime", ignoreCase = true) -> "📦 Amazon Prime Video"
+            t.contains("Disney", ignoreCase = true) -> "🏰 Disney+"
+            t.contains("Apple", ignoreCase = true) -> "🍏 Apple TV+"
+            t.contains("Tokyo", ignoreCase = true) -> "🗼 $t"
+            else -> t
         }
     }
 

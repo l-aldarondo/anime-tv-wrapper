@@ -24,6 +24,16 @@ object HomeCatalogCache {
                 put("recentEpisodes", cardsToJson(data.recentEpisodes))
                 put("animeYtTrending", cardsToJson(data.animeYtTrending))
                 put("gogoTrending", cardsToJson(data.gogoTrending))
+
+                val sectionsArr = JSONArray()
+                for (row in data.soloLatinoSections) {
+                    val secObj = JSONObject().apply {
+                        put("title", row.title)
+                        put("cards", cardsToJson(row.cards))
+                    }
+                    sectionsArr.put(secObj)
+                }
+                put("soloLatinoSections", sectionsArr)
             }
             val file = File(context.filesDir, CACHE_FILE_NAME)
             file.writeText(root.toString())
@@ -47,6 +57,19 @@ object HomeCatalogCache {
             val animeYt = jsonToCards(root.optJSONArray("animeYtTrending"))
             val gogo = jsonToCards(root.optJSONArray("gogoTrending"))
 
+            val secJson = root.optJSONArray("soloLatinoSections")
+            val soloLatinoSections = mutableListOf<com.example.animetv.core.model.CatalogRow>()
+            if (secJson != null) {
+                for (i in 0 until secJson.length()) {
+                    val secObj = secJson.optJSONObject(i) ?: continue
+                    val secTitle = secObj.optString("title")
+                    val secCards = jsonToCards(secObj.optJSONArray("cards"))
+                    if (secTitle.isNotEmpty() && secCards.isNotEmpty()) {
+                        soloLatinoSections.add(com.example.animetv.core.model.CatalogRow(title = secTitle, cards = secCards))
+                    }
+                }
+            }
+
             if (latino.isEmpty() && recent.isEmpty()) return null
 
             HomeCatalogData(
@@ -55,7 +78,8 @@ object HomeCatalogCache {
                 nineAnimeTrending = nineAnime,
                 recentEpisodes = recent,
                 animeYtTrending = animeYt,
-                gogoTrending = gogo
+                gogoTrending = gogo,
+                soloLatinoSections = soloLatinoSections
             )
         } catch (e: Exception) {
             e.printStackTrace()

@@ -28,7 +28,16 @@ data class AnimeDetail(
     val genres: List<String> = emptyList(),
     val source: String,
     val detailUrl: String,
+    val trailerUrl: String = "",
     val episodes: List<AnimeEpisode> = emptyList()
+) : Serializable
+
+/**
+ * Clean data model representing a row of anime cards in the catalog.
+ */
+data class CatalogRow(
+    val title: String,
+    val cards: List<AnimeCard>
 ) : Serializable
 
 /**

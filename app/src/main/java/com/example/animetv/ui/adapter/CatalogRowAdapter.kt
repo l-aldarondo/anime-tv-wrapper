@@ -8,11 +8,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.animetv.R
 import com.example.animetv.core.model.AnimeCard
-
-data class CatalogRow(
-    val title: String,
-    val cards: List<AnimeCard>
-)
+import com.example.animetv.core.model.CatalogRow
 
 class CatalogRowAdapter(
     private val rows: MutableList<CatalogRow>,

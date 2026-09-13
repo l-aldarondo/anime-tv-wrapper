@@ -2,7 +2,7 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0A0B10">
+    android:background="#0F0F0F">
 
     <!-- Backdrop Background Image with Dark Vignette -->
     <ImageView
@@ -30,23 +30,28 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- Top Info Row (Poster + Metadata) -->
+            <!-- Top Row: Poster + Core Metadata -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginBottom="28dp">
+                android:orientation="horizontal">
 
-                <!-- Anime Poster -->
-                <ImageView
-                    android:id="@+id/imgDetailPoster"
-                    android:layout_width="180dp"
-                    android:layout_height="260dp"
-                    android:scaleType="centerCrop"
-                    android:background="@drawable/bg_favorite_card"
-                    android:contentDescription="@null" />
+                <!-- High-Res Cover Poster Card -->
+                <FrameLayout
+                    android:layout_width="200dp"
+                    android:layout_height="280dp">
 
-                <!-- Metadata Column -->
+                    <ImageView
+                        android:id="@+id/imgDetailPoster"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="centerCrop"
+                        android:background="#151722"
+                        android:contentDescription="@null" />
+
+                </FrameLayout>
+
+                <!-- Information Section -->
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
@@ -54,18 +59,21 @@
                     android:layout_marginStart="24dp"
                     android:orientation="vertical">
 
+                    <!-- Title -->
                     <TextView
                         android:id="@+id/txtDetailTitle"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:textColor="#FFFFFF"
-                        android:textSize="26sp"
-                        android:textStyle="bold" />
+                        android:textSize="28sp"
+                        android:textStyle="bold"
+                        android:maxLines="2"
+                        android:ellipsize="end" />
 
-                    <!-- Source & Genres -->
+                    <!-- Source + Rating Metadata -->
                     <TextView
                         android:id="@+id/txtDetailMeta"
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
                         android:textColor="#FFD54F"
@@ -103,6 +111,21 @@
                             android:textColor="#FFFFFF"
                             android:textSize="14sp"
                             android:textStyle="bold" />
+
+                        <Button
+                            android:id="@+id/btnTrailer"
+                            android:layout_width="wrap_content"
+                            android:layout_height="48dp"
+                            android:layout_marginStart="14dp"
+                            android:background="@drawable/bg_topbar_item"
+                            android:focusable="true"
+                            android:focusableInTouchMode="true"
+                            android:paddingHorizontal="18dp"
+                            android:text="🎬  Ver Tráiler"
+                            android:textColor="#F0F0FF"
+                            android:textSize="14sp"
+                            android:textStyle="bold"
+                            android:visibility="gone" />
 
                         <Button
                             android:id="@+id/btnToggleFavorite"

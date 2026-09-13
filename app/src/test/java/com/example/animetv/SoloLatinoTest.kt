@@ -33,11 +33,31 @@ class SoloLatinoTest {
     }
 
     @Test
-    fun testSearchHiddenMurder() = kotlinx.coroutines.runBlocking {
-        println("=== TESTING SEARCH HIDDEN MURDER ===")
-        val results = com.example.animetv.core.CatalogRepository.searchAll("Hidden Murder")
-        println("=== SEARCH ALL (Hidden Murder): size=${results.size} ===")
-        results.forEach { println("RESULT: ${it.title} (${it.source}) -> ${it.detailUrl}") }
+    fun testGetHomeSections() = kotlinx.coroutines.runBlocking {
+        val s = com.example.animetv.core.source.SoloLatinoSource()
+        val sections = s.getHomeSections()
+        println("=== RETRIEVED ${sections.size} HOME SECTIONS ===")
+        for (sec in sections) {
+            println("SECTION: '${sec.title}' -> ${sec.cards.size} items (First: ${sec.cards.firstOrNull()?.title})")
+        }
+        org.junit.Assert.assertTrue("Should find multiple rows", sections.isNotEmpty())
+        org.junit.Assert.assertFalse("Should not contain animes", sections.any { it.title.contains("anime", ignoreCase = true) })
+    }
+
+    @Test
+    fun testTrailerExtract() = kotlinx.coroutines.runBlocking {
+        val client = okhttp3.OkHttpClient()
+        val html = client.newCall(
+            okhttp3.Request.Builder()
+                .url("https://sololatino.net/pelicula/parecido-a-un-asesinato")
+                .header("User-Agent", "Mozilla/5.0")
+                .build()
+        ).execute().body?.string() ?: ""
+        val doc = org.jsoup.Jsoup.parse(html)
+        val trailerId = doc.selectFirst("[data-trailer]")?.attr("data-trailer")?.trim() ?: ""
+        println("=== EXTRACTED TRAILER ID: $trailerId ===")
+        org.junit.Assert.assertTrue("Should have trailer ID", trailerId.isNotEmpty())
     }
 }
+
 

@@ -25,9 +25,9 @@ import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.example.animetv.core.CatalogRepository
 import com.example.animetv.core.HomeCatalogData
 import com.example.animetv.core.model.AnimeCard
+import com.example.animetv.core.model.CatalogRow
 import com.example.animetv.ui.DetailActivity
 import com.example.animetv.ui.adapter.AnimeCardAdapter
-import com.example.animetv.ui.adapter.CatalogRow
 import com.example.animetv.ui.adapter.CatalogRowAdapter
 import kotlinx.coroutines.launch
 
@@ -246,24 +246,26 @@ class MainActivity : AppCompatActivity() {
             allRows.add(CatalogRow(title = "🔥 SoloAnime (Audio Latino)", cards = data.latinoTrending))
         }
 
-        // 3. SoloStream (Películas y Series Populares)
+        // 3. SoloLatino Categorías (Películas, Series, Recién Añadidos, Netflix, Prime, Disney+, etc.)
+        for (sec in data.soloLatinoSections) {
+            if (sec.cards.isNotEmpty()) {
+                allRows.add(sec)
+            }
+        }
+
+        // 4. SoloStream (Películas y Series Populares)
         if (data.soloStreamTrending.isNotEmpty()) {
             allRows.add(CatalogRow(title = "🎬 SoloStream (Películas y Series Populares)", cards = data.soloStreamTrending))
         }
 
-        // 4. 9Anime (Catálogo Global HD)
+        // 5. 9Anime (Catálogo Global HD)
         if (data.nineAnimeTrending.isNotEmpty()) {
             allRows.add(CatalogRow(title = "● 9Anime (Catálogo Global en HD)", cards = data.nineAnimeTrending))
         }
 
-        // 5. JKAnime Recent Episodes (Estrenos)
+        // 6. JKAnime Recent Episodes (Estrenos)
         if (data.recentEpisodes.isNotEmpty()) {
             allRows.add(CatalogRow(title = "⚡ Últimos Capítulos Estrenados (JKAnime)", cards = data.recentEpisodes))
-        }
-
-        // 6. AnimeYT (Anime en Español y Temporadas)
-        if (data.animeYtTrending.isNotEmpty()) {
-            allRows.add(CatalogRow(title = "🎌 Anime en Español (AnimeYT)", cards = data.animeYtTrending))
         }
 
         // 7. GogoAnime (Catálogo Global Subtitulado)

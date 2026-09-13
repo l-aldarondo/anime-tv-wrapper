@@ -186,7 +186,8 @@
                 android:textSize="14sp"
                 android:textStyle="bold"
                 android:focusable="true"
-                android:clickable="true" />
+                android:clickable="true"
+                android:visibility="gone" />
 
             <TextView
                 android:id="@+id/pillSearchJKAnime"

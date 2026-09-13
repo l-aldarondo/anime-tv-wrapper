@@ -199,6 +199,9 @@ class SoloStreamSource : AnimeSource {
                 )
             }
 
+            val trailerId = doc.selectFirst("[data-trailer]")?.attr("data-trailer")?.trim() ?: ""
+            val trailerUrl = if (trailerId.isNotEmpty()) "https://www.youtube.com/embed/$trailerId?autoplay=1" else ""
+
             AnimeDetail(
                 title = title,
                 posterUrl = posterUrl,
@@ -206,6 +209,7 @@ class SoloStreamSource : AnimeSource {
                 genres = genres,
                 source = name,
                 detailUrl = detailUrl,
+                trailerUrl = trailerUrl,
                 episodes = episodes.sortedWith(compareBy({ it.seasonNumber }, { it.episodeNumber }))
             )
         } catch (e: Exception) {

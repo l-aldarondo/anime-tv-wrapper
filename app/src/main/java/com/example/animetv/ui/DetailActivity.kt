@@ -44,6 +44,7 @@ class DetailActivity : AppCompatActivity() {
     private lateinit var txtMeta: TextView
     private lateinit var txtSynopsis: TextView
     private lateinit var btnPlayFirst: Button
+    private lateinit var btnTrailer: Button
     private lateinit var btnToggleFavorite: Button
     private lateinit var btnBack: Button
     private lateinit var txtEpisodesHeader: TextView
@@ -73,6 +74,7 @@ class DetailActivity : AppCompatActivity() {
         txtMeta = findViewById(R.id.txtDetailMeta)
         txtSynopsis = findViewById(R.id.txtDetailSynopsis)
         btnPlayFirst = findViewById(R.id.btnPlayFirst)
+        btnTrailer = findViewById(R.id.btnTrailer)
         btnToggleFavorite = findViewById(R.id.btnToggleFavorite)
         btnBack = findViewById(R.id.btnBack)
         txtEpisodesHeader = findViewById(R.id.txtEpisodesHeader)
@@ -266,6 +268,22 @@ class DetailActivity : AppCompatActivity() {
                 txtMeta.text = "${detail.source}  •  $genresStr"
                 txtSynopsis.text = detail.synopsis.ifEmpty { "Sin sinopsis disponible." }
                 txtEpisodesHeader.text = "Episodios Disponibles (${detail.episodes.size})"
+
+                // Trailer Button
+                if (detail.trailerUrl.isNotEmpty()) {
+                    btnTrailer.visibility = View.VISIBLE
+                    btnTrailer.setOnClickListener {
+                        PlayerActivity.start(
+                            this@DetailActivity,
+                            videoUrl = detail.trailerUrl,
+                            title = "Tráiler: ${detail.title}",
+                            isHls = false,
+                            isEmbed = true
+                        )
+                    }
+                } else {
+                    btnTrailer.visibility = View.GONE
+                }
 
                 if (detail.episodes.isNotEmpty()) {
                     val record = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this@DetailActivity, card.detailUrl)

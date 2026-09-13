@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#0A0B10">
+    android:background="#0F0F0F">
 
     <!-- Top Persistent Header Bar -->
     <LinearLayout
@@ -13,7 +13,7 @@
         android:layout_height="56dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:background="#12141D"
+        android:background="#141414"
         android:paddingHorizontal="24dp">
 
         <!-- App Logo / Title -->
