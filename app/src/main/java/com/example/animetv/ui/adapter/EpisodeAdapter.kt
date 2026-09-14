@@ -14,6 +14,7 @@ class EpisodeAdapter(
     private var episodes: List<AnimeEpisode>,
     private var lastWatchedRecord: PlaybackRecord? = null,
     private val onEpisodeFocus: ((AnimeEpisode) -> Unit)? = null,
+    private val onEpisodeLongClick: ((AnimeEpisode) -> Unit)? = null,
     private val onEpisodeClick: (AnimeEpisode) -> Unit
 ) : RecyclerView.Adapter<EpisodeAdapter.ViewHolder>() {
 
@@ -70,6 +71,15 @@ class EpisodeAdapter(
 
         holder.itemView.setOnClickListener {
             onEpisodeClick(ep)
+        }
+
+        holder.itemView.setOnLongClickListener {
+            if (onEpisodeLongClick != null) {
+                onEpisodeLongClick.invoke(ep)
+                true
+            } else {
+                false
+            }
         }
     }
 

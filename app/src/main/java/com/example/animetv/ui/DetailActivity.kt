@@ -4,12 +4,15 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.view.LayoutInflater
 import android.view.View
 import android.widget.Button
+import android.widget.EditText
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -23,8 +26,15 @@ import com.example.animetv.core.CatalogRepository
 import com.example.animetv.core.model.AnimeCard
 import com.example.animetv.core.model.AnimeDetail
 import com.example.animetv.core.model.AnimeEpisode
+import com.example.animetv.core.tmdb.TmdbMetadata
+import com.example.animetv.core.tmdb.TmdbMetadataRepository
+import com.example.animetv.core.torrent.TorrServerClient
+import com.example.animetv.core.torrent.TorrentSearchRepository
+import com.example.animetv.core.torrent.TorrentSettingsStore
+import com.example.animetv.core.torrent.TorrentStreamItem
 import com.example.animetv.core.util.CoverUtils
 import com.example.animetv.ui.adapter.EpisodeAdapter
+import com.example.animetv.ui.adapter.TorrentItemAdapter
 import kotlinx.coroutines.launch
 
 class DetailActivity : AppCompatActivity() {
@@ -47,6 +57,7 @@ class DetailActivity : AppCompatActivity() {
     private lateinit var txtSynopsis: TextView
     private lateinit var btnPlayFirst: Button
     private lateinit var btnRestartEpisode: Button
+    private lateinit var btnPlayTorrent: Button
     private lateinit var btnTrailer: Button
     private lateinit var btnToggleFavorite: Button
     private lateinit var btnBack: Button
@@ -63,6 +74,7 @@ class DetailActivity : AppCompatActivity() {
 
     private var currentCard: AnimeCard? = null
     private var currentDetail: AnimeDetail? = null
+    private var currentTmdbMeta: TmdbMetadata? = null
     private var isAscendingOrder: Boolean = true
     private var episodeAdapter: EpisodeAdapter? = null
     private var rawEpisodes: List<AnimeEpisode> = emptyList()
@@ -78,9 +90,14 @@ class DetailActivity : AppCompatActivity() {
         txtSynopsis = findViewById(R.id.txtDetailSynopsis)
         btnPlayFirst = findViewById(R.id.btnPlayFirst)
         btnRestartEpisode = findViewById(R.id.btnRestartEpisode)
+        btnPlayTorrent = findViewById(R.id.btnPlayTorrent)
         btnTrailer = findViewById(R.id.btnTrailer)
         btnToggleFavorite = findViewById(R.id.btnToggleFavorite)
         btnBack = findViewById(R.id.btnBack)
+
+        btnPlayTorrent.setOnClickListener {
+            showTorrentSelectorDialog()
+        }
         txtEpisodesHeader = findViewById(R.id.txtEpisodesHeader)
         btnSortOrder = findViewById(R.id.btnSortOrder)
         btnJumpStart = findViewById(R.id.btnJumpStart)
@@ -300,6 +317,41 @@ class DetailActivity : AppCompatActivity() {
 
     private fun loadDetail(card: AnimeCard) {
         progressBar.visibility = View.VISIBLE
+
+        // Asynchronously fetch TMDB metadata & high-resolution artwork
+        lifecycleScope.launch {
+            try {
+                val tmdb = TmdbMetadataRepository.searchMetadata(this@DetailActivity, card.title)
+                if (tmdb != null) {
+                    currentTmdbMeta = tmdb
+                    val bestBackdrop = if (tmdb.backdropUrl.isNotEmpty()) tmdb.backdropUrl else tmdb.posterUrl
+                    if (bestBackdrop.isNotEmpty()) {
+                        Glide.with(this@DetailActivity)
+                            .load(bestBackdrop)
+                            .centerCrop()
+                            .diskCacheStrategy(DiskCacheStrategy.ALL)
+                            .into(imgBackdrop)
+                    }
+                    if (tmdb.posterUrl.isNotEmpty()) {
+                        Glide.with(this@DetailActivity)
+                            .load(tmdb.posterUrl)
+                            .centerCrop()
+                            .placeholder(R.drawable.bg_card_poster_placeholder)
+                            .diskCacheStrategy(DiskCacheStrategy.ALL)
+                            .into(imgPoster)
+                    }
+                    if (tmdb.overview.isNotEmpty() && (txtSynopsis.text.isNullOrEmpty() || txtSynopsis.text.length < 50 || txtSynopsis.text.contains("Cargando"))) {
+                        txtSynopsis.text = tmdb.overview
+                    }
+                    if (tmdb.ratingText.isNotEmpty() && !txtMeta.text.contains("★")) {
+                        txtMeta.text = "${txtMeta.text}  •  ${tmdb.ratingText}"
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
         lifecycleScope.launch {
             try {
                 val detail = CatalogRepository.getAnimeDetail(card)
@@ -307,8 +359,8 @@ class DetailActivity : AppCompatActivity() {
                 rawEpisodes = detail.episodes
                 progressBar.visibility = View.GONE
 
-                val bestPoster = CoverUtils.pickBestCover(detail.posterUrl, card.posterUrl)
-                if (bestPoster.isNotEmpty()) {
+                val bestPoster = CoverUtils.pickBestCover(currentTmdbMeta?.posterUrl ?: detail.posterUrl, card.posterUrl)
+                if (bestPoster.isNotEmpty() && (currentTmdbMeta == null || currentTmdbMeta?.posterUrl.isNullOrEmpty())) {
                     Glide.with(this@DetailActivity)
                         .load(bestPoster)
                         .centerCrop()
@@ -325,8 +377,11 @@ class DetailActivity : AppCompatActivity() {
 
                 txtTitle.text = detail.title
                 val genresStr = if (detail.genres.isNotEmpty()) detail.genres.take(3).joinToString(", ") else "Anime"
-                txtMeta.text = "${detail.source}  •  $genresStr"
-                txtSynopsis.text = detail.synopsis.ifEmpty { "Sin sinopsis disponible." }
+                val ratingPart = if (currentTmdbMeta?.ratingText?.isNotEmpty() == true) "  •  ${currentTmdbMeta?.ratingText}" else ""
+                txtMeta.text = "${detail.source}  •  $genresStr$ratingPart"
+                if (currentTmdbMeta == null || currentTmdbMeta?.overview.isNullOrEmpty()) {
+                    txtSynopsis.text = detail.synopsis.ifEmpty { "Sin sinopsis disponible." }
+                }
                 txtEpisodesHeader.text = "Episodios Disponibles (${detail.episodes.size})"
 
                 // Trailer Button
@@ -371,6 +426,9 @@ class DetailActivity : AppCompatActivity() {
                         lastWatchedRecord = record,
                         onEpisodeFocus = { ep ->
                             bindFocusedEpisode(ep)
+                        },
+                        onEpisodeLongClick = { ep ->
+                            showTorrentSelectorDialog(ep)
                         },
                         onEpisodeClick = { ep ->
                             playEpisode(detail, ep)
@@ -515,5 +573,187 @@ class DetailActivity : AppCompatActivity() {
         val s = totalSec % 60
         val h = totalSec / 3600
         return if (h > 0) String.format(java.util.Locale.US, "%d:%02d:%02d", h, m, s) else String.format(java.util.Locale.US, "%02d:%02d", m, s)
+    }
+
+    private fun showTorrentSelectorDialog(targetEpisode: AnimeEpisode? = null) {
+        val card = currentCard ?: return
+        val detail = currentDetail
+
+        val isMovie = card.detailUrl.contains("/pelicula/") || (detail != null && detail.episodes.isEmpty())
+        val selectedEp = targetEpisode ?: run {
+            val record = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this, card.detailUrl)
+            if (record != null) {
+                rawEpisodes.firstOrNull { it.episodeUrl == record.episodeUrl || it.episodeNumber == record.episodeNumber }
+            } else if (rawEpisodes.isNotEmpty()) {
+                rawEpisodes.first()
+            } else null
+        }
+
+        val epNumber = selectedEp?.episodeNumber ?: 1
+        val seasonNumber = selectedEp?.seasonNumber ?: 1
+
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_torrent_selector, null)
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .create()
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        val txtHeader = dialogView.findViewById<TextView>(R.id.txtDialogTorrentHeader)
+        val txtSubtitle = dialogView.findViewById<TextView>(R.id.txtDialogTorrentSubtitle)
+        val btnClose = dialogView.findViewById<Button>(R.id.btnDialogClose)
+        val btnSettings = dialogView.findViewById<Button>(R.id.btnTorrentQuickSettings)
+        val progressBar = dialogView.findViewById<ProgressBar>(R.id.progressBarTorrents)
+        val txtEmpty = dialogView.findViewById<TextView>(R.id.txtEmptyTorrents)
+        val recycler = dialogView.findViewById<RecyclerView>(R.id.recyclerTorrents)
+
+        val titleDisplay = card.title
+        val epDisplay = if (isMovie) "(Película)" else "Temporada $seasonNumber • Episodio $epNumber"
+        txtHeader.text = "⚡ Torrents (1080p): $titleDisplay"
+        txtSubtitle.text = "$epDisplay | Filtro: Máximo 1080p (4K bloqueado) | Prioridad: Español/Latino > Dual Audio > Seeds"
+
+        btnClose.setOnClickListener { dialog.dismiss() }
+        btnSettings.setOnClickListener {
+            showTorrentSettingsDialog {
+                dialog.dismiss()
+                showTorrentSelectorDialog(targetEpisode)
+            }
+        }
+
+        recycler.layoutManager = LinearLayoutManager(this)
+        val adapter = TorrentItemAdapter(emptyList()) { item ->
+            handleTorrentSelection(dialog, item, card, detail, selectedEp)
+        }
+        recycler.adapter = adapter
+
+        progressBar.visibility = View.VISIBLE
+        txtEmpty.visibility = View.VISIBLE
+        txtEmpty.text = "Buscando fuentes torrent en alta definición (Torrentio, Nyaa, Jackett)..."
+        recycler.visibility = View.GONE
+
+        lifecycleScope.launch {
+            try {
+                val origTitle = currentTmdbMeta?.titleOriginal ?: ""
+                val imdbId = currentTmdbMeta?.imdbId ?: ""
+
+                val results = TorrentSearchRepository.searchAndFilter(
+                    context = this@DetailActivity,
+                    query = titleDisplay,
+                    originalQuery = origTitle,
+                    imdbId = imdbId,
+                    seasonNumber = seasonNumber,
+                    episodeNumber = epNumber,
+                    isMovie = isMovie
+                )
+
+                progressBar.visibility = View.GONE
+                if (results.isEmpty()) {
+                    txtEmpty.visibility = View.VISIBLE
+                    txtEmpty.text = "No se encontraron torrents en 1080p/HD para esta búsqueda.\nPuedes verificar los ajustes de Jackett o reproducir desde la fuente Web estándar."
+                    recycler.visibility = View.GONE
+                } else {
+                    txtEmpty.visibility = View.GONE
+                    recycler.visibility = View.VISIBLE
+                    adapter.updateList(results)
+                    recycler.requestFocus()
+                }
+            } catch (e: Exception) {
+                progressBar.visibility = View.GONE
+                txtEmpty.visibility = View.VISIBLE
+                txtEmpty.text = "Error al buscar torrents: ${e.message}"
+            }
+        }
+
+        dialog.show()
+    }
+
+    private fun handleTorrentSelection(
+        dialog: AlertDialog,
+        item: TorrentStreamItem,
+        card: AnimeCard,
+        detail: AnimeDetail?,
+        episode: AnimeEpisode?
+    ) {
+        val torrServerUrl = TorrentSettingsStore.getTorrServerUrl(this)
+        Toast.makeText(this, "Conectando con motor TorrServer...", Toast.LENGTH_SHORT).show()
+
+        lifecycleScope.launch {
+            val isAlive = TorrServerClient.isServerAlive(torrServerUrl)
+            if (isAlive) {
+                val title = "${card.title} - ${episode?.title ?: item.resolutionBadge}"
+                val streamUrl = TorrServerClient.getStreamUrl(torrServerUrl, item.magnetUrl, title)
+                dialog.dismiss()
+
+                val bestPoster = CoverUtils.pickBestCover(currentTmdbMeta?.posterUrl, detail?.posterUrl ?: card.posterUrl)
+                PlayerActivity.start(
+                    context = this@DetailActivity,
+                    videoUrl = streamUrl,
+                    title = title,
+                    isHls = false,
+                    isEmbed = false,
+                    referer = "",
+                    animeDetailUrl = card.detailUrl,
+                    animeTitle = card.title,
+                    posterUrl = bestPoster,
+                    source = "Torrent (${item.provider})",
+                    episodeUrl = item.magnetUrl,
+                    episodeTitle = item.title,
+                    episodeNumber = episode?.episodeNumber ?: 1,
+                    startOver = false
+                )
+            } else {
+                showTorrServerOfflineDialog(item, torrServerUrl)
+            }
+        }
+    }
+
+    private fun showTorrServerOfflineDialog(item: TorrentStreamItem, serverUrl: String) {
+        AlertDialog.Builder(this)
+            .setTitle("⚡ Motor TorrServer no detectado")
+            .setMessage("No se pudo conectar al servidor de streaming en:\n$serverUrl\n\nPara reproducir torrents directamente en la app con ExoPlayer, ejecuta TorrServer en tu red local o Android TV.\n\nTambién puedes abrir este enlace magnet directamente en VLC o Nova Video Player.")
+            .setPositiveButton("▶ Abrir en VLC / Nova") { _, _ ->
+                TorrServerClient.openWithExternalPlayer(this, item.magnetUrl, item.title)
+            }
+            .setNeutralButton("⚙ Ajustes") { _, _ ->
+                showTorrentSettingsDialog()
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    private fun showTorrentSettingsDialog(onSaved: (() -> Unit)? = null) {
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_torrent_settings, null)
+        val editTorrServer = dialogView.findViewById<EditText>(R.id.editTorrServerUrl)
+        val editJackett = dialogView.findViewById<EditText>(R.id.editJackettUrl)
+        val editJackettKey = dialogView.findViewById<EditText>(R.id.editJackettApiKey)
+        val btnCancel = dialogView.findViewById<Button>(R.id.btnCancelTorrentSettings)
+        val btnSave = dialogView.findViewById<Button>(R.id.btnSaveTorrentSettings)
+
+        editTorrServer.setText(TorrentSettingsStore.getTorrServerUrl(this))
+        editJackett.setText(TorrentSettingsStore.getJackettUrl(this))
+        editJackettKey.setText(TorrentSettingsStore.getJackettApiKey(this))
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .create()
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        btnCancel.setOnClickListener { dialog.dismiss() }
+        btnSave.setOnClickListener {
+            val tsUrl = editTorrServer.text.toString().trim()
+            val jUrl = editJackett.text.toString().trim()
+            val jKey = editJackettKey.text.toString().trim()
+
+            TorrentSettingsStore.setTorrServerUrl(this, tsUrl)
+            TorrentSettingsStore.setJackettUrl(this, jUrl)
+            TorrentSettingsStore.setJackettApiKey(this, jKey)
+
+            Toast.makeText(this, "Ajustes de Torrents guardados", Toast.LENGTH_SHORT).show()
+            dialog.dismiss()
+            onSaved?.invoke()
+        }
+
+        dialog.show()
     }
 }

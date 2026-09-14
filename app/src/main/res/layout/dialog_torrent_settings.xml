@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_popup_panel"
+    android:padding="24dp">
+
+    <!-- Title -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="⚙ Configuración de Motor Torrent"
+        android:textColor="#00E5FF"
+        android:textSize="20sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="TorrServer convierte torrents en streaming instantáneo sin llenar la memoria de la tele."
+        android:textColor="#B0B3C6"
+        android:textSize="13sp" />
+
+    <!-- TorrServer Host -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Servidor TorrServer (Local o Remoto):"
+        android:textColor="#FFD54F"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+
+    <EditText
+        android:id="@+id/editTorrServerUrl"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:background="@drawable/bg_netflix_tab"
+        android:padding="12dp"
+        android:hint="http://127.0.0.1:8090"
+        android:textColorHint="#60647A"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:inputType="textUri"
+        android:focusable="true"
+        android:focusableInTouchMode="true" />
+
+    <!-- Jackett / Prowlarr URL -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:text="Jackett / Prowlarr URL (Opcional):"
+        android:textColor="#B0B3C6"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <EditText
+        android:id="@+id/editJackettUrl"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:background="@drawable/bg_netflix_tab"
+        android:padding="12dp"
+        android:hint="http://192.168.1.50:9117"
+        android:textColorHint="#60647A"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:inputType="textUri"
+        android:focusable="true"
+        android:focusableInTouchMode="true" />
+
+    <!-- Jackett API Key -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:text="Jackett API Key (Opcional):"
+        android:textColor="#B0B3C6"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <EditText
+        android:id="@+id/editJackettApiKey"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:background="@drawable/bg_netflix_tab"
+        android:padding="12dp"
+        android:hint="API Key..."
+        android:textColorHint="#60647A"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:inputType="text"
+        android:focusable="true"
+        android:focusableInTouchMode="true" />
+
+    <!-- Action Buttons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="end"
+        android:layout_marginTop="22dp">
+
+        <Button
+            android:id="@+id/btnCancelTorrentSettings"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_netflix_btn_secondary"
+            android:paddingHorizontal="16dp"
+            android:text="Cancelar"
+            android:textColor="#E0E0FF"
+            android:textSize="13sp"
+            android:focusable="true"
+            android:clickable="true" />
+
+        <Button
+            android:id="@+id/btnSaveTorrentSettings"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginStart="10dp"
+            android:background="@drawable/bg_netflix_btn_play"
+            android:paddingHorizontal="18dp"
+            android:text="💾 Guardar Ajustes"
+            android:textColor="@color/color_netflix_btn_play"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:focusable="true"
+            android:clickable="true" />
+
+    </LinearLayout>
+
+</LinearLayout>

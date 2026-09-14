@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#D0000000"
+    android:padding="28dp">
+
+    <LinearLayout
+        android:layout_width="720dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="#151722"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <!-- Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/txtDialogTorrentHeader"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="⚡ Fuentes Torrent (1080p Máxima Calidad)"
+                    android:textColor="#00E5FF"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/txtDialogTorrentSubtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Prioridad: Español/Latino > Dual Audio > Mayor velocidad (Seeders). 4K descartado."
+                    android:textColor="#8F94A6"
+                    android:textSize="12sp" />
+
+            </LinearLayout>
+
+            <!-- Quick Settings Button -->
+            <Button
+                android:id="@+id/btnTorrentQuickSettings"
+                android:layout_width="wrap_content"
+                android:layout_height="38dp"
+                android:background="@drawable/bg_netflix_btn_secondary"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:paddingHorizontal="14dp"
+                android:text="⚙ Ajustes"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
+
+            <!-- Close Button -->
+            <Button
+                android:id="@+id/btnDialogClose"
+                android:layout_width="wrap_content"
+                android:layout_height="38dp"
+                android:layout_marginStart="10dp"
+                android:background="@drawable/bg_netflix_btn_secondary"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:paddingHorizontal="14dp"
+                android:text="✕ Cerrar"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
+
+        </LinearLayout>
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginVertical="14dp"
+            android:background="#2E3244" />
+
+        <!-- Progress Spinner -->
+        <ProgressBar
+            android:id="@+id/progressBarTorrents"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginVertical="24dp"
+            android:indeterminateTint="#00E5FF"
+            android:visibility="gone" />
+
+        <!-- Empty State Label -->
+        <TextView
+            android:id="@+id/txtEmptyTorrents"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginVertical="24dp"
+            android:gravity="center"
+            android:text="Buscando fuentes torrent en alta definición..."
+            android:textColor="#B0B3C6"
+            android:textSize="14sp" />
+
+        <!-- Torrent Stream Recycler -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerTorrents"
+            android:layout_width="match_parent"
+            android:layout_height="360dp"
+            android:clipToPadding="false"
+            android:scrollbars="vertical"
+            android:visibility="gone" />
+
+    </LinearLayout>
+
+</FrameLayout>

@@ -128,6 +128,20 @@
                             android:visibility="gone" />
 
                         <Button
+                            android:id="@+id/btnPlayTorrent"
+                            android:layout_width="wrap_content"
+                            android:layout_height="48dp"
+                            android:layout_marginStart="14dp"
+                            android:background="@drawable/bg_netflix_btn_secondary"
+                            android:focusable="true"
+                            android:focusableInTouchMode="true"
+                            android:paddingHorizontal="18dp"
+                            android:text="⚡  Torrents (1080p)"
+                            android:textColor="#00E5FF"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <Button
                             android:id="@+id/btnTrailer"
                             android:layout_width="wrap_content"
                             android:layout_height="48dp"
