@@ -29,6 +29,19 @@
         android:name="android.hardware.microphone"
         android:required="false" />
 
+    <queries>
+        <package android:name="org.courville.nova" />
+        <package android:name="org.videolan.vlc" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="magnet" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="video/*" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:banner="@drawable/tv_banner"

@@ -674,13 +674,14 @@ class DetailActivity : AppCompatActivity() {
         detail: AnimeDetail?,
         episode: AnimeEpisode?
     ) {
+        val title = "${card.title} - ${episode?.title ?: item.resolutionBadge}"
         val torrServerUrl = TorrentSettingsStore.getTorrServerUrl(this)
-        Toast.makeText(this, "Conectando con motor TorrServer...", Toast.LENGTH_SHORT).show()
 
         lifecycleScope.launch {
-            val isAlive = TorrServerClient.isServerAlive(torrServerUrl)
-            if (isAlive) {
-                val title = "${card.title} - ${episode?.title ?: item.resolutionBadge}"
+            // 1. If a local TorrServer instance is already running (e.g. TorrServer APK on TV), use native ExoPlayer
+            val isTorrServerAlive = TorrServerClient.isServerAlive(torrServerUrl)
+            if (isTorrServerAlive) {
+                Toast.makeText(this@DetailActivity, "Conectando con motor de streaming...", Toast.LENGTH_SHORT).show()
                 val streamUrl = TorrServerClient.getStreamUrl(torrServerUrl, item.magnetUrl, title)
                 dialog.dismiss()
 
@@ -701,20 +702,50 @@ class DetailActivity : AppCompatActivity() {
                     episodeNumber = episode?.episodeNumber ?: 1,
                     startOver = false
                 )
-            } else {
-                showTorrServerOfflineDialog(item, torrServerUrl)
+                return@launch
             }
+
+            // 2. Zero-Server / Zero-PC mode: check if Nova Video Player is installed
+            if (TorrServerClient.isNovaPlayerInstalled(this@DetailActivity)) {
+                Toast.makeText(this@DetailActivity, "Iniciando streaming en Nova Video Player...", Toast.LENGTH_SHORT).show()
+                dialog.dismiss()
+                TorrServerClient.launchNovaPlayer(this@DetailActivity, item.magnetUrl, title)
+                return@launch
+            }
+
+            // 3. Check if VLC is installed
+            if (TorrServerClient.isVlcInstalled(this@DetailActivity)) {
+                showVlcOrNovaPromptDialog(item, title)
+                return@launch
+            }
+
+            // 4. No torrent player installed: Guide user to install Nova Video Player from Google Play Store
+            showInstallNovaPromptDialog()
         }
     }
 
-    private fun showTorrServerOfflineDialog(item: TorrentStreamItem, serverUrl: String) {
+    private fun showVlcOrNovaPromptDialog(item: TorrentStreamItem, title: String) {
         AlertDialog.Builder(this)
-            .setTitle("⚡ Motor TorrServer no detectado")
-            .setMessage("No se pudo conectar al servidor de streaming en:\n$serverUrl\n\nPara reproducir torrents directamente en la app con ExoPlayer, ejecuta TorrServer en tu red local o Android TV.\n\nTambién puedes abrir este enlace magnet directamente en VLC o Nova Video Player.")
-            .setPositiveButton("▶ Abrir en VLC / Nova") { _, _ ->
-                TorrServerClient.openWithExternalPlayer(this, item.magnetUrl, item.title)
+            .setTitle("🎬 Reproductor de Torrents")
+            .setMessage("Se detectó VLC en este dispositivo.\n\nPara la mejor experiencia con motor BitTorrent integrado en la memoria, recomendamos Nova Video Player (gratuito y de código abierto).\n\n¿Cómo deseas reproducir?")
+            .setPositiveButton("▶ Abrir en VLC") { _, _ ->
+                TorrServerClient.launchVlc(this, item.magnetUrl, title)
             }
-            .setNeutralButton("⚙ Ajustes") { _, _ ->
+            .setNeutralButton("📥 Instalar Nova Player") { _, _ ->
+                TorrServerClient.openPlayStoreForNova(this)
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    private fun showInstallNovaPromptDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("🎬 Nova Video Player Necesario")
+            .setMessage("Para reproducir torrents en 1080p sin necesidad de una computadora o servidor físico, necesitas el reproductor gratuito Nova Video Player (incluye motor de streaming integrado en la TV/teléfono).\n\n¿Deseas instalarlo gratis desde Google Play Store?")
+            .setPositiveButton("📥 Instalar desde Google Play") { _, _ ->
+                TorrServerClient.openPlayStoreForNova(this)
+            }
+            .setNeutralButton("⚙ Ajustes Avanzados") { _, _ ->
                 showTorrentSettingsDialog()
             }
             .setNegativeButton("Cancelar", null)
