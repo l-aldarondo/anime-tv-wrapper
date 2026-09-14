@@ -79,13 +79,21 @@ object TorrentSearchRepository {
         val uniqueByHash = rawResults.distinctBy { extractInfoHash(it.magnetUrl).ifEmpty { it.title } }
 
         // Filter and sort according to user's strict rules
-        filterAndRankTorrents(uniqueByHash, TorrentSettingsStore.isDisallow4k(context), TorrentSettingsStore.isPreferSpanish(context))
+        filterAndRankTorrents(
+            items = uniqueByHash,
+            disallow4k = TorrentSettingsStore.isDisallow4k(context),
+            preferSpanish = TorrentSettingsStore.isPreferSpanish(context),
+            qualityFilter = TorrentSettingsStore.getQualityFilter(context),
+            languageFilter = TorrentSettingsStore.getLanguageFilter(context)
+        )
     }
 
     private fun filterAndRankTorrents(
         items: List<TorrentStreamItem>,
         disallow4k: Boolean,
-        preferSpanish: Boolean
+        preferSpanish: Boolean,
+        qualityFilter: String = "1080p",
+        languageFilter: String = "all"
     ): List<TorrentStreamItem> {
         val filtered = mutableListOf<TorrentStreamItem>()
 
@@ -96,22 +104,36 @@ object TorrentSearchRepository {
             val is4k = lower.contains("2160p") || lower.contains("4k") || lower.contains("uhd")
             if (disallow4k && is4k) continue
 
-            // --- FILTRO 2: Solo High Definition (HD) hasta 1080p ---
-            val isHd = lower.contains("1080p") || lower.contains("720p") ||
-                    lower.contains("bluray") || lower.contains("bdrip") ||
-                    lower.contains("web-dl") || lower.contains("webrip") ||
-                    lower.contains("hdrip") || lower.contains("hdtv") ||
-                    item.resolutionBadge.contains("1080") || item.resolutionBadge.contains("720")
-
             // Disallow very low quality CAM / TS / Telesync
             if (lower.contains("camrip") || lower.contains("telesync") || lower.contains("hdcam")) continue
-
-            val (langBadge, priority) = detectLanguage(lower, preferSpanish)
 
             val resBadge = when {
                 lower.contains("1080p") || item.resolutionBadge.contains("1080") -> "1080p"
                 lower.contains("720p") || item.resolutionBadge.contains("720") -> "720p"
+                is4k -> "4K"
                 else -> "HD"
+            }
+
+            // --- FILTRO 2: Calidad Máxima Solicitada por el Usuario ---
+            if (qualityFilter == "1080p") {
+                // Keep 1080p and general HD, discard if strictly 720p or lower
+                if (resBadge == "720p" && !lower.contains("1080p")) continue
+            } else if (qualityFilter == "720p") {
+                // User wants 720p specifically
+                if (resBadge == "1080p" || resBadge == "4K") continue
+            }
+
+            val (langBadge, priority) = detectLanguage(lower, preferSpanish)
+
+            // --- FILTRO 3: Filtro de Idioma Solicitado por el Usuario ---
+            if (languageFilter == "spanish_only" && priority > 1) {
+                // Only keep Spanish/Latino/Castellano
+                continue
+            } else if (languageFilter == "dual_audio" && priority > 2) {
+                // Only keep Spanish or Dual Audio
+                continue
+            } else if (languageFilter == "sub_only" && !langBadge.contains("Sub")) {
+                continue
             }
 
             filtered.add(

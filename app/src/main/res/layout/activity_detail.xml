@@ -136,7 +136,7 @@
                             android:focusable="true"
                             android:focusableInTouchMode="true"
                             android:paddingHorizontal="18dp"
-                            android:text="⚡  Torrents (1080p)"
+                            android:text="⚡  Torrents"
                             android:textColor="#00E5FF"
                             android:textSize="14sp"
                             android:textStyle="bold" />
@@ -297,6 +297,42 @@
                     android:textSize="13sp"
                     android:maxLines="4"
                     android:ellipsize="end" />
+
+                <!-- Action Buttons for Focused Episode (Symmetric & TV-Friendly) -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btnSpotlightPlayWeb"
+                        android:layout_width="wrap_content"
+                        android:layout_height="38dp"
+                        android:background="@drawable/bg_netflix_btn_play"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:paddingHorizontal="18dp"
+                        android:text="▶  Web"
+                        android:textColor="@color/color_netflix_btn_play"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <Button
+                        android:id="@+id/btnSpotlightPlayTorrent"
+                        android:layout_width="wrap_content"
+                        android:layout_height="38dp"
+                        android:layout_marginStart="10dp"
+                        android:background="@drawable/bg_netflix_btn_secondary"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:paddingHorizontal="18dp"
+                        android:text="⚡  Torrents"
+                        android:textColor="#00E5FF"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                </LinearLayout>
 
             </LinearLayout>
 

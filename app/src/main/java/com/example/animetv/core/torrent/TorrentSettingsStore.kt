@@ -12,6 +12,9 @@ object TorrentSettingsStore {
     private const val KEY_JACKETT_API_KEY = "jackett_api_key"
     private const val KEY_PREFER_SPANISH = "prefer_spanish"
     private const val KEY_DISALLOW_4K = "disallow_4k"
+    private const val KEY_QUALITY_FILTER = "quality_filter" // "1080p", "720p", "all"
+    private const val KEY_LANGUAGE_FILTER = "language_filter" // "all", "spanish_only", "dual_audio", "sub_only"
+    private const val KEY_EPISODE_CLICK_ACTION = "episode_click_action" // "web", "torrent", "ask"
 
     // Default public community TMDB API v3 key for out-of-the-box metadata enrichment
     const val DEFAULT_TMDB_API_KEY = "3b0e14112e1a3848b61e27a6f2be7e1c"
@@ -69,5 +72,29 @@ object TorrentSettingsStore {
 
     fun setDisallow4k(context: Context, disallow: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_DISALLOW_4K, disallow).apply()
+    }
+
+    fun getQualityFilter(context: Context): String {
+        return getPrefs(context).getString(KEY_QUALITY_FILTER, "1080p") ?: "1080p"
+    }
+
+    fun setQualityFilter(context: Context, quality: String) {
+        getPrefs(context).edit().putString(KEY_QUALITY_FILTER, quality).apply()
+    }
+
+    fun getLanguageFilter(context: Context): String {
+        return getPrefs(context).getString(KEY_LANGUAGE_FILTER, "all") ?: "all"
+    }
+
+    fun setLanguageFilter(context: Context, lang: String) {
+        getPrefs(context).edit().putString(KEY_LANGUAGE_FILTER, lang).apply()
+    }
+
+    fun getEpisodeClickAction(context: Context): String {
+        return getPrefs(context).getString(KEY_EPISODE_CLICK_ACTION, "web") ?: "web"
+    }
+
+    fun setEpisodeClickAction(context: Context, action: String) {
+        getPrefs(context).edit().putString(KEY_EPISODE_CLICK_ACTION, action).apply()
     }
 }

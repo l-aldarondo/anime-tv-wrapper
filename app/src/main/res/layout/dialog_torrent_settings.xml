@@ -1,137 +1,346 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
     android:background="@drawable/bg_popup_panel"
-    android:padding="24dp">
+    android:padding="20dp">
 
-    <!-- Title -->
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="⚙ Configuración de Motor Torrent"
-        android:textColor="#00E5FF"
-        android:textSize="20sp"
-        android:textStyle="bold" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:text="TorrServer convierte torrents en streaming instantáneo sin llenar la memoria de la tele."
-        android:textColor="#B0B3C6"
-        android:textSize="13sp" />
-
-    <!-- TorrServer Host -->
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="Servidor TorrServer (Local o Remoto):"
-        android:textColor="#FFD54F"
-        android:textSize="14sp"
-        android:textStyle="bold" />
-
-    <EditText
-        android:id="@+id/editTorrServerUrl"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:background="@drawable/bg_netflix_tab"
-        android:padding="12dp"
-        android:hint="http://127.0.0.1:8090"
-        android:textColorHint="#60647A"
-        android:textColor="#FFFFFF"
-        android:textSize="14sp"
-        android:inputType="textUri"
-        android:focusable="true"
-        android:focusableInTouchMode="true" />
-
-    <!-- Jackett / Prowlarr URL -->
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="14dp"
-        android:text="Jackett / Prowlarr URL (Opcional):"
-        android:textColor="#B0B3C6"
-        android:textSize="13sp"
-        android:textStyle="bold" />
-
-    <EditText
-        android:id="@+id/editJackettUrl"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:background="@drawable/bg_netflix_tab"
-        android:padding="12dp"
-        android:hint="http://192.168.1.50:9117"
-        android:textColorHint="#60647A"
-        android:textColor="#FFFFFF"
-        android:textSize="14sp"
-        android:inputType="textUri"
-        android:focusable="true"
-        android:focusableInTouchMode="true" />
-
-    <!-- Jackett API Key -->
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="14dp"
-        android:text="Jackett API Key (Opcional):"
-        android:textColor="#B0B3C6"
-        android:textSize="13sp"
-        android:textStyle="bold" />
-
-    <EditText
-        android:id="@+id/editJackettApiKey"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:background="@drawable/bg_netflix_tab"
-        android:padding="12dp"
-        android:hint="API Key..."
-        android:textColorHint="#60647A"
-        android:textColor="#FFFFFF"
-        android:textSize="14sp"
-        android:inputType="text"
-        android:focusable="true"
-        android:focusableInTouchMode="true" />
-
-    <!-- Action Buttons -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="end"
-        android:layout_marginTop="22dp">
+        android:orientation="vertical">
 
-        <Button
-            android:id="@+id/btnCancelTorrentSettings"
+        <!-- Header -->
+        <TextView
             android:layout_width="wrap_content"
-            android:layout_height="40dp"
-            android:background="@drawable/bg_netflix_btn_secondary"
-            android:paddingHorizontal="16dp"
-            android:text="Cancelar"
-            android:textColor="#E0E0FF"
-            android:textSize="13sp"
-            android:focusable="true"
-            android:clickable="true" />
+            android:layout_height="wrap_content"
+            android:text="⚙ Ajustes de Streaming y Filtros"
+            android:textColor="#00E5FF"
+            android:textSize="20sp"
+            android:textStyle="bold" />
 
-        <Button
-            android:id="@+id/btnSaveTorrentSettings"
+        <TextView
             android:layout_width="wrap_content"
-            android:layout_height="40dp"
-            android:layout_marginStart="10dp"
-            android:background="@drawable/bg_netflix_btn_play"
-            android:paddingHorizontal="18dp"
-            android:text="💾 Guardar Ajustes"
-            android:textColor="@color/color_netflix_btn_play"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Personaliza la calidad, idiomas preferidos y comportamiento de reproducción en TV."
+            android:textColor="#B0B3C6"
+            android:textSize="12sp" />
+
+        <!-- 1. Calidad Máxima -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Calidad Máxima de Torrents:"
+            android:textColor="#FFD54F"
             android:textSize="13sp"
-            android:textStyle="bold"
+            android:textStyle="bold" />
+
+        <RadioGroup
+            android:id="@+id/rgQuality"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+
+            <RadioButton
+                android:id="@+id/rbQuality1080p"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_torrent_item_selector"
+                android:button="@null"
+                android:gravity="center"
+                android:paddingHorizontal="6dp"
+                android:text="1080p (Óptimo)"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:focusable="true" />
+
+            <RadioButton
+                android:id="@+id/rbQuality720p"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_torrent_item_selector"
+                android:button="@null"
+                android:gravity="center"
+                android:paddingHorizontal="6dp"
+                android:text="720p"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:focusable="true" />
+
+            <RadioButton
+                android:id="@+id/rbQualityAll"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_torrent_item_selector"
+                android:button="@null"
+                android:gravity="center"
+                android:paddingHorizontal="6dp"
+                android:text="Cualquiera (HD)"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:focusable="true" />
+
+        </RadioGroup>
+
+        <CheckBox
+            android:id="@+id/chkAllow4k"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Permitir 4K / UHD (desactivado por defecto para proteger la RAM de la tele)"
+            android:textColor="#8F94A6"
+            android:textSize="11sp"
+            android:focusable="true" />
+
+        <!-- 2. Filtro de Idiomas -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="Filtro de Idiomas Preferido:"
+            android:textColor="#FFD54F"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <RadioGroup
+            android:id="@+id/rgLanguage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+
+            <RadioButton
+                android:id="@+id/rbLangSpanish"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_torrent_item_selector"
+                android:button="@null"
+                android:gravity="center"
+                android:paddingHorizontal="4dp"
+                android:text="🇪🇸 Solo Español"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:focusable="true" />
+
+            <RadioButton
+                android:id="@+id/rbLangDual"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/bg_torrent_item_selector"
+                android:button="@null"
+                android:gravity="center"
+                android:paddingHorizontal="4dp"
+                android:text="🌐 Dual Audio"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:focusable="true" />
+
+            <RadioButton
+                android:id="@+id/rbLangSub"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/bg_torrent_item_selector"
+                android:button="@null"
+                android:gravity="center"
+                android:paddingHorizontal="4dp"
+                android:text="💬 Sub / Orig"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:focusable="true" />
+
+            <RadioButton
+                android:id="@+id/rbLangAll"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/bg_torrent_item_selector"
+                android:button="@null"
+                android:gravity="center"
+                android:paddingHorizontal="4dp"
+                android:text="🌍 Todos"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:focusable="true" />
+
+        </RadioGroup>
+
+        <!-- 3. Acción al pulsar un Episodio en el Carrusel -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="Al pulsar una tarjeta de episodio en la lista:"
+            android:textColor="#FFD54F"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <RadioGroup
+            android:id="@+id/rgEpisodeAction"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+
+            <RadioButton
+                android:id="@+id/rbActionWeb"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_torrent_item_selector"
+                android:button="@null"
+                android:gravity="center"
+                android:paddingHorizontal="6dp"
+                android:text="▶ Web Directo"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:focusable="true" />
+
+            <RadioButton
+                android:id="@+id/rbActionTorrent"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_torrent_item_selector"
+                android:button="@null"
+                android:gravity="center"
+                android:paddingHorizontal="6dp"
+                android:text="⚡ Torrents"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:focusable="true" />
+
+            <RadioButton
+                android:id="@+id/rbActionAsk"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_torrent_item_selector"
+                android:button="@null"
+                android:gravity="center"
+                android:paddingHorizontal="6dp"
+                android:text="❓ Preguntar"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:focusable="true" />
+
+        </RadioGroup>
+
+        <!-- 4. Opciones de Servidor / Red (Avanzado) -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Servidor de Streaming (Opcional - por defecto Nova Player):"
+            android:textColor="#B0B3C6"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/editTorrServerUrl"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:background="@drawable/bg_netflix_tab"
+            android:padding="10dp"
+            android:hint="http://127.0.0.1:8090"
+            android:textColorHint="#60647A"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:inputType="textUri"
             android:focusable="true"
-            android:clickable="true" />
+            android:focusableInTouchMode="true" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/editJackettUrl"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/bg_netflix_tab"
+                android:padding="10dp"
+                android:hint="Jackett URL (Opcional)"
+                android:textColorHint="#60647A"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:inputType="textUri"
+                android:focusable="true"
+                android:focusableInTouchMode="true" />
+
+            <EditText
+                android:id="@+id/editJackettApiKey"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_netflix_tab"
+                android:padding="10dp"
+                android:hint="Jackett API Key"
+                android:textColorHint="#60647A"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:inputType="text"
+                android:focusable="true"
+                android:focusableInTouchMode="true" />
+
+        </LinearLayout>
+
+        <!-- Action Buttons -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="end"
+            android:layout_marginTop="20dp">
+
+            <Button
+                android:id="@+id/btnCancelTorrentSettings"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:background="@drawable/bg_netflix_btn_secondary"
+                android:paddingHorizontal="18dp"
+                android:text="Cancelar"
+                android:textColor="#E0E0FF"
+                android:textSize="13sp"
+                android:focusable="true"
+                android:clickable="true" />
+
+            <Button
+                android:id="@+id/btnSaveTorrentSettings"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_marginStart="12dp"
+                android:background="@drawable/bg_netflix_btn_play"
+                android:paddingHorizontal="22dp"
+                android:text="💾 Guardar Ajustes"
+                android:textColor="@color/color_netflix_btn_play"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:focusable="true"
+                android:clickable="true" />
+
+        </LinearLayout>
 
     </LinearLayout>
 
-</LinearLayout>
+</ScrollView>
