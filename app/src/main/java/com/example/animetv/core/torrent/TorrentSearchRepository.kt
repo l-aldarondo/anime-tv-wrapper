@@ -98,6 +98,8 @@ object TorrentSearchRepository {
             qualityFilter = TorrentSettingsStore.getQualityFilter(context),
             languageFilter = TorrentSettingsStore.getLanguageFilter(context),
             isSingleEpisode = episodeNumber > 0 && !isMovie,
+            seasonNumber = seasonNumber,
+            episodeNumber = episodeNumber,
             isLiveAction = isLiveAction
         )
     }
@@ -120,6 +122,9 @@ object TorrentSearchRepository {
         // Known title aliases
         if (cleanQ.contains("yomi no tsugai", true) || originalQuery.contains("yomi", true)) {
             searchTerms.add(0, "Daemons of the Shadow Realm")
+        }
+        if (cleanQ.contains("hora de aventura", true) || originalQuery.contains("adventure time", true)) {
+            searchTerms.add(0, "Adventure Time")
         }
 
         val type = if (isMovie) "movie" else "series"
@@ -184,6 +189,8 @@ object TorrentSearchRepository {
         qualityFilter: String = "1080p",
         languageFilter: String = "all",
         isSingleEpisode: Boolean = false,
+        seasonNumber: Int = 1,
+        episodeNumber: Int = 1,
         isLiveAction: Boolean = false
     ): List<TorrentStreamItem> {
         val filtered = mutableListOf<TorrentStreamItem>()
@@ -199,16 +206,28 @@ object TorrentSearchRepository {
                 continue
             }
 
-            // --- FILTRO EPISODIO AISLADO: descartar paquetes de temporada completa si se busca un capítulo individual ---
-            if (isSingleEpisode && item.provider != "Torrentio") {
-                val isBatchOrFullSeason = lower.contains("complete") ||
+            // --- FILTRO EPISODIO AISLADO: descartar paquetes de temporada completa / series completas ---
+            if (isSingleEpisode) {
+                val isMultiSeasonOrComplete = lower.contains("complete series") ||
+                        lower.contains("all seasons") ||
+                        lower.contains("temporadas 1-") ||
+                        lower.contains("temporadas completas") ||
                         lower.contains("temporada completa") ||
                         lower.contains("full season") ||
                         lower.contains("batch") ||
                         lower.contains("01-12") ||
                         lower.contains("01-24") ||
-                        lower.contains("01x01-")
-                if (isBatchOrFullSeason) continue
+                        Regex("""(?i)\b(?:season|seasons|temporada|temporadas|s)\s*\d+\s*[-–]\s*s?\d+\b""").containsMatchIn(lower)
+                if (isMultiSeasonOrComplete) continue
+
+                // Check wrong season number
+                if (seasonNumber > 0) {
+                    val wrongSeasonMatch = Regex("""(?i)\b(?:s0?(\d+)e\d+|(\d+)x\d+)\b""").find(lower)
+                    if (wrongSeasonMatch != null) {
+                        val s = wrongSeasonMatch.groupValues[1].ifEmpty { wrongSeasonMatch.groupValues[2] }.toIntOrNull()
+                        if (s != null && s != seasonNumber) continue
+                    }
+                }
             }
 
             // --- FILTRO 1: PROHIBIDO 4K/2160p/UHD ---
@@ -263,8 +282,24 @@ object TorrentSearchRepository {
             }.sortedWith(compareBy({ it.languagePriority }, { -it.seeders }))
         }
 
-        // Ordenar: Prioridad de idioma ASC (1=Latino/Español, 2=Dual, 3=Inglés), luego mayor número de Seeders DESC
-        return filtered.sortedWith(compareBy({ it.languagePriority }, { -it.seeders }))
+        // Ordenar: Prioridad de idioma ASC (1=Latino/Español, 2=Dual, 3=Inglés),
+        // luego episodios individuales puros primero, luego mayor número de Seeders DESC
+        return filtered.sortedWith(
+            compareBy(
+                { it.languagePriority },
+                { item ->
+                    if (isSingleEpisode) {
+                        val lower = item.title.lowercase(Locale.ROOT)
+                        val sPad = String.format(Locale.US, "%02d", seasonNumber)
+                        val ePad = String.format(Locale.US, "%02d", episodeNumber)
+                        val isPureSingle = (lower.contains("s${sPad}e${ePad}") || lower.contains("${seasonNumber}x${ePad}") || lower.contains("${seasonNumber}x${episodeNumber}")) &&
+                                !lower.contains("season") && !lower.contains("temporada")
+                        if (isPureSingle) 0 else 1
+                    } else 0
+                },
+                { -it.seeders }
+            )
+        )
     }
 
     private fun detectLanguage(titleLower: String, preferSpanish: Boolean): Pair<String, Int> {
@@ -315,8 +350,28 @@ object TorrentSearchRepository {
                     val fileIdx = if (stream.has("fileIdx")) stream.optInt("fileIdx", 0) + 1 else 1
 
                     val lines = rawTitle.split("\n")
-                    val titleLine = lines.firstOrNull()?.trim() ?: "Stream $i"
-                    val details = lines.drop(1).joinToString(" ")
+                    val packName = lines.firstOrNull()?.trim() ?: "Stream $i"
+                    val epFileName = if (lines.size > 1 && !lines[1].contains("👤")) lines[1].trim() else ""
+                    val details = lines.find { it.contains("👤") } ?: lines.drop(1).joinToString(" ")
+
+                    // Filter out multi-season / complete series packs when querying a specific episode
+                    if (!isMovie && episodeNumber > 0) {
+                        val lowerRaw = rawTitle.lowercase(Locale.ROOT)
+                        val isMultiSeason = lowerRaw.contains("complete series") ||
+                                lowerRaw.contains("all seasons") ||
+                                lowerRaw.contains("temporadas 1-") ||
+                                Regex("""(?i)\b(?:season|seasons|temporada|temporadas|s)\s*\d+\s*[-–]\s*s?\d+\b""").containsMatchIn(lowerRaw)
+                        if (isMultiSeason) continue
+
+                        // Filter out mismatched season
+                        if (seasonNumber > 0) {
+                            val wrongSeasonMatch = Regex("""(?i)\b(?:s0?(\d+)e\d+|(\d+)x\d+)\b""").find(lowerRaw)
+                            if (wrongSeasonMatch != null) {
+                                val s = wrongSeasonMatch.groupValues[1].ifEmpty { wrongSeasonMatch.groupValues[2] }.toIntOrNull()
+                                if (s != null && s != seasonNumber) continue
+                            }
+                        }
+                    }
 
                     // Extract seeders from Torrentio details (e.g. "👤 45")
                     val seedersMatch = Regex("""👤\s*(\d+)""").find(details)
@@ -326,19 +381,31 @@ object TorrentSearchRepository {
                     val sizeMatch = Regex("""💾\s*([\d\.]+\s*(?:GB|MB))""").find(details)
                     val sizeFormatted = sizeMatch?.groupValues?.get(1) ?: ""
 
+                    // Construct clear episode title for display
+                    val displayTitle = if (epFileName.isNotEmpty()) {
+                        val cleanEp = epFileName.substringAfterLast("/").replace(Regex("""\.(?:mkv|mp4|avi)$""", RegexOption.IGNORE_CASE), "").replace(Regex("""[._]"""), " ").trim()
+                        if (cleanEp.isNotEmpty() && !cleanEp.equals(packName, ignoreCase = true)) {
+                            "$cleanEp  [$packName]"
+                        } else {
+                            packName
+                        }
+                    } else {
+                        packName
+                    }
+
                     val magnetUrl = if (infoHash.isNotEmpty()) {
-                        "magnet:?xt=urn:btih:$infoHash&dn=${URLEncoder.encode(titleLine, "UTF-8")}&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce"
+                        "magnet:?xt=urn:btih:$infoHash&dn=${URLEncoder.encode(packName, "UTF-8")}&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce"
                     } else ""
 
                     if (magnetUrl.isNotEmpty()) {
                         list.add(
                             TorrentStreamItem(
-                                title = "$name - $titleLine",
+                                title = displayTitle,
                                 magnetUrl = magnetUrl,
                                 seeders = seeders,
                                 sizeBytes = 0L,
                                 sizeFormatted = sizeFormatted,
-                                resolutionBadge = if (titleLine.contains("1080p") || name.contains("1080p")) "1080p" else "720p",
+                                resolutionBadge = if (displayTitle.contains("1080p") || name.contains("1080p")) "1080p" else "720p",
                                 languageBadge = "🌐 Multi",
                                 languagePriority = 3,
                                 provider = "Torrentio",
