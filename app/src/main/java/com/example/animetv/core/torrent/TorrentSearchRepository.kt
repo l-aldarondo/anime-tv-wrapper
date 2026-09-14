@@ -105,7 +105,7 @@ object TorrentSearchRepository {
         for (term in searchTerms) {
             try {
                 val encoded = URLEncoder.encode(term, "UTF-8")
-                val url = "https://v3-cinemeta.strem.io/catalog/$type/top.json?search=$encoded"
+                val url = "https://v3-cinemeta.strem.io/catalog/$type/top/search=$encoded.json"
                 val req = Request.Builder()
                     .url(url)
                     .header("User-Agent", "Mozilla/5.0")
@@ -114,11 +114,14 @@ object TorrentSearchRepository {
                     if (resp.isSuccessful) {
                         val body = resp.body?.string() ?: return@use
                         val json = JSONObject(body)
-                        val metas = json.optJSONArray("metas")
-                        if (metas != null && metas.length() > 0) {
-                            val first = metas.getJSONObject(0)
-                            val id = first.optString("imdb_id", first.optString("id", ""))
-                            if (id.startsWith("tt")) return id
+                        val metas = json.optJSONArray("metas") ?: return@use
+                        for (i in 0 until metas.length()) {
+                            val metaObj = metas.getJSONObject(i)
+                            val candidateName = metaObj.optString("name", "")
+                            val id = metaObj.optString("imdb_id", metaObj.optString("id", ""))
+                            if (id.startsWith("tt") && isTitleSimilar(candidateName, term)) {
+                                return id
+                            }
                         }
                     }
                 }
@@ -127,6 +130,18 @@ object TorrentSearchRepository {
             }
         }
         return ""
+    }
+
+    private fun isTitleSimilar(candidateName: String, query: String): Boolean {
+        val c = candidateName.lowercase(Locale.ROOT).replace(Regex("""[^a-z0-9\s]"""), " ").trim()
+        val q = query.lowercase(Locale.ROOT).replace(Regex("""[^a-z0-9\s]"""), " ").trim()
+        if (c.isEmpty() || q.isEmpty()) return false
+        if (c == q || c.contains(q) || q.contains(c)) return true
+        val cWords = c.split(Regex("""\s+""")).filter { it.length > 2 }
+        val qWords = q.split(Regex("""\s+""")).filter { it.length > 2 }
+        if (qWords.isEmpty()) return false
+        val matches = qWords.count { qw -> cWords.any { cw -> cw == qw || cw.contains(qw) || qw.contains(cw) } }
+        return matches.toDouble() / qWords.size >= 0.5
     }
 
     private fun filterAndRankTorrents(

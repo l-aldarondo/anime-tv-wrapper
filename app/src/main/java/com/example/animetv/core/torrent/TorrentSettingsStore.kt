@@ -17,7 +17,7 @@ object TorrentSettingsStore {
     private const val KEY_EPISODE_CLICK_ACTION = "episode_click_action" // "web", "torrent", "ask"
 
     // Default public community TMDB API v3 key for out-of-the-box metadata enrichment
-    const val DEFAULT_TMDB_API_KEY = "3b0e14112e1a3848b61e27a6f2be7e1c"
+    const val DEFAULT_TMDB_API_KEY = "4e44d9029b1270a757cddc766a1bcb63"
     const val DEFAULT_TORRSERVER_URL = "http://127.0.0.1:8090"
 
     private fun getPrefs(context: Context): SharedPreferences {
@@ -26,7 +26,7 @@ object TorrentSettingsStore {
 
     fun getTmdbApiKey(context: Context): String {
         val key = getPrefs(context).getString(KEY_TMDB_API_KEY, "") ?: ""
-        return if (key.isNotEmpty()) key else DEFAULT_TMDB_API_KEY
+        return if (key.isNotEmpty() && key != "3b0e14112e1a3848b61e27a6f2be7e1c") key else DEFAULT_TMDB_API_KEY
     }
 
     fun setTmdbApiKey(context: Context, key: String) {

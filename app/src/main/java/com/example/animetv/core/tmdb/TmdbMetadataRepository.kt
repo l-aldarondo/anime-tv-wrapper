@@ -174,15 +174,23 @@ object TmdbMetadataRepository {
                 if (imdbId.isEmpty()) {
                     try {
                         val cinemetaType = if (mType == "movie") "movie" else "series"
-                        val cinemetaUrl = "https://v3-cinemeta.strem.io/catalog/$cinemetaType/top.json?search=${URLEncoder.encode(cleanQuery, "UTF-8")}"
+                        val cinemetaUrl = "https://v3-cinemeta.strem.io/catalog/$cinemetaType/top/search=${URLEncoder.encode(cleanQuery, "UTF-8")}.json"
                         val cinemetaReq = Request.Builder().url(cinemetaUrl).header("User-Agent", "Mozilla/5.0").build()
                         client.newCall(cinemetaReq).execute().use { cinResp ->
                             if (cinResp.isSuccessful) {
                                 val cinJson = JSONObject(cinResp.body?.string() ?: "")
                                 val metas = cinJson.optJSONArray("metas")
-                                if (metas != null && metas.length() > 0) {
-                                    val first = metas.getJSONObject(0)
-                                    imdbId = first.optString("imdb_id", first.optString("id", ""))
+                                if (metas != null) {
+                                    val qClean = cleanQuery.lowercase(Locale.ROOT)
+                                    for (m in 0 until metas.length()) {
+                                        val mObj = metas.getJSONObject(m)
+                                        val mName = mObj.optString("name", "").lowercase(Locale.ROOT)
+                                        val mId = mObj.optString("imdb_id", mObj.optString("id", ""))
+                                        if (mId.startsWith("tt") && (mName.contains(qClean) || qClean.contains(mName))) {
+                                            imdbId = mId
+                                            break
+                                        }
+                                    }
                                 }
                             }
                         }

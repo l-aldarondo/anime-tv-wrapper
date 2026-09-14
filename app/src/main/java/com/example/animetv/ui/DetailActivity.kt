@@ -170,6 +170,7 @@ class DetailActivity : AppCompatActivity() {
         }
 
         bindInitialCard(currentCard!!)
+        setupTrailerButton("", currentCard!!.title)
         loadDetail(currentCard!!)
     }
 
@@ -440,11 +441,7 @@ class DetailActivity : AppCompatActivity() {
 
                 // Trailer Button
                 val effectiveTrailer = detail.trailerUrl.ifEmpty { currentTmdbMeta?.trailerUrl ?: "" }
-                if (effectiveTrailer.isNotEmpty()) {
-                    setupTrailerButton(effectiveTrailer, detail.title)
-                } else if (currentTmdbMeta == null || currentTmdbMeta?.trailerUrl.isNullOrEmpty()) {
-                    btnTrailer.visibility = View.GONE
-                }
+                setupTrailerButton(effectiveTrailer, detail.title)
 
                 if (detail.episodes.isNotEmpty()) {
                     val record = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this@DetailActivity, card.detailUrl)
@@ -489,17 +486,27 @@ class DetailActivity : AppCompatActivity() {
     }
 
     private fun setupTrailerButton(trailerUrl: String, title: String) {
-        if (trailerUrl.isEmpty()) return
         btnTrailer.visibility = View.VISIBLE
         btnTrailer.setOnClickListener {
-            PlayerActivity.start(
-                this@DetailActivity,
-                videoUrl = trailerUrl,
-                title = "Tráiler: $title",
-                isHls = false,
-                isEmbed = true,
-                referer = if (currentCard?.detailUrl?.isNotEmpty() == true) currentCard!!.detailUrl else "https://www.youtube.com"
-            )
+            if (trailerUrl.isNotEmpty()) {
+                PlayerActivity.start(
+                    this@DetailActivity,
+                    videoUrl = trailerUrl,
+                    title = "Tráiler: $title",
+                    isHls = false,
+                    isEmbed = true,
+                    referer = if (currentCard?.detailUrl?.isNotEmpty() == true) currentCard!!.detailUrl else "https://www.youtube.com"
+                )
+            } else {
+                try {
+                    val q = java.net.URLEncoder.encode("$title Trailer Oficial", "UTF-8")
+                    val ytUri = Uri.parse("https://www.youtube.com/results?search_query=$q")
+                    startActivity(Intent(Intent.ACTION_VIEW, ytUri))
+                    Toast.makeText(this@DetailActivity, "Buscando tráiler en YouTube...", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Toast.makeText(this@DetailActivity, "No se pudo abrir YouTube", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
         btnTrailer.setOnLongClickListener {
             val videoId = if (trailerUrl.contains("/embed/")) {
@@ -515,6 +522,12 @@ class DetailActivity : AppCompatActivity() {
                 } catch (e: Exception) {
                     Toast.makeText(this@DetailActivity, "No se pudo abrir YouTube", Toast.LENGTH_SHORT).show()
                 }
+            } else {
+                try {
+                    val q = java.net.URLEncoder.encode("$title Trailer Oficial", "UTF-8")
+                    val ytUri = Uri.parse("https://www.youtube.com/results?search_query=$q")
+                    startActivity(Intent(Intent.ACTION_VIEW, ytUri))
+                } catch (e: Exception) {}
             }
             true
         }
