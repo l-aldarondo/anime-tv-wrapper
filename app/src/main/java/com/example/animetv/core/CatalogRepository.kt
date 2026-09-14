@@ -100,7 +100,10 @@ object CatalogRepository {
 
     private val TITLE_ALIASES: Map<String, List<String>> = mapOf(
         "hidden murder" to listOf("Parecido a un asesinato"),
-        "parecido a un asesinato" to listOf("Hidden Murder")
+        "parecido a un asesinato" to listOf("Hidden Murder"),
+        "yomi no tsugai" to listOf("Daemons of the Shadow Realm", "Yomi no Tsugai: Dúo del Inframundo"),
+        "daemons of the shadow realm" to listOf("Yomi no Tsugai", "Yomi no Tsugai: Dúo del Inframundo"),
+        "daemon of the shadow" to listOf("Yomi no Tsugai", "Daemons of the Shadow Realm")
     )
 
     private fun getSearchQueries(query: String): List<String> {

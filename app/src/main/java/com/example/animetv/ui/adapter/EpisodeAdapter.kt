@@ -18,6 +18,7 @@ class EpisodeAdapter(
     private var lastWatchedRecord: PlaybackRecord? = null,
     private val onEpisodeFocus: ((AnimeEpisode) -> Unit)? = null,
     private val onEpisodeLongClick: ((AnimeEpisode) -> Unit)? = null,
+    private val onEpisodeTorClick: ((AnimeEpisode) -> Unit)? = null,
     private val onEpisodeClick: (AnimeEpisode) -> Unit
 ) : RecyclerView.Adapter<EpisodeAdapter.ViewHolder>() {
 
@@ -26,6 +27,7 @@ class EpisodeAdapter(
         val badge: TextView = view.findViewById(R.id.txtEpisodeBadge)
         val title: TextView = view.findViewById(R.id.txtEpisodeTitle)
         val progress: TextView = view.findViewById(R.id.txtEpisodeProgress)
+        val btnTor: TextView = view.findViewById(R.id.btnEpisodeTor)
     }
 
     fun updateList(newList: List<AnimeEpisode>, record: PlaybackRecord? = null) {
@@ -88,6 +90,19 @@ class EpisodeAdapter(
 
         holder.itemView.setOnClickListener {
             onEpisodeClick(ep)
+        }
+
+        holder.btnTor.setOnClickListener {
+            onEpisodeTorClick?.invoke(ep)
+        }
+
+        holder.btnTor.setOnFocusChangeListener { v, hasFocus ->
+            if (hasFocus) {
+                v.animate().scaleX(1.15f).scaleY(1.15f).setDuration(120).start()
+                onEpisodeFocus?.invoke(ep)
+            } else {
+                v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(120).start()
+            }
         }
 
         holder.itemView.setOnLongClickListener {

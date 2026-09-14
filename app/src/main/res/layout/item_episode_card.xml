@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/rootEpisodeCard"
     android:layout_width="164dp"
     android:layout_height="94dp"
     android:layout_marginEnd="12dp"
     android:focusable="true"
     android:focusableInTouchMode="true"
     android:clickable="true"
+    android:descendantFocusability="afterDescendants"
     android:background="@drawable/bg_favorite_card">
 
     <!-- Episode Screenshot Still Image (TMDB) -->
@@ -23,6 +25,31 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="@drawable/bg_bottom_fader" />
+
+    <!-- Top Action Bar inside Episode Card (Direct TOR Button) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:orientation="horizontal"
+        android:gravity="center_vertical|end"
+        android:padding="5dp">
+
+        <TextView
+            android:id="@+id/btnEpisodeTor"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_episode_tor_btn"
+            android:text="⚡ TOR"
+            android:textColor="@color/color_episode_tor_btn_text"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="2dp"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:clickable="true" />
+    </LinearLayout>
 
     <!-- Episode Details Content -->
     <LinearLayout

@@ -39,7 +39,12 @@ object TorrServerClient {
     /**
      * Obtains a sequential HTTP streaming URL from TorrServer for ExoPlayer playback.
      */
-    suspend fun getStreamUrl(serverUrl: String, magnetUrl: String, title: String): String = withContext(Dispatchers.IO) {
+    suspend fun getStreamUrl(
+        serverUrl: String,
+        magnetUrl: String,
+        title: String,
+        fileIndex: Int = 1
+    ): String = withContext(Dispatchers.IO) {
         try {
             // Register torrent with TorrServer to initiate pre-buffering
             val actionUrl = "$serverUrl/torrents/action"
@@ -56,9 +61,10 @@ object TorrServerClient {
             // Continue even if add action fails, as /stream?link handles auto-add
         }
 
+        val idx = if (fileIndex > 0) fileIndex else 1
         val encodedMagnet = URLEncoder.encode(magnetUrl, "UTF-8")
         val encodedTitle = URLEncoder.encode(title, "UTF-8")
-        "$serverUrl/stream/$encodedTitle.mp4?link=$encodedMagnet&index=1&play=1"
+        "$serverUrl/stream/$encodedTitle.mp4?link=$encodedMagnet&index=$idx&play=1"
     }
 
     const val PACKAGE_NOVA_PLAYER = "org.courville.nova"

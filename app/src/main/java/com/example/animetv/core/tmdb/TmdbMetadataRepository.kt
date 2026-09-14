@@ -18,12 +18,14 @@ data class TmdbMetadata(
     val trailerUrl: String = "",
     val titleSpanish: String,
     val titleOriginal: String,
+    val titleEnglish: String = "",
     val overview: String,
     val posterUrl: String,
     val backdropUrl: String,
     val ratingText: String,
     val releaseYear: String,
-    val mediaType: String // "tv" or "movie"
+    val mediaType: String, // "tv" or "movie"
+    val isAnimation: Boolean = false
 )
 
 data class TmdbEpisode(
@@ -53,12 +55,22 @@ object TmdbMetadataRepository {
 
     /**
      * Searches TMDB for rich metadata, high-resolution artwork, and original title.
+     * Accurately distinguishes between Anime and Live Action adaptations (e.g. One Piece).
      */
-    suspend fun searchMetadata(context: Context, rawTitle: String): TmdbMetadata? = withContext(Dispatchers.IO) {
+    suspend fun searchMetadata(
+        context: Context,
+        rawTitle: String,
+        isMovie: Boolean = false,
+        isLiveAction: Boolean = false
+    ): TmdbMetadata? = withContext(Dispatchers.IO) {
+        val detectedLiveAction = isLiveAction ||
+                rawTitle.contains("Live Action", ignoreCase = true) ||
+                rawTitle.contains("Acción Real", ignoreCase = true)
+
         val cleanQuery = sanitizeTitle(rawTitle)
         if (cleanQuery.isEmpty()) return@withContext null
 
-        val cacheKey = cleanQuery.lowercase(Locale.ROOT)
+        val cacheKey = "${cleanQuery.lowercase(Locale.ROOT)}_m${isMovie}_la$detectedLiveAction"
         memoryCache[cacheKey]?.let { return@withContext it }
 
         val apiKey = TorrentSettingsStore.getTmdbApiKey(context)
@@ -82,25 +94,54 @@ object TmdbMetadataRepository {
                 val results = json.optJSONArray("results") ?: return@withContext null
                 if (results.length() == 0) return@withContext null
 
-                // Pick first valid movie or tv result with a poster
+                // Rank results to properly distinguish Anime vs Live Action and Movie vs TV
                 var bestObj: JSONObject? = null
+                var bestScore = -999
+
                 for (i in 0 until results.length()) {
                     val obj = results.getJSONObject(i)
                     val mType = obj.optString("media_type", "")
-                    if (mType == "movie" || mType == "tv") {
-                        if (bestObj == null) bestObj = obj
-                        // Prefer one that has both poster and overview
-                        val p = obj.optString("poster_path", "")
-                        val ov = obj.optString("overview", "")
-                        if (p.isNotEmpty() && ov.isNotEmpty()) {
-                            bestObj = obj
-                            break
-                        }
+                    if (mType != "movie" && mType != "tv") continue
+
+                    val gArray = obj.optJSONArray("genre_ids")
+                    val genreIds = mutableListOf<Int>()
+                    if (gArray != null) {
+                        for (g in 0 until gArray.length()) genreIds.add(gArray.getInt(g))
+                    }
+                    val origLang = obj.optString("original_language", "").lowercase(Locale.ROOT)
+                    val hasAnimGenre = genreIds.contains(16)
+                    val isJapanese = origLang == "ja"
+
+                    var score = 0
+                    // Type preference
+                    if (isMovie && mType == "movie") score += 50
+                    if (!isMovie && mType == "tv") score += 50
+
+                    // Live Action vs Anime preference
+                    if (detectedLiveAction) {
+                        if (!hasAnimGenre) score += 50
+                        if (!isJapanese) score += 20
+                    } else {
+                        // Standard Anime: strong bonus for Animation genre and Japanese origin
+                        if (hasAnimGenre) score += 60
+                        if (isJapanese) score += 40
+                        // Heavy penalty if live action English series is returned for an anime
+                        if (!hasAnimGenre && origLang == "en") score -= 80
+                    }
+
+                    val p = obj.optString("poster_path", "")
+                    val ov = obj.optString("overview", "")
+                    if (p.isNotEmpty()) score += 10
+                    if (ov.isNotEmpty()) score += 10
+
+                    if (score > bestScore) {
+                        bestScore = score
+                        bestObj = obj
                     }
                 }
 
                 val target = bestObj ?: return@withContext null
-                val mType = target.optString("media_type", "tv")
+                val mType = target.optString("media_type", if (isMovie) "movie" else "tv")
                 val posterPath = target.optString("poster_path", "")
                 val backdropPath = target.optString("backdrop_path", "")
                 val overview = target.optString("overview", "").trim()
@@ -111,15 +152,28 @@ object TmdbMetadataRepository {
                 val dateStr = target.optString("first_air_date", target.optString("release_date", ""))
                 val year = if (dateStr.length >= 4) dateStr.substring(0, 4) else ""
 
+                val gArray = target.optJSONArray("genre_ids")
+                var isAnimation = false
+                if (gArray != null) {
+                    for (g in 0 until gArray.length()) {
+                        if (gArray.getInt(g) == 16) {
+                            isAnimation = true
+                            break
+                        }
+                    }
+                }
+
                 val ratingFormatted = if (voteAvg > 0) {
                     String.format(Locale.US, "★ %.1f (TMDB)", voteAvg)
                 } else ""
 
                 val tmdbId = target.optInt("id", 0)
                 var imdbId = ""
+                var englishTitle = ""
                 var trailerUrl = ""
 
                 if (tmdbId > 0) {
+                    // Fetch External IDs (IMDb ID)
                     try {
                         val extUrl = "$BASE_URL/$mType/$tmdbId/external_ids?api_key=$apiKey"
                         val extReq = Request.Builder().url(extUrl).build()
@@ -127,6 +181,18 @@ object TmdbMetadataRepository {
                             if (extResp.isSuccessful) {
                                 val extJson = JSONObject(extResp.body?.string() ?: "")
                                 imdbId = extJson.optString("imdb_id", "")
+                            }
+                        }
+                    } catch (e: Exception) {}
+
+                    // Fetch English Title (crucial for anime indexers like Cinemeta, Nyaa, Jackett)
+                    try {
+                        val enUrl = "$BASE_URL/$mType/$tmdbId?api_key=$apiKey&language=en-US"
+                        val enReq = Request.Builder().url(enUrl).build()
+                        client.newCall(enReq).execute().use { enResp ->
+                            if (enResp.isSuccessful) {
+                                val enJson = JSONObject(enResp.body?.string() ?: "")
+                                englishTitle = enJson.optString("name", enJson.optString("title", "")).trim()
                             }
                         }
                     } catch (e: Exception) {}
@@ -170,18 +236,19 @@ object TmdbMetadataRepository {
                     } catch (e: Exception) {}
                 }
 
-                // Fallback: If IMDb ID is still missing (common in anime), query Cinemeta search
+                // Fallback: If IMDb ID is still missing, query Cinemeta search
                 if (imdbId.isEmpty()) {
                     try {
                         val cinemetaType = if (mType == "movie") "movie" else "series"
-                        val cinemetaUrl = "https://v3-cinemeta.strem.io/catalog/$cinemetaType/top/search=${URLEncoder.encode(cleanQuery, "UTF-8")}.json"
+                        val cinemetaSearch = englishTitle.ifEmpty { cleanQuery }
+                        val cinemetaUrl = "https://v3-cinemeta.strem.io/catalog/$cinemetaType/top/search=${URLEncoder.encode(cinemetaSearch, "UTF-8")}.json"
                         val cinemetaReq = Request.Builder().url(cinemetaUrl).header("User-Agent", "Mozilla/5.0").build()
                         client.newCall(cinemetaReq).execute().use { cinResp ->
                             if (cinResp.isSuccessful) {
                                 val cinJson = JSONObject(cinResp.body?.string() ?: "")
                                 val metas = cinJson.optJSONArray("metas")
                                 if (metas != null) {
-                                    val qClean = cleanQuery.lowercase(Locale.ROOT)
+                                    val qClean = cinemetaSearch.lowercase(Locale.ROOT)
                                     for (m in 0 until metas.length()) {
                                         val mObj = metas.getJSONObject(m)
                                         val mName = mObj.optString("name", "").lowercase(Locale.ROOT)
@@ -203,12 +270,14 @@ object TmdbMetadataRepository {
                     trailerUrl = trailerUrl,
                     titleSpanish = spanishTitle,
                     titleOriginal = originalTitle,
+                    titleEnglish = englishTitle,
                     overview = overview,
                     posterUrl = if (posterPath.isNotEmpty()) "$IMAGE_BASE_W500$posterPath" else "",
                     backdropUrl = if (backdropPath.isNotEmpty()) "$IMAGE_BASE_W1280$backdropPath" else "",
                     ratingText = ratingFormatted,
                     releaseYear = year,
-                    mediaType = mType
+                    mediaType = mType,
+                    isAnimation = isAnimation
                 )
 
                 memoryCache[cacheKey] = meta

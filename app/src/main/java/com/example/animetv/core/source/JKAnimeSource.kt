@@ -95,18 +95,22 @@ class JKAnimeSource : AnimeSource {
     override suspend fun search(query: String): List<AnimeCard> = withContext(Dispatchers.IO) {
         val list = mutableListOf<AnimeCard>()
         try {
-            val searchUrl = "$baseUrl/buscar/${query.trim().replace(" ", "_")}/1/"
+            val encoded = java.net.URLEncoder.encode(query.trim(), "UTF-8")
+            val searchUrl = "$baseUrl/buscar?q=$encoded"
             val html = fetchHtml(searchUrl)
             if (html.isEmpty()) return@withContext list
             val doc = Jsoup.parse(html, baseUrl)
 
             val cards = doc.select(".anime__item, .card")
             for (c in cards) {
-                val a = c.selectFirst("a") ?: continue
+                val a = c.selectFirst("a[href]") ?: continue
                 val href = a.absUrl("href")
-                val img = c.selectFirst("img") ?: c.selectFirst(".anime__item__pic")
-                val imgUrl = img?.attr("src")?.ifEmpty { img.attr("data-setbg") } ?: ""
-                val title = c.selectFirst("h5, .title, a")?.text()?.trim() ?: ""
+                if (href.isEmpty() || href == baseUrl || href.contains("/buscar") || href.contains("/dash/")) continue
+
+                val img = c.selectFirst("img") ?: c.selectFirst(".anime__item__pic, [data-setbg]")
+                val imgUrl = img?.attr("data-setbg")?.ifEmpty { img.attr("src") } ?: ""
+                val titleEl = c.selectFirst("h5, .title, .card-title, h6") ?: a
+                val title = titleEl.text().trim()
 
                 if (title.isNotEmpty() && href.isNotEmpty()) {
                     list.add(

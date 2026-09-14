@@ -455,6 +455,9 @@ class DetailActivity : AppCompatActivity() {
                         onEpisodeLongClick = { ep ->
                             showTorrentSelectorDialog(ep)
                         },
+                        onEpisodeTorClick = { ep ->
+                            showTorrentSelectorDialog(ep)
+                        },
                         onEpisodeClick = { ep ->
                             val action = TorrentSettingsStore.getEpisodeClickAction(this@DetailActivity)
                             when (action) {
@@ -733,25 +736,30 @@ class DetailActivity : AppCompatActivity() {
         val sortedList = getSortedEpisodes(rawEpisodes, isAscendingOrder)
 
         var currentEpIndex = if (targetEpisode != null) {
-            sortedList.indexOfFirst {
+            val idx = sortedList.indexOfFirst {
                 it.episodeUrl == targetEpisode.episodeUrl ||
-                        (it.seasonNumber == targetEpisode.seasonNumber && it.episodeNumber == targetEpisode.episodeNumber)
+                        (it.seasonNumber == targetEpisode.seasonNumber && it.episodeNumber == targetEpisode.episodeNumber) ||
+                        (it.episodeNumber == targetEpisode.episodeNumber)
             }
+            if (idx >= 0) idx else 0
         } else {
             val focused = currentlyFocusedEpisode
             if (focused != null) {
-                sortedList.indexOfFirst {
+                val idx = sortedList.indexOfFirst {
                     it.episodeUrl == focused.episodeUrl ||
-                            (it.seasonNumber == focused.seasonNumber && it.episodeNumber == focused.episodeNumber)
+                            (it.seasonNumber == focused.seasonNumber && it.episodeNumber == focused.episodeNumber) ||
+                            (it.episodeNumber == focused.episodeNumber)
                 }
+                if (idx >= 0) idx else 0
             } else {
                 val record = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this, card.detailUrl)
                 if (record != null) {
-                    sortedList.indexOfFirst { it.episodeUrl == record.episodeUrl || it.episodeNumber == record.episodeNumber }
+                    val idx = sortedList.indexOfFirst { it.episodeUrl == record.episodeUrl || it.episodeNumber == record.episodeNumber }
+                    if (idx >= 0) idx else 0
                 } else 0
             }
         }
-        if (currentEpIndex < 0) currentEpIndex = 0
+        if (currentEpIndex < 0 || (sortedList.isNotEmpty() && currentEpIndex >= sortedList.size)) currentEpIndex = 0
 
         var currentEp = if (sortedList.isNotEmpty()) sortedList[currentEpIndex] else targetEpisode
 
@@ -794,7 +802,7 @@ class DetailActivity : AppCompatActivity() {
             val seasonNum = ep?.seasonNumber ?: 1
             val epNum = ep?.episodeNumber ?: 1
 
-            txtHeader.text = "⚡ Torrents: $titleDisplay"
+            txtHeader.text = if (isMovie) "⚡ Torrents: $titleDisplay" else "⚡ Torrents: $titleDisplay (Episodio $epNum)"
             val qualityBadge = TorrentSettingsStore.getQualityFilter(this)
             val langFilter = TorrentSettingsStore.getLanguageFilter(this)
             val langText = when (langFilter) {
@@ -803,7 +811,8 @@ class DetailActivity : AppCompatActivity() {
                 "sub_only" -> "Subtitulado"
                 else -> "Español > Dual > Seeds"
             }
-            txtSubtitle.text = if (isMovie) "(Película) | $qualityBadge | $langText" else "T$seasonNum • Ep. $epNum | $qualityBadge | $langText"
+            val epExtraTitle = if (ep?.title?.isNotEmpty() == true && !ep.title.startsWith("Episodio", true)) " • ${ep.title}" else ""
+            txtSubtitle.text = if (isMovie) "(Película) | $qualityBadge | $langText" else "T$seasonNum • Ep. $epNum$epExtraTitle | $qualityBadge | $langText"
 
             if (sortedList.isNotEmpty() && !isMovie) {
                 layoutEpisodeNavigator.visibility = View.VISIBLE
@@ -818,22 +827,26 @@ class DetailActivity : AppCompatActivity() {
 
             progressBar.visibility = View.VISIBLE
             txtEmpty.visibility = View.VISIBLE
-            txtEmpty.text = "Buscando torrents para ${if (isMovie) "película" else "Episodio $epNum"}..."
+            txtEmpty.text = "Buscando torrents exclusivos para ${if (isMovie) "película" else "Episodio $epNum"}..."
             recycler.visibility = View.GONE
 
             searchJob = lifecycleScope.launch {
                 try {
                     val origTitle = currentTmdbMeta?.titleOriginal ?: ""
+                    val engTitle = currentTmdbMeta?.titleEnglish ?: ""
+                    val isLiveAction = currentTmdbMeta?.let { !it.isAnimation } ?: false
                     val imdbId = currentTmdbMeta?.imdbId ?: ""
 
                     val results = TorrentSearchRepository.searchAndFilter(
                         context = this@DetailActivity,
                         query = titleDisplay,
                         originalQuery = origTitle,
+                        englishQuery = engTitle,
                         imdbId = imdbId,
                         seasonNumber = seasonNum,
                         episodeNumber = epNum,
-                        isMovie = isMovie
+                        isMovie = isMovie,
+                        isLiveAction = isLiveAction
                     )
 
                     progressBar.visibility = View.GONE
@@ -914,7 +927,12 @@ class DetailActivity : AppCompatActivity() {
             val isTorrServerAlive = TorrServerClient.isServerAlive(torrServerUrl)
             if (isTorrServerAlive) {
                 Toast.makeText(this@DetailActivity, "Conectando con motor de streaming...", Toast.LENGTH_SHORT).show()
-                val streamUrl = TorrServerClient.getStreamUrl(torrServerUrl, item.magnetUrl, title)
+                val streamUrl = TorrServerClient.getStreamUrl(
+                    serverUrl = torrServerUrl,
+                    magnetUrl = item.magnetUrl,
+                    title = title,
+                    fileIndex = item.fileIndex
+                )
                 dialog.dismiss()
 
                 val bestPoster = CoverUtils.pickBestCover(currentTmdbMeta?.posterUrl, detail?.posterUrl ?: card.posterUrl)
