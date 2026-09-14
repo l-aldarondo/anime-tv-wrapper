@@ -106,7 +106,8 @@ class DetailActivity : AppCompatActivity() {
         btnBack = findViewById(R.id.btnBack)
 
         btnPlayTorrent.setOnClickListener {
-            showTorrentSelectorDialog()
+            val ep = currentlyFocusedEpisode ?: rawEpisodes.firstOrNull()
+            showTorrentSelectorDialog(ep)
         }
         btnTorrentSettings.setOnClickListener {
             showTorrentSettingsDialog()
@@ -455,16 +456,8 @@ class DetailActivity : AppCompatActivity() {
                         onEpisodeLongClick = { ep ->
                             showTorrentSelectorDialog(ep)
                         },
-                        onEpisodeTorClick = { ep ->
-                            showTorrentSelectorDialog(ep)
-                        },
                         onEpisodeClick = { ep ->
-                            val action = TorrentSettingsStore.getEpisodeClickAction(this@DetailActivity)
-                            when (action) {
-                                "torrent" -> showTorrentSelectorDialog(ep)
-                                "ask" -> showEpisodeChoiceDialog(detail, ep)
-                                else -> playEpisode(detail, ep)
-                            }
+                            playEpisode(detail, ep)
                         }
                     )
                     episodeAdapter = adapter
@@ -910,6 +903,10 @@ class DetailActivity : AppCompatActivity() {
 
         searchEpisode(currentEp)
         dialog.show()
+        dialog.window?.setLayout(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+        )
     }
 
     private fun handleTorrentSelection(

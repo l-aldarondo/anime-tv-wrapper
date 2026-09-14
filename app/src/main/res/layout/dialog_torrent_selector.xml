@@ -2,16 +2,17 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#D0000000"
-    android:padding="24dp">
+    android:background="#E0000000"
+    android:paddingHorizontal="36dp"
+    android:paddingVertical="20dp">
 
     <LinearLayout
-        android:layout_width="740dp"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
         android:background="#151722"
         android:orientation="vertical"
-        android:padding="20dp">
+        android:padding="24dp">
 
         <!-- Header -->
         <LinearLayout
@@ -32,17 +33,17 @@
                     android:layout_height="wrap_content"
                     android:text="⚡ TOR"
                     android:textColor="#00E5FF"
-                    android:textSize="19sp"
+                    android:textSize="22sp"
                     android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/txtDialogTorrentSubtitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
+                    android:layout_marginTop="4dp"
                     android:text="Prioridad: Español/Latino > Dual Audio > Seeds"
                     android:textColor="#8F94A6"
-                    android:textSize="12sp" />
+                    android:textSize="14sp" />
 
             </LinearLayout>
 
@@ -50,28 +51,28 @@
             <Button
                 android:id="@+id/btnTorrentQuickSettings"
                 android:layout_width="wrap_content"
-                android:layout_height="36dp"
+                android:layout_height="42dp"
                 android:background="@drawable/bg_netflix_btn_secondary"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
-                android:paddingHorizontal="12dp"
+                android:paddingHorizontal="16dp"
                 android:text="⚙ Ajustes"
                 android:textColor="#FFFFFF"
-                android:textSize="12sp" />
+                android:textSize="13sp" />
 
             <!-- Close Button -->
             <Button
                 android:id="@+id/btnDialogClose"
                 android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:layout_marginStart="8dp"
+                android:layout_height="42dp"
+                android:layout_marginStart="10dp"
                 android:background="@drawable/bg_netflix_btn_secondary"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
-                android:paddingHorizontal="12dp"
+                android:paddingHorizontal="16dp"
                 android:text="✕ Cerrar"
                 android:textColor="#FFFFFF"
-                android:textSize="12sp" />
+                android:textSize="13sp" />
 
         </LinearLayout>
 
@@ -79,7 +80,7 @@
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
-            android:layout_marginVertical="10dp"
+            android:layout_marginVertical="12dp"
             android:background="#2E3244" />
 
         <!-- Episode Switcher Row (Symmetric Navigation) -->
@@ -89,70 +90,70 @@
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:layout_marginBottom="10dp">
+            android:layout_marginBottom="12dp">
 
             <Button
                 android:id="@+id/btnTorrentEpFirst"
                 android:layout_width="wrap_content"
-                android:layout_height="36dp"
+                android:layout_height="42dp"
                 android:background="@drawable/bg_netflix_btn_secondary"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
-                android:paddingHorizontal="10dp"
+                android:paddingHorizontal="14dp"
                 android:text="⏮ Primero"
                 android:textColor="#FFFFFF"
-                android:textSize="11sp" />
+                android:textSize="12sp" />
 
             <Button
                 android:id="@+id/btnTorrentEpPrev"
                 android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:layout_marginStart="6dp"
+                android:layout_height="42dp"
+                android:layout_marginStart="8dp"
                 android:background="@drawable/bg_netflix_btn_secondary"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
-                android:paddingHorizontal="10dp"
+                android:paddingHorizontal="14dp"
                 android:text="◀ Anterior"
                 android:textColor="#FFFFFF"
-                android:textSize="11sp" />
+                android:textSize="12sp" />
 
             <TextView
                 android:id="@+id/txtTorrentCurrentEp"
                 android:layout_width="0dp"
-                android:layout_height="36dp"
+                android:layout_height="42dp"
                 android:layout_weight="1"
-                android:layout_marginHorizontal="6dp"
+                android:layout_marginHorizontal="8dp"
                 android:background="@drawable/bg_badge_pill"
                 android:gravity="center"
                 android:text="Temporada 1 • Ep. 1"
                 android:textColor="#00E5FF"
-                android:textSize="12sp"
+                android:textSize="14sp"
                 android:textStyle="bold" />
 
             <Button
                 android:id="@+id/btnTorrentEpNext"
                 android:layout_width="wrap_content"
-                android:layout_height="36dp"
+                android:layout_height="42dp"
                 android:background="@drawable/bg_netflix_btn_secondary"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
-                android:paddingHorizontal="10dp"
+                android:paddingHorizontal="14dp"
                 android:text="Siguiente ▶"
                 android:textColor="#FFFFFF"
-                android:textSize="11sp" />
+                android:textSize="12sp" />
 
             <Button
                 android:id="@+id/btnTorrentEpLast"
                 android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:layout_marginStart="6dp"
+                android:layout_height="42dp"
+                android:layout_marginStart="8dp"
                 android:background="@drawable/bg_netflix_btn_secondary"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
-                android:paddingHorizontal="10dp"
+                android:paddingHorizontal="14dp"
                 android:text="Último ⏭"
                 android:textColor="#FFFFFF"
-                android:textSize="11sp" />
+                android:textSize="12sp" />
 
         </LinearLayout>
 
@@ -162,7 +163,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
-            android:layout_marginVertical="20dp"
+            android:layout_marginVertical="24dp"
             android:indeterminateTint="#00E5FF"
             android:visibility="gone" />
 
@@ -171,17 +172,17 @@
             android:id="@+id/txtEmptyTorrents"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginVertical="20dp"
+            android:layout_marginVertical="24dp"
             android:gravity="center"
             android:text="Buscando fuentes torrent..."
             android:textColor="#B0B3C6"
-            android:textSize="13sp" />
+            android:textSize="15sp" />
 
-        <!-- Torrent Stream Recycler -->
+        <!-- Torrent Stream Recycler (Wide and Spacious for 75" TV) -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recyclerTorrents"
             android:layout_width="match_parent"
-            android:layout_height="340dp"
+            android:layout_height="480dp"
             android:clipToPadding="false"
             android:scrollbars="vertical"
             android:visibility="gone" />
