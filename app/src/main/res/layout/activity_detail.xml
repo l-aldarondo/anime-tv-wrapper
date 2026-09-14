@@ -92,98 +92,120 @@
                         android:textColor="#B0B3C6"
                         android:textSize="14sp" />
 
-                    <!-- Action Buttons -->
-                    <LinearLayout
-                        android:layout_width="wrap_content"
+                    <!-- Symmetrical Action Buttons (Scrollable so never clipped) -->
+                    <HorizontalScrollView
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="16dp"
-                        android:orientation="horizontal">
+                        android:scrollbars="none">
 
-                        <Button
-                            android:id="@+id/btnPlayFirst"
+                        <LinearLayout
                             android:layout_width="wrap_content"
-                            android:layout_height="48dp"
-                            android:background="@drawable/bg_netflix_btn_play"
-                            android:focusable="true"
-                            android:focusableInTouchMode="true"
-                            android:paddingHorizontal="20dp"
-                            android:text="▶  Reproducir"
-                            android:textColor="@color/color_netflix_btn_play"
-                            android:textSize="14sp"
-                            android:textStyle="bold" />
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
 
-                        <Button
-                            android:id="@+id/btnRestartEpisode"
-                            android:layout_width="wrap_content"
-                            android:layout_height="48dp"
-                            android:layout_marginStart="14dp"
-                            android:background="@drawable/bg_netflix_btn_secondary"
-                            android:focusable="true"
-                            android:focusableInTouchMode="true"
-                            android:paddingHorizontal="18dp"
-                            android:text="↺  Reiniciar"
-                            android:textColor="#FFFFFF"
-                            android:textSize="14sp"
-                            android:textStyle="bold"
-                            android:visibility="gone" />
+                            <Button
+                                android:id="@+id/btnPlayFirst"
+                                android:layout_width="wrap_content"
+                                android:layout_height="44dp"
+                                android:background="@drawable/bg_netflix_btn_play"
+                                android:focusable="true"
+                                android:focusableInTouchMode="true"
+                                android:paddingHorizontal="18dp"
+                                android:text="▶  WEB"
+                                android:textColor="@color/color_netflix_btn_play"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
 
-                        <Button
-                            android:id="@+id/btnPlayTorrent"
-                            android:layout_width="wrap_content"
-                            android:layout_height="48dp"
-                            android:layout_marginStart="14dp"
-                            android:background="@drawable/bg_netflix_btn_secondary"
-                            android:focusable="true"
-                            android:focusableInTouchMode="true"
-                            android:paddingHorizontal="18dp"
-                            android:text="⚡  Torrents"
-                            android:textColor="#00E5FF"
-                            android:textSize="14sp"
-                            android:textStyle="bold" />
+                            <Button
+                                android:id="@+id/btnRestartEpisode"
+                                android:layout_width="wrap_content"
+                                android:layout_height="44dp"
+                                android:layout_marginStart="12dp"
+                                android:background="@drawable/bg_netflix_btn_secondary"
+                                android:focusable="true"
+                                android:focusableInTouchMode="true"
+                                android:paddingHorizontal="16dp"
+                                android:text="↺  Reiniciar"
+                                android:textColor="#FFFFFF"
+                                android:textSize="13sp"
+                                android:textStyle="bold"
+                                android:visibility="gone" />
 
-                        <Button
-                            android:id="@+id/btnTrailer"
-                            android:layout_width="wrap_content"
-                            android:layout_height="48dp"
-                            android:layout_marginStart="14dp"
-                            android:background="@drawable/bg_netflix_btn_secondary"
-                            android:focusable="true"
-                            android:focusableInTouchMode="true"
-                            android:paddingHorizontal="18dp"
-                            android:text="🎬  Ver Tráiler"
-                            android:textColor="#FFFFFF"
-                            android:textSize="14sp"
-                            android:textStyle="bold"
-                            android:visibility="gone" />
+                            <Button
+                                android:id="@+id/btnPlayTorrent"
+                                android:layout_width="wrap_content"
+                                android:layout_height="44dp"
+                                android:layout_marginStart="12dp"
+                                android:background="@drawable/bg_netflix_btn_secondary"
+                                android:focusable="true"
+                                android:focusableInTouchMode="true"
+                                android:paddingHorizontal="18dp"
+                                android:text="⚡  TOR"
+                                android:textColor="#00E5FF"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
 
-                        <Button
-                            android:id="@+id/btnToggleFavorite"
-                            android:layout_width="wrap_content"
-                            android:layout_height="48dp"
-                            android:layout_marginStart="14dp"
-                            android:background="@drawable/bg_netflix_btn_secondary"
-                            android:focusable="true"
-                            android:focusableInTouchMode="true"
-                            android:paddingHorizontal="18dp"
-                            android:text="⭐  Mi Lista"
-                            android:textColor="#FFFFFF"
-                            android:textSize="14sp"
-                            android:textStyle="bold" />
+                            <Button
+                                android:id="@+id/btnTorrentSettings"
+                                android:layout_width="wrap_content"
+                                android:layout_height="44dp"
+                                android:layout_marginStart="12dp"
+                                android:background="@drawable/bg_netflix_btn_secondary"
+                                android:focusable="true"
+                                android:focusableInTouchMode="true"
+                                android:paddingHorizontal="16dp"
+                                android:text="⚙  Ajustes"
+                                android:textColor="#FFFFFF"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
 
-                        <Button
-                            android:id="@+id/btnBack"
-                            android:layout_width="wrap_content"
-                            android:layout_height="48dp"
-                            android:layout_marginStart="14dp"
-                            android:background="@drawable/bg_topbar_item"
-                            android:focusable="true"
-                            android:focusableInTouchMode="true"
-                            android:paddingHorizontal="16dp"
-                            android:text="↩  Volver"
-                            android:textColor="#F0F0FF"
-                            android:textSize="14sp" />
+                            <Button
+                                android:id="@+id/btnTrailer"
+                                android:layout_width="wrap_content"
+                                android:layout_height="44dp"
+                                android:layout_marginStart="12dp"
+                                android:background="@drawable/bg_netflix_btn_secondary"
+                                android:focusable="true"
+                                android:focusableInTouchMode="true"
+                                android:paddingHorizontal="16dp"
+                                android:text="🎬  Tráiler"
+                                android:textColor="#FFFFFF"
+                                android:textSize="13sp"
+                                android:textStyle="bold"
+                                android:visibility="gone" />
 
-                    </LinearLayout>
+                            <Button
+                                android:id="@+id/btnToggleFavorite"
+                                android:layout_width="wrap_content"
+                                android:layout_height="44dp"
+                                android:layout_marginStart="12dp"
+                                android:background="@drawable/bg_netflix_btn_secondary"
+                                android:focusable="true"
+                                android:focusableInTouchMode="true"
+                                android:paddingHorizontal="16dp"
+                                android:text="⭐  Mi Lista"
+                                android:textColor="#FFFFFF"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+
+                            <Button
+                                android:id="@+id/btnBack"
+                                android:layout_width="wrap_content"
+                                android:layout_height="44dp"
+                                android:layout_marginStart="12dp"
+                                android:background="@drawable/bg_topbar_item"
+                                android:focusable="true"
+                                android:focusableInTouchMode="true"
+                                android:paddingHorizontal="16dp"
+                                android:text="↩  Volver"
+                                android:textColor="#F0F0FF"
+                                android:textSize="13sp" />
+
+                        </LinearLayout>
+
+                    </HorizontalScrollView>
 
                 </LinearLayout>
 
@@ -259,78 +281,111 @@
                 android:clipToPadding="false"
                 android:overScrollMode="never" />
 
-            <!-- Episode Spotlight / Description Box (Netflix-like) -->
+            <!-- Episode Spotlight / Description Box (Netflix/Stremio-like) -->
             <LinearLayout
                 android:id="@+id/layoutFocusedEpisodeInfo"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
+                android:orientation="horizontal"
                 android:layout_marginTop="16dp"
                 android:padding="16dp"
                 android:background="@drawable/bg_spotlight_card"
                 android:visibility="gone">
 
-                <TextView
-                    android:id="@+id/txtFocusedEpisodeHeader"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textColor="#FFD54F"
-                    android:textSize="12sp"
-                    android:textStyle="bold" />
+                <!-- 16:9 Episode Still Image Thumbnail -->
+                <FrameLayout
+                    android:id="@+id/frameFocusedStill"
+                    android:layout_width="220dp"
+                    android:layout_height="124dp"
+                    android:layout_marginEnd="16dp"
+                    android:visibility="gone">
 
-                <TextView
-                    android:id="@+id/txtFocusedEpisodeTitle"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:textColor="#FFFFFF"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
+                    <ImageView
+                        android:id="@+id/imgFocusedEpisodeStill"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="centerCrop"
+                        android:background="#151722"
+                        android:contentDescription="@null" />
 
-                <TextView
-                    android:id="@+id/txtFocusedEpisodeSynopsis"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:lineSpacingExtra="3dp"
-                    android:textColor="#B0B3C6"
-                    android:textSize="13sp"
-                    android:maxLines="4"
-                    android:ellipsize="end" />
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/bg_bottom_fader" />
 
-                <!-- Action Buttons for Focused Episode (Symmetric & TV-Friendly) -->
+                </FrameLayout>
+
+                <!-- Episode Details & Direct Actions -->
                 <LinearLayout
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:orientation="horizontal">
+                    android:layout_weight="1"
+                    android:orientation="vertical">
 
-                    <Button
-                        android:id="@+id/btnSpotlightPlayWeb"
+                    <TextView
+                        android:id="@+id/txtFocusedEpisodeHeader"
                         android:layout_width="wrap_content"
-                        android:layout_height="38dp"
-                        android:background="@drawable/bg_netflix_btn_play"
-                        android:focusable="true"
-                        android:focusableInTouchMode="true"
-                        android:paddingHorizontal="18dp"
-                        android:text="▶  Web"
-                        android:textColor="@color/color_netflix_btn_play"
-                        android:textSize="13sp"
+                        android:layout_height="wrap_content"
+                        android:textColor="#FFD54F"
+                        android:textSize="12sp"
                         android:textStyle="bold" />
 
-                    <Button
-                        android:id="@+id/btnSpotlightPlayTorrent"
-                        android:layout_width="wrap_content"
-                        android:layout_height="38dp"
-                        android:layout_marginStart="10dp"
-                        android:background="@drawable/bg_netflix_btn_secondary"
-                        android:focusable="true"
-                        android:focusableInTouchMode="true"
-                        android:paddingHorizontal="18dp"
-                        android:text="⚡  Torrents"
-                        android:textColor="#00E5FF"
-                        android:textSize="13sp"
+                    <TextView
+                        android:id="@+id/txtFocusedEpisodeTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:textColor="#FFFFFF"
+                        android:textSize="16sp"
                         android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/txtFocusedEpisodeSynopsis"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:lineSpacingExtra="3dp"
+                        android:textColor="#B0B3C6"
+                        android:textSize="13sp"
+                        android:maxLines="4"
+                        android:ellipsize="end" />
+
+                    <!-- Action Buttons for Focused Episode (Symmetric & TV-Friendly) -->
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <Button
+                            android:id="@+id/btnSpotlightPlayWeb"
+                            android:layout_width="wrap_content"
+                            android:layout_height="40dp"
+                            android:background="@drawable/bg_netflix_btn_play"
+                            android:focusable="true"
+                            android:focusableInTouchMode="true"
+                            android:paddingHorizontal="20dp"
+                            android:text="▶  WEB"
+                            android:textColor="@color/color_netflix_btn_play"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+
+                        <Button
+                            android:id="@+id/btnSpotlightPlayTorrent"
+                            android:layout_width="wrap_content"
+                            android:layout_height="40dp"
+                            android:layout_marginStart="12dp"
+                            android:background="@drawable/bg_netflix_btn_secondary"
+                            android:focusable="true"
+                            android:focusableInTouchMode="true"
+                            android:paddingHorizontal="20dp"
+                            android:text="⚡  TOR"
+                            android:textColor="#00E5FF"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+
+                    </LinearLayout>
 
                 </LinearLayout>
 

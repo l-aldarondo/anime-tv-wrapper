@@ -49,12 +49,13 @@
                 android:layout_width="0dp"
                 android:layout_height="38dp"
                 android:layout_weight="1"
-                android:background="@drawable/bg_torrent_item_selector"
+                android:background="@drawable/bg_filter_chip_selector"
                 android:button="@null"
                 android:gravity="center"
                 android:paddingHorizontal="6dp"
                 android:text="1080p (Óptimo)"
-                android:textColor="#FFFFFF"
+                android:textColor="@color/color_filter_chip_text"
+                android:textStyle="bold"
                 android:textSize="12sp"
                 android:focusable="true" />
 
@@ -64,12 +65,13 @@
                 android:layout_height="38dp"
                 android:layout_weight="1"
                 android:layout_marginStart="8dp"
-                android:background="@drawable/bg_torrent_item_selector"
+                android:background="@drawable/bg_filter_chip_selector"
                 android:button="@null"
                 android:gravity="center"
                 android:paddingHorizontal="6dp"
                 android:text="720p"
-                android:textColor="#FFFFFF"
+                android:textColor="@color/color_filter_chip_text"
+                android:textStyle="bold"
                 android:textSize="12sp"
                 android:focusable="true" />
 
@@ -79,16 +81,27 @@
                 android:layout_height="38dp"
                 android:layout_weight="1"
                 android:layout_marginStart="8dp"
-                android:background="@drawable/bg_torrent_item_selector"
+                android:background="@drawable/bg_filter_chip_selector"
                 android:button="@null"
                 android:gravity="center"
                 android:paddingHorizontal="6dp"
                 android:text="Cualquiera (HD)"
-                android:textColor="#FFFFFF"
+                android:textColor="@color/color_filter_chip_text"
+                android:textStyle="bold"
                 android:textSize="12sp"
                 android:focusable="true" />
 
         </RadioGroup>
+
+        <TextView
+            android:id="@+id/txtQualitySummary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Activo: 1080p (Óptimo)"
+            android:textColor="#00E5FF"
+            android:textSize="11sp"
+            android:textStyle="bold" />
 
         <CheckBox
             android:id="@+id/chkAllow4k"
@@ -122,12 +135,13 @@
                 android:layout_width="0dp"
                 android:layout_height="38dp"
                 android:layout_weight="1"
-                android:background="@drawable/bg_torrent_item_selector"
+                android:background="@drawable/bg_filter_chip_selector"
                 android:button="@null"
                 android:gravity="center"
                 android:paddingHorizontal="4dp"
                 android:text="🇪🇸 Solo Español"
-                android:textColor="#FFFFFF"
+                android:textColor="@color/color_filter_chip_text"
+                android:textStyle="bold"
                 android:textSize="11sp"
                 android:focusable="true" />
 
@@ -137,12 +151,13 @@
                 android:layout_height="38dp"
                 android:layout_weight="1"
                 android:layout_marginStart="6dp"
-                android:background="@drawable/bg_torrent_item_selector"
+                android:background="@drawable/bg_filter_chip_selector"
                 android:button="@null"
                 android:gravity="center"
                 android:paddingHorizontal="4dp"
                 android:text="🌐 Dual Audio"
-                android:textColor="#FFFFFF"
+                android:textColor="@color/color_filter_chip_text"
+                android:textStyle="bold"
                 android:textSize="11sp"
                 android:focusable="true" />
 
@@ -152,12 +167,13 @@
                 android:layout_height="38dp"
                 android:layout_weight="1"
                 android:layout_marginStart="6dp"
-                android:background="@drawable/bg_torrent_item_selector"
+                android:background="@drawable/bg_filter_chip_selector"
                 android:button="@null"
                 android:gravity="center"
                 android:paddingHorizontal="4dp"
                 android:text="💬 Sub / Orig"
-                android:textColor="#FFFFFF"
+                android:textColor="@color/color_filter_chip_text"
+                android:textStyle="bold"
                 android:textSize="11sp"
                 android:focusable="true" />
 
@@ -167,16 +183,27 @@
                 android:layout_height="38dp"
                 android:layout_weight="1"
                 android:layout_marginStart="6dp"
-                android:background="@drawable/bg_torrent_item_selector"
+                android:background="@drawable/bg_filter_chip_selector"
                 android:button="@null"
                 android:gravity="center"
                 android:paddingHorizontal="4dp"
                 android:text="🌍 Todos"
-                android:textColor="#FFFFFF"
+                android:textColor="@color/color_filter_chip_text"
+                android:textStyle="bold"
                 android:textSize="11sp"
                 android:focusable="true" />
 
         </RadioGroup>
+
+        <TextView
+            android:id="@+id/txtLanguageSummary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Activo: Solo Español"
+            android:textColor="#00E5FF"
+            android:textSize="11sp"
+            android:textStyle="bold" />
 
         <!-- 3. Acción al pulsar un Episodio en el Carrusel -->
         <TextView
@@ -200,12 +227,13 @@
                 android:layout_width="0dp"
                 android:layout_height="38dp"
                 android:layout_weight="1"
-                android:background="@drawable/bg_torrent_item_selector"
+                android:background="@drawable/bg_filter_chip_selector"
                 android:button="@null"
                 android:gravity="center"
                 android:paddingHorizontal="6dp"
-                android:text="▶ Web Directo"
-                android:textColor="#FFFFFF"
+                android:text="▶ WEB"
+                android:textColor="@color/color_filter_chip_text"
+                android:textStyle="bold"
                 android:textSize="11sp"
                 android:focusable="true" />
 
@@ -215,12 +243,13 @@
                 android:layout_height="38dp"
                 android:layout_weight="1"
                 android:layout_marginStart="8dp"
-                android:background="@drawable/bg_torrent_item_selector"
+                android:background="@drawable/bg_filter_chip_selector"
                 android:button="@null"
                 android:gravity="center"
                 android:paddingHorizontal="6dp"
-                android:text="⚡ Torrents"
-                android:textColor="#FFFFFF"
+                android:text="⚡ TOR"
+                android:textColor="@color/color_filter_chip_text"
+                android:textStyle="bold"
                 android:textSize="11sp"
                 android:focusable="true" />
 
@@ -230,16 +259,27 @@
                 android:layout_height="38dp"
                 android:layout_weight="1"
                 android:layout_marginStart="8dp"
-                android:background="@drawable/bg_torrent_item_selector"
+                android:background="@drawable/bg_filter_chip_selector"
                 android:button="@null"
                 android:gravity="center"
                 android:paddingHorizontal="6dp"
                 android:text="❓ Preguntar"
-                android:textColor="#FFFFFF"
+                android:textColor="@color/color_filter_chip_text"
+                android:textStyle="bold"
                 android:textSize="11sp"
                 android:focusable="true" />
 
         </RadioGroup>
+
+        <TextView
+            android:id="@+id/txtActionSummary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Activo: ▶ WEB"
+            android:textColor="#00E5FF"
+            android:textSize="11sp"
+            android:textStyle="bold" />
 
         <!-- 4. Opciones de Servidor / Red (Avanzado) -->
         <TextView

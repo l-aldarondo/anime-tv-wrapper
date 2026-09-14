@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Checked (Selected) State -> Bold Black on Radiant Cyan -->
+    <item android:state_checked="true" android:color="#050B14" />
+
+    <!-- Focused (Unchecked) State -> Crisp White on Slate -->
+    <item android:state_focused="true" android:color="#FFFFFF" />
+
+    <!-- Pressed State -->
+    <item android:state_pressed="true" android:color="#FFFFFF" />
+
+    <!-- Default Idle State -> Soft Light Gray -->
+    <item android:color="#B4B9CE" />
+</selector>

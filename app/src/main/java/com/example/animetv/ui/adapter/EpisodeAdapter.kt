@@ -3,8 +3,11 @@ package com.example.animetv.ui.adapter
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
+import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.example.animetv.R
 import com.example.animetv.core.history.PlaybackRecord
 import com.example.animetv.core.model.AnimeEpisode
@@ -19,6 +22,7 @@ class EpisodeAdapter(
 ) : RecyclerView.Adapter<EpisodeAdapter.ViewHolder>() {
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+        val still: ImageView = view.findViewById(R.id.imgEpisodeStill)
         val badge: TextView = view.findViewById(R.id.txtEpisodeBadge)
         val title: TextView = view.findViewById(R.id.txtEpisodeTitle)
         val progress: TextView = view.findViewById(R.id.txtEpisodeProgress)
@@ -42,6 +46,19 @@ class EpisodeAdapter(
         val ep = episodes[position]
         holder.badge.text = if (ep.seasonNumber > 1) "T${ep.seasonNumber} • E${ep.episodeNumber}" else "Episodio ${ep.episodeNumber}"
         holder.title.text = ep.title.ifEmpty { "Episodio ${ep.episodeNumber}" }
+
+        if (ep.stillUrl.isNotEmpty()) {
+            holder.still.visibility = View.VISIBLE
+            Glide.with(holder.itemView.context)
+                .load(ep.stillUrl)
+                .placeholder(R.drawable.bg_card_poster_placeholder)
+                .diskCacheStrategy(DiskCacheStrategy.ALL)
+                .centerCrop()
+                .into(holder.still)
+        } else {
+            holder.still.visibility = View.GONE
+            Glide.with(holder.itemView.context).clear(holder.still)
+        }
 
         val rec = lastWatchedRecord
         if (rec != null && (rec.episodeUrl == ep.episodeUrl || rec.episodeNumber == ep.episodeNumber)) {

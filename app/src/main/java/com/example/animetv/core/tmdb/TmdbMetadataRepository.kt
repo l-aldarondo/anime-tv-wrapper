@@ -25,6 +25,16 @@ data class TmdbMetadata(
     val mediaType: String // "tv" or "movie"
 )
 
+data class TmdbEpisode(
+    val episodeNumber: Int,
+    val seasonNumber: Int,
+    val name: String,
+    val overview: String,
+    val stillUrl: String,
+    val airDate: String,
+    val voteAverage: Double = 0.0
+)
+
 object TmdbMetadataRepository {
 
     private const val BASE_URL = "https://api.themoviedb.org/3"
@@ -38,6 +48,7 @@ object TmdbMetadataRepository {
 
     // In-memory cache to make screen loads instantaneous
     private val memoryCache = ConcurrentHashMap<String, TmdbMetadata>()
+    private val seasonCache = ConcurrentHashMap<String, List<TmdbEpisode>>()
 
     /**
      * Searches TMDB for rich metadata, high-resolution artwork, and original title.
@@ -154,5 +165,98 @@ object TmdbMetadataRepository {
             .replace("_", " ")
             .replace(Regex("""\s+"""), " ")
             .trim()
+    }
+
+    /**
+     * Fetches detailed episode metadata for a specific season from TMDB, including
+     * real chapter titles, individual synopses, still images, and air dates.
+     */
+    suspend fun getSeasonEpisodes(
+        context: Context,
+        tmdbId: Int,
+        seasonNumber: Int
+    ): List<TmdbEpisode> = withContext(Dispatchers.IO) {
+        if (tmdbId <= 0) return@withContext emptyList()
+        val cacheKey = "$tmdbId-s$seasonNumber"
+        seasonCache[cacheKey]?.let { return@withContext it }
+
+        val apiKey = TorrentSettingsStore.getTmdbApiKey(context)
+        if (apiKey.isEmpty()) return@withContext emptyList()
+
+        fun parseSeasonJson(jsonStr: String): List<TmdbEpisode> {
+            val list = mutableListOf<TmdbEpisode>()
+            try {
+                val json = JSONObject(jsonStr)
+                val epArray = json.optJSONArray("episodes") ?: return list
+                for (i in 0 until epArray.length()) {
+                    val epObj = epArray.getJSONObject(i)
+                    val epNum = epObj.optInt("episode_number", i + 1)
+                    val sNum = epObj.optInt("season_number", seasonNumber)
+                    val name = epObj.optString("name", "").trim()
+                    val overview = epObj.optString("overview", "").trim()
+                    val stillPath = epObj.optString("still_path", "").trim()
+                    val airDate = epObj.optString("air_date", "").trim()
+                    val voteAvg = epObj.optDouble("vote_average", 0.0)
+
+                    list.add(
+                        TmdbEpisode(
+                            episodeNumber = epNum,
+                            seasonNumber = sNum,
+                            name = name,
+                            overview = overview,
+                            stillUrl = if (stillPath.isNotEmpty()) "$IMAGE_BASE_W500$stillPath" else "",
+                            airDate = airDate,
+                            voteAverage = voteAvg
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            return list
+        }
+
+        try {
+            // First attempt: Spanish Latin America (es-MX)
+            val urlEs = "$BASE_URL/tv/$tmdbId/season/$seasonNumber?api_key=$apiKey&language=es-MX"
+            val reqEs = Request.Builder().url(urlEs).header("User-Agent", "AnimeTV/2.8").build()
+            var episodes = client.newCall(reqEs).execute().use { resp ->
+                if (resp.isSuccessful) parseSeasonJson(resp.body?.string() ?: "") else emptyList()
+            }
+
+            // Fallback: If missing titles or overviews, attempt en-US to complement
+            val hasMissingTitles = episodes.isEmpty() || episodes.all { it.name.isEmpty() || it.name.startsWith("Episode", true) }
+            if (hasMissingTitles) {
+                val urlEn = "$BASE_URL/tv/$tmdbId/season/$seasonNumber?api_key=$apiKey&language=en-US"
+                val reqEn = Request.Builder().url(urlEn).header("User-Agent", "AnimeTV/2.8").build()
+                val fallbackEps = client.newCall(reqEn).execute().use { resp ->
+                    if (resp.isSuccessful) parseSeasonJson(resp.body?.string() ?: "") else emptyList()
+                }
+
+                if (episodes.isEmpty()) {
+                    episodes = fallbackEps
+                } else if (fallbackEps.isNotEmpty()) {
+                    val fallbackMap = fallbackEps.associateBy { it.episodeNumber }
+                    episodes = episodes.map { ep ->
+                        val fb = fallbackMap[ep.episodeNumber]
+                        if (fb != null) {
+                            ep.copy(
+                                name = ep.name.ifEmpty { fb.name },
+                                overview = ep.overview.ifEmpty { fb.overview },
+                                stillUrl = ep.stillUrl.ifEmpty { fb.stillUrl }
+                            )
+                        } else ep
+                    }
+                }
+            }
+
+            if (episodes.isNotEmpty()) {
+                seasonCache[cacheKey] = episodes
+            }
+            episodes
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
+        }
     }
 }

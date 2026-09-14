@@ -49,7 +49,8 @@ data class AnimeEpisode(
     val title: String,
     val episodeUrl: String,
     val releaseDate: String = "",
-    val synopsis: String = ""
+    val synopsis: String = "",
+    val stillUrl: String = ""
 ) : Serializable
 
 /**

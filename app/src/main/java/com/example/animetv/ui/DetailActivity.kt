@@ -61,6 +61,7 @@ class DetailActivity : AppCompatActivity() {
     private lateinit var btnPlayFirst: Button
     private lateinit var btnRestartEpisode: Button
     private lateinit var btnPlayTorrent: Button
+    private lateinit var btnTorrentSettings: Button
     private lateinit var btnTrailer: Button
     private lateinit var btnToggleFavorite: Button
     private lateinit var btnBack: Button
@@ -71,6 +72,8 @@ class DetailActivity : AppCompatActivity() {
     private lateinit var recyclerEpisodes: RecyclerView
     private lateinit var progressBar: ProgressBar
     private lateinit var layoutFocusedEpisodeInfo: View
+    private lateinit var frameFocusedStill: View
+    private lateinit var imgFocusedEpisodeStill: ImageView
     private lateinit var txtFocusedEpisodeHeader: TextView
     private lateinit var txtFocusedEpisodeTitle: TextView
     private lateinit var txtFocusedEpisodeSynopsis: TextView
@@ -97,12 +100,16 @@ class DetailActivity : AppCompatActivity() {
         btnPlayFirst = findViewById(R.id.btnPlayFirst)
         btnRestartEpisode = findViewById(R.id.btnRestartEpisode)
         btnPlayTorrent = findViewById(R.id.btnPlayTorrent)
+        btnTorrentSettings = findViewById(R.id.btnTorrentSettings)
         btnTrailer = findViewById(R.id.btnTrailer)
         btnToggleFavorite = findViewById(R.id.btnToggleFavorite)
         btnBack = findViewById(R.id.btnBack)
 
         btnPlayTorrent.setOnClickListener {
             showTorrentSelectorDialog()
+        }
+        btnTorrentSettings.setOnClickListener {
+            showTorrentSettingsDialog()
         }
         txtEpisodesHeader = findViewById(R.id.txtEpisodesHeader)
         btnSortOrder = findViewById(R.id.btnSortOrder)
@@ -111,6 +118,8 @@ class DetailActivity : AppCompatActivity() {
         recyclerEpisodes = findViewById(R.id.recyclerEpisodes)
         progressBar = findViewById(R.id.progressBarDetail)
         layoutFocusedEpisodeInfo = findViewById(R.id.layoutFocusedEpisodeInfo)
+        frameFocusedStill = findViewById(R.id.frameFocusedStill)
+        imgFocusedEpisodeStill = findViewById(R.id.imgFocusedEpisodeStill)
         txtFocusedEpisodeHeader = findViewById(R.id.txtFocusedEpisodeHeader)
         txtFocusedEpisodeTitle = findViewById(R.id.txtFocusedEpisodeTitle)
         txtFocusedEpisodeSynopsis = findViewById(R.id.txtFocusedEpisodeSynopsis)
@@ -175,8 +184,7 @@ class DetailActivity : AppCompatActivity() {
         val record = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this, card.detailUrl)
         
         if (record != null) {
-            val timeStr = if (record.positionMs > 5000) " (${formatTime(record.positionMs)})" else ""
-            btnPlayFirst.text = "▶  Continuar: ${record.episodeTitle}$timeStr"
+            btnPlayFirst.text = "▶  WEB (E${record.episodeNumber})"
             btnPlayFirst.setOnClickListener {
                 // Play last watched episode with auto-resume
                 val detail = currentDetail
@@ -223,15 +231,18 @@ class DetailActivity : AppCompatActivity() {
             }
         } else if (rawEpisodes.isNotEmpty()) {
             val firstEp = rawEpisodes.first()
-            btnPlayFirst.text = "▶  ${firstEp.title}"
+            btnPlayFirst.text = "▶  WEB"
             btnPlayFirst.setOnLongClickListener(null)
             btnPlayFirst.setOnClickListener {
                 currentDetail?.let { playEpisode(it, firstEp, startOver = false) }
             }
             btnRestartEpisode.visibility = View.GONE
         } else {
+            btnPlayFirst.text = "▶  WEB"
             btnRestartEpisode.visibility = View.GONE
         }
+
+        btnPlayTorrent.text = "⚡  TOR"
 
         episodeAdapter?.let { adapter ->
             val list = getSortedEpisodes(rawEpisodes, isAscendingOrder)
@@ -269,8 +280,20 @@ class DetailActivity : AppCompatActivity() {
         }
         txtFocusedEpisodeSynopsis.text = synopsisText
 
-        btnSpotlightPlayWeb.text = "▶  Web (Ep. ${ep.episodeNumber})"
-        btnSpotlightPlayTorrent.text = "⚡  Torrents (Ep. ${ep.episodeNumber})"
+        if (ep.stillUrl.isNotEmpty()) {
+            frameFocusedStill.visibility = View.VISIBLE
+            Glide.with(this)
+                .load(ep.stillUrl)
+                .centerCrop()
+                .placeholder(R.drawable.bg_card_poster_placeholder)
+                .diskCacheStrategy(DiskCacheStrategy.ALL)
+                .into(imgFocusedEpisodeStill)
+        } else {
+            frameFocusedStill.visibility = View.GONE
+        }
+
+        btnSpotlightPlayWeb.text = "▶  WEB (Ep. ${ep.episodeNumber})"
+        btnSpotlightPlayTorrent.text = "⚡  TOR (Ep. ${ep.episodeNumber})"
     }
 
     private fun toggleSortOrder() {
@@ -373,6 +396,7 @@ class DetailActivity : AppCompatActivity() {
                     if (tmdb.ratingText.isNotEmpty() && !txtMeta.text.contains("★")) {
                         txtMeta.text = "${txtMeta.text}  •  ${tmdb.ratingText}"
                     }
+                    enrichEpisodesWithTmdb(tmdb)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -473,13 +497,65 @@ class DetailActivity : AppCompatActivity() {
                     refreshPlaybackState()
                     btnPlayFirst.requestFocus()
                 } else {
-                    btnPlayFirst.text = if (detail.detailUrl.contains("/pelicula/")) "▶  Reproducir Película" else "▶  Ver en Web"
+                    btnPlayFirst.text = if (detail.detailUrl.contains("/pelicula/")) "▶  WEB (Película)" else "▶  WEB"
                     btnPlayFirst.setOnClickListener {
                         playDirectUrl(detail.detailUrl, detail.title)
                     }
                 }
+
+                currentTmdbMeta?.let { enrichEpisodesWithTmdb(it) }
             } catch (e: Exception) {
                 progressBar.visibility = View.GONE
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private fun enrichEpisodesWithTmdb(tmdb: TmdbMetadata) {
+        if (rawEpisodes.isEmpty()) return
+        lifecycleScope.launch {
+            try {
+                val seasons = rawEpisodes.map { it.seasonNumber }.distinct()
+                val tmdbEpisodesMap = mutableMapOf<Pair<Int, Int>, com.example.animetv.core.tmdb.TmdbEpisode>()
+                for (sNum in seasons) {
+                    val eps = TmdbMetadataRepository.getSeasonEpisodes(this@DetailActivity, tmdb.tmdbId, sNum)
+                    for (ep in eps) {
+                        tmdbEpisodesMap[Pair(ep.seasonNumber, ep.episodeNumber)] = ep
+                    }
+                }
+
+                if (tmdbEpisodesMap.isNotEmpty()) {
+                    rawEpisodes = rawEpisodes.map { ep ->
+                        val tEp = tmdbEpisodesMap[Pair(ep.seasonNumber, ep.episodeNumber)]
+                            ?: tmdbEpisodesMap[Pair(1, ep.episodeNumber)]
+                        if (tEp != null) {
+                            val enrichedTitle = if (tEp.name.isNotEmpty() && !tEp.name.equals("Episodio ${ep.episodeNumber}", true)) {
+                                "${ep.episodeNumber}. ${tEp.name}"
+                            } else ep.title
+
+                            ep.copy(
+                                title = enrichedTitle,
+                                synopsis = tEp.overview.ifEmpty { ep.synopsis },
+                                releaseDate = tEp.airDate.ifEmpty { ep.releaseDate },
+                                stillUrl = tEp.stillUrl.ifEmpty { ep.stillUrl }
+                            )
+                        } else {
+                            ep
+                        }
+                    }
+
+                    val record = currentCard?.let { com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this@DetailActivity, it.detailUrl) }
+                    val sortedList = getSortedEpisodes(rawEpisodes, isAscendingOrder)
+                    episodeAdapter?.updateList(sortedList, record)
+                    currentlyFocusedEpisode?.let { focused ->
+                        val updated = sortedList.firstOrNull { it.episodeUrl == focused.episodeUrl || it.episodeNumber == focused.episodeNumber }
+                            ?: sortedList.firstOrNull()
+                        if (updated != null) {
+                            bindFocusedEpisode(updated)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
@@ -617,10 +693,10 @@ class DetailActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle(titleText)
             .setMessage(episode.title.ifEmpty { "¿Cómo deseas reproducir este capítulo?" })
-            .setPositiveButton("▶ Stream Web") { _, _ ->
+            .setPositiveButton("▶ WEB") { _, _ ->
                 playEpisode(detail, episode)
             }
-            .setNeutralButton("⚡ Torrents") { _, _ ->
+            .setNeutralButton("⚡ TOR") { _, _ ->
                 showTorrentSelectorDialog(episode)
             }
             .setNegativeButton("Cancelar", null)
@@ -899,38 +975,74 @@ class DetailActivity : AppCompatActivity() {
         val rbQuality720p = dialogView.findViewById<RadioButton>(R.id.rbQuality720p)
         val rbQualityAll = dialogView.findViewById<RadioButton>(R.id.rbQualityAll)
         val chkAllow4k = dialogView.findViewById<CheckBox>(R.id.chkAllow4k)
+        val txtQualitySummary = dialogView.findViewById<TextView>(R.id.txtQualitySummary)
 
         val rgLanguage = dialogView.findViewById<RadioGroup>(R.id.rgLanguage)
         val rbLangSpanish = dialogView.findViewById<RadioButton>(R.id.rbLangSpanish)
         val rbLangDual = dialogView.findViewById<RadioButton>(R.id.rbLangDual)
         val rbLangSub = dialogView.findViewById<RadioButton>(R.id.rbLangSub)
         val rbLangAll = dialogView.findViewById<RadioButton>(R.id.rbLangAll)
+        val txtLanguageSummary = dialogView.findViewById<TextView>(R.id.txtLanguageSummary)
 
         val rgEpisodeAction = dialogView.findViewById<RadioGroup>(R.id.rgEpisodeAction)
         val rbActionWeb = dialogView.findViewById<RadioButton>(R.id.rbActionWeb)
         val rbActionTorrent = dialogView.findViewById<RadioButton>(R.id.rbActionTorrent)
         val rbActionAsk = dialogView.findViewById<RadioButton>(R.id.rbActionAsk)
+        val txtActionSummary = dialogView.findViewById<TextView>(R.id.txtActionSummary)
+
+        fun updateQualitySummary(id: Int) {
+            txtQualitySummary.text = when (id) {
+                R.id.rbQuality720p -> "✔ Activo: 720p"
+                R.id.rbQualityAll -> "✔ Activo: Cualquiera (HD)"
+                else -> "✔ Activo: 1080p (Óptimo)"
+            }
+        }
+
+        fun updateLanguageSummary(id: Int) {
+            txtLanguageSummary.text = when (id) {
+                R.id.rbLangSpanish -> "✔ Activo: 🇪🇸 Solo Español"
+                R.id.rbLangDual -> "✔ Activo: 🌐 Dual Audio"
+                R.id.rbLangSub -> "✔ Activo: 💬 Sub / Orig"
+                else -> "✔ Activo: 🌍 Todos"
+            }
+        }
+
+        fun updateActionSummary(id: Int) {
+            txtActionSummary.text = when (id) {
+                R.id.rbActionTorrent -> "✔ Activo: ⚡ TOR"
+                R.id.rbActionAsk -> "✔ Activo: ❓ Preguntar"
+                else -> "✔ Activo: ▶ WEB"
+            }
+        }
 
         // Initialize values from store
         when (TorrentSettingsStore.getQualityFilter(this)) {
-            "720p" -> rbQuality720p.isChecked = true
-            "all" -> rbQualityAll.isChecked = true
-            else -> rbQuality1080p.isChecked = true
+            "720p" -> rgQuality.check(R.id.rbQuality720p)
+            "all" -> rgQuality.check(R.id.rbQualityAll)
+            else -> rgQuality.check(R.id.rbQuality1080p)
         }
         chkAllow4k.isChecked = !TorrentSettingsStore.isDisallow4k(this)
 
         when (TorrentSettingsStore.getLanguageFilter(this)) {
-            "spanish_only" -> rbLangSpanish.isChecked = true
-            "dual_audio" -> rbLangDual.isChecked = true
-            "sub_only" -> rbLangSub.isChecked = true
-            else -> rbLangAll.isChecked = true
+            "spanish_only" -> rgLanguage.check(R.id.rbLangSpanish)
+            "dual_audio" -> rgLanguage.check(R.id.rbLangDual)
+            "sub_only" -> rgLanguage.check(R.id.rbLangSub)
+            else -> rgLanguage.check(R.id.rbLangAll)
         }
 
         when (TorrentSettingsStore.getEpisodeClickAction(this)) {
-            "torrent" -> rbActionTorrent.isChecked = true
-            "ask" -> rbActionAsk.isChecked = true
-            else -> rbActionWeb.isChecked = true
+            "torrent" -> rgEpisodeAction.check(R.id.rbActionTorrent)
+            "ask" -> rgEpisodeAction.check(R.id.rbActionAsk)
+            else -> rgEpisodeAction.check(R.id.rbActionWeb)
         }
+
+        updateQualitySummary(rgQuality.checkedRadioButtonId)
+        updateLanguageSummary(rgLanguage.checkedRadioButtonId)
+        updateActionSummary(rgEpisodeAction.checkedRadioButtonId)
+
+        rgQuality.setOnCheckedChangeListener { _, id -> updateQualitySummary(id) }
+        rgLanguage.setOnCheckedChangeListener { _, id -> updateLanguageSummary(id) }
+        rgEpisodeAction.setOnCheckedChangeListener { _, id -> updateActionSummary(id) }
 
         editTorrServer.setText(TorrentSettingsStore.getTorrServerUrl(this))
         editJackett.setText(TorrentSettingsStore.getJackettUrl(this))
