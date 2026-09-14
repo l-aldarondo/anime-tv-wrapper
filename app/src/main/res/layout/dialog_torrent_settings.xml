@@ -306,10 +306,19 @@
             android:focusable="true"
             android:focusableInTouchMode="true" />
 
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Indexador de Torrents (Jackett o Prowlarr - Opcional):"
+            android:textColor="#B0B3C6"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="4dp"
             android:orientation="horizontal">
 
             <EditText
@@ -319,7 +328,7 @@
                 android:layout_weight="1"
                 android:background="@drawable/bg_netflix_tab"
                 android:padding="10dp"
-                android:hint="Jackett URL (Opcional)"
+                android:hint="Jackett o Prowlarr URL"
                 android:textColorHint="#60647A"
                 android:textColor="#FFFFFF"
                 android:textSize="13sp"
@@ -335,7 +344,7 @@
                 android:layout_marginStart="8dp"
                 android:background="@drawable/bg_netflix_tab"
                 android:padding="10dp"
-                android:hint="Jackett API Key"
+                android:hint="API Key (Jackett/Prowlarr)"
                 android:textColorHint="#60647A"
                 android:textColor="#FFFFFF"
                 android:textSize="13sp"

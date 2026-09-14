@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit
 data class TmdbMetadata(
     val tmdbId: Int,
     val imdbId: String = "",
+    val trailerUrl: String = "",
     val titleSpanish: String,
     val titleOriginal: String,
     val overview: String,
@@ -116,6 +117,8 @@ object TmdbMetadataRepository {
 
                 val tmdbId = target.optInt("id", 0)
                 var imdbId = ""
+                var trailerUrl = ""
+
                 if (tmdbId > 0) {
                     try {
                         val extUrl = "$BASE_URL/$mType/$tmdbId/external_ids?api_key=$apiKey"
@@ -127,11 +130,69 @@ object TmdbMetadataRepository {
                             }
                         }
                     } catch (e: Exception) {}
+
+                    // Fetch Official YouTube Trailer from TMDB
+                    try {
+                        fun getTrailer(lang: String): String {
+                            val vidUrl = "$BASE_URL/$mType/$tmdbId/videos?api_key=$apiKey&language=$lang"
+                            val vidReq = Request.Builder().url(vidUrl).build()
+                            client.newCall(vidReq).execute().use { vidResp ->
+                                if (vidResp.isSuccessful) {
+                                    val vidJson = JSONObject(vidResp.body?.string() ?: "")
+                                    val vids = vidJson.optJSONArray("results") ?: return ""
+                                    for (j in 0 until vids.length()) {
+                                        val v = vids.getJSONObject(j)
+                                        val site = v.optString("site", "")
+                                        val type = v.optString("type", "")
+                                        val key = v.optString("key", "")
+                                        if (site.equals("YouTube", true) && key.isNotEmpty()) {
+                                            if (type.equals("Trailer", true)) {
+                                                return "https://www.youtube.com/watch?v=$key"
+                                            }
+                                        }
+                                    }
+                                    if (vids.length() > 0) {
+                                        val firstKey = vids.getJSONObject(0).optString("key", "")
+                                        if (firstKey.isNotEmpty()) return "https://www.youtube.com/watch?v=$firstKey"
+                                    }
+                                }
+                            }
+                            return ""
+                        }
+
+                        trailerUrl = getTrailer("es-MX")
+                        if (trailerUrl.isEmpty()) {
+                            trailerUrl = getTrailer("es-ES")
+                        }
+                        if (trailerUrl.isEmpty()) {
+                            trailerUrl = getTrailer("en-US")
+                        }
+                    } catch (e: Exception) {}
+                }
+
+                // Fallback: If IMDb ID is still missing (common in anime), query Cinemeta search
+                if (imdbId.isEmpty()) {
+                    try {
+                        val cinemetaType = if (mType == "movie") "movie" else "series"
+                        val cinemetaUrl = "https://v3-cinemeta.strem.io/catalog/$cinemetaType/top.json?search=${URLEncoder.encode(cleanQuery, "UTF-8")}"
+                        val cinemetaReq = Request.Builder().url(cinemetaUrl).header("User-Agent", "Mozilla/5.0").build()
+                        client.newCall(cinemetaReq).execute().use { cinResp ->
+                            if (cinResp.isSuccessful) {
+                                val cinJson = JSONObject(cinResp.body?.string() ?: "")
+                                val metas = cinJson.optJSONArray("metas")
+                                if (metas != null && metas.length() > 0) {
+                                    val first = metas.getJSONObject(0)
+                                    imdbId = first.optString("imdb_id", first.optString("id", ""))
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {}
                 }
 
                 val meta = TmdbMetadata(
                     tmdbId = tmdbId,
                     imdbId = imdbId,
+                    trailerUrl = trailerUrl,
                     titleSpanish = spanishTitle,
                     titleOriginal = originalTitle,
                     overview = overview,

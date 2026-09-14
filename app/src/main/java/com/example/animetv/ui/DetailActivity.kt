@@ -397,6 +397,9 @@ class DetailActivity : AppCompatActivity() {
                         txtMeta.text = "${txtMeta.text}  •  ${tmdb.ratingText}"
                     }
                     enrichEpisodesWithTmdb(tmdb)
+                    if (tmdb.trailerUrl.isNotEmpty()) {
+                        setupTrailerButton(tmdb.trailerUrl, currentDetail?.title ?: card.title)
+                    }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -436,36 +439,10 @@ class DetailActivity : AppCompatActivity() {
                 txtEpisodesHeader.text = "Episodios Disponibles (${detail.episodes.size})"
 
                 // Trailer Button
-                if (detail.trailerUrl.isNotEmpty()) {
-                    btnTrailer.visibility = View.VISIBLE
-                    btnTrailer.setOnClickListener {
-                        PlayerActivity.start(
-                            this@DetailActivity,
-                            videoUrl = detail.trailerUrl,
-                            title = "Tráiler: ${detail.title}",
-                            isHls = false,
-                            isEmbed = true,
-                            referer = if (card.detailUrl.isNotEmpty()) card.detailUrl else "https://sololatino.net"
-                        )
-                    }
-                    btnTrailer.setOnLongClickListener {
-                        val videoId = if (detail.trailerUrl.contains("/embed/")) {
-                            detail.trailerUrl.substringAfter("/embed/").substringBefore("?").substringBefore("/")
-                        } else {
-                            Regex("""(?:v=|youtu\.be/)([\w-]+)""").find(detail.trailerUrl)?.groupValues?.get(1) ?: ""
-                        }
-                        if (videoId.isNotEmpty()) {
-                            try {
-                                val ytUri = Uri.parse("https://www.youtube.com/watch?v=$videoId")
-                                startActivity(Intent(Intent.ACTION_VIEW, ytUri))
-                                Toast.makeText(this@DetailActivity, "Abriendo en YouTube...", Toast.LENGTH_SHORT).show()
-                            } catch (e: Exception) {
-                                Toast.makeText(this@DetailActivity, "No se pudo abrir YouTube", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                        true
-                    }
-                } else {
+                val effectiveTrailer = detail.trailerUrl.ifEmpty { currentTmdbMeta?.trailerUrl ?: "" }
+                if (effectiveTrailer.isNotEmpty()) {
+                    setupTrailerButton(effectiveTrailer, detail.title)
+                } else if (currentTmdbMeta == null || currentTmdbMeta?.trailerUrl.isNullOrEmpty()) {
                     btnTrailer.visibility = View.GONE
                 }
 
@@ -508,6 +485,38 @@ class DetailActivity : AppCompatActivity() {
                 progressBar.visibility = View.GONE
                 e.printStackTrace()
             }
+        }
+    }
+
+    private fun setupTrailerButton(trailerUrl: String, title: String) {
+        if (trailerUrl.isEmpty()) return
+        btnTrailer.visibility = View.VISIBLE
+        btnTrailer.setOnClickListener {
+            PlayerActivity.start(
+                this@DetailActivity,
+                videoUrl = trailerUrl,
+                title = "Tráiler: $title",
+                isHls = false,
+                isEmbed = true,
+                referer = if (currentCard?.detailUrl?.isNotEmpty() == true) currentCard!!.detailUrl else "https://www.youtube.com"
+            )
+        }
+        btnTrailer.setOnLongClickListener {
+            val videoId = if (trailerUrl.contains("/embed/")) {
+                trailerUrl.substringAfter("/embed/").substringBefore("?").substringBefore("/")
+            } else {
+                Regex("""(?:v=|youtu\.be/)([\w-]+)""").find(trailerUrl)?.groupValues?.get(1) ?: ""
+            }
+            if (videoId.isNotEmpty()) {
+                try {
+                    val ytUri = Uri.parse("https://www.youtube.com/watch?v=$videoId")
+                    startActivity(Intent(Intent.ACTION_VIEW, ytUri))
+                    Toast.makeText(this@DetailActivity, "Abriendo en YouTube...", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Toast.makeText(this@DetailActivity, "No se pudo abrir YouTube", Toast.LENGTH_SHORT).show()
+                }
+            }
+            true
         }
     }
 
@@ -817,7 +826,7 @@ class DetailActivity : AppCompatActivity() {
                     progressBar.visibility = View.GONE
                     if (results.isEmpty()) {
                         txtEmpty.visibility = View.VISIBLE
-                        txtEmpty.text = "No se encontraron torrents para T$seasonNum • Ep. $epNum.\nPuedes verificar los ajustes de Jackett o reproducir desde Web."
+                        txtEmpty.text = "No se encontraron torrents para T$seasonNum • Ep. $epNum.\nPuedes verificar los ajustes de Jackett / Prowlarr o reproducir desde Web."
                         recycler.visibility = View.GONE
                     } else {
                         txtEmpty.visibility = View.GONE

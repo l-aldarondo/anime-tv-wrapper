@@ -46,32 +46,39 @@ object TorrentSearchRepository {
     ): List<TorrentStreamItem> = withContext(Dispatchers.IO) {
         val jackettUrl = TorrentSettingsStore.getJackettUrl(context)
         val jackettKey = TorrentSettingsStore.getJackettApiKey(context)
-        val hasJackett = jackettUrl.isNotEmpty() && jackettKey.isNotEmpty()
+        val hasIndexer = jackettUrl.isNotEmpty() && jackettKey.isNotEmpty()
 
         val rawResults = mutableListOf<TorrentStreamItem>()
 
-        // 1. If Jackett is configured, query it
-        val jackettDeferred = async {
-            if (hasJackett) {
+        // 1. Fast IMDb ID resolution if not yet provided by TMDB
+        val resolvedImdbId = if (imdbId.isNotEmpty()) {
+            imdbId
+        } else {
+            resolveImdbIdFast(query, originalQuery, isMovie)
+        }
+
+        // 2. Query Jackett or Prowlarr (if configured)
+        val indexerDeferred = async {
+            if (hasIndexer) {
                 val searchQuery = if (originalQuery.isNotEmpty()) originalQuery else query
-                fetchFromJackett(jackettUrl, jackettKey, searchQuery, seasonNumber, episodeNumber, isMovie)
+                fetchFromIndexer(jackettUrl, jackettKey, searchQuery, seasonNumber, episodeNumber, isMovie)
             } else emptyList()
         }
 
-        // 2. Query Torrentio API (if imdbId available)
+        // 3. Query Torrentio API (if imdbId available)
         val torrentioDeferred = async {
-            if (imdbId.isNotEmpty()) {
-                fetchFromTorrentio(imdbId, seasonNumber, episodeNumber, isMovie)
+            if (resolvedImdbId.isNotEmpty()) {
+                fetchFromTorrentio(resolvedImdbId, seasonNumber, episodeNumber, isMovie)
             } else emptyList()
         }
 
-        // 3. Query Nyaa for anime (fallback keyword search)
+        // 4. Query Nyaa for anime (fallback keyword search)
         val nyaaDeferred = async {
             val q = if (originalQuery.isNotEmpty()) originalQuery else query
             fetchFromNyaa(q, episodeNumber, isMovie)
         }
 
-        rawResults.addAll(jackettDeferred.await())
+        rawResults.addAll(indexerDeferred.await())
         rawResults.addAll(torrentioDeferred.await())
         rawResults.addAll(nyaaDeferred.await())
 
@@ -86,6 +93,40 @@ object TorrentSearchRepository {
             qualityFilter = TorrentSettingsStore.getQualityFilter(context),
             languageFilter = TorrentSettingsStore.getLanguageFilter(context)
         )
+    }
+
+    private fun resolveImdbIdFast(query: String, originalQuery: String, isMovie: Boolean): String {
+        val searchTerms = listOf(
+            originalQuery.trim(),
+            query.replace(Regex("""(?i)\b(Temporada \d+|Season \d+|Audio Latino|Castellano|Latino|Dual)\b"""), "").trim()
+        ).filter { it.isNotEmpty() }.distinct()
+
+        val type = if (isMovie) "movie" else "series"
+        for (term in searchTerms) {
+            try {
+                val encoded = URLEncoder.encode(term, "UTF-8")
+                val url = "https://v3-cinemeta.strem.io/catalog/$type/top.json?search=$encoded"
+                val req = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "Mozilla/5.0")
+                    .build()
+                client.newCall(req).execute().use { resp ->
+                    if (resp.isSuccessful) {
+                        val body = resp.body?.string() ?: return@use
+                        val json = JSONObject(body)
+                        val metas = json.optJSONArray("metas")
+                        if (metas != null && metas.length() > 0) {
+                            val first = metas.getJSONObject(0)
+                            val id = first.optString("imdb_id", first.optString("id", ""))
+                            if (id.startsWith("tt")) return id
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                // Try next term
+            }
+        }
+        return ""
     }
 
     private fun filterAndRankTorrents(
@@ -127,10 +168,8 @@ object TorrentSearchRepository {
 
             // --- FILTRO 3: Filtro de Idioma Solicitado por el Usuario ---
             if (languageFilter == "spanish_only" && priority > 1) {
-                // Only keep Spanish/Latino/Castellano
                 continue
             } else if (languageFilter == "dual_audio" && priority > 2) {
-                // Only keep Spanish or Dual Audio
                 continue
             } else if (languageFilter == "sub_only" && !langBadge.contains("Sub")) {
                 continue
@@ -143,6 +182,15 @@ object TorrentSearchRepository {
                     languagePriority = priority
                 )
             )
+        }
+
+        // Graceful Fallback: If strict filters eliminated everything, but raw streams exist,
+        // show the available non-4K streams instead of giving the user a blank empty screen!
+        if (filtered.isEmpty() && items.isNotEmpty()) {
+            return items.filter { item ->
+                val lower = item.title.lowercase(Locale.ROOT)
+                !(disallow4k && (lower.contains("2160p") || lower.contains("4k") || lower.contains("uhd")))
+            }.sortedWith(compareBy({ it.languagePriority }, { -it.seeders }))
         }
 
         // Ordenar: Prioridad de idioma ASC (1=Latino/Español, 2=Dual, 3=Inglés), luego mayor número de Seeders DESC
@@ -194,7 +242,6 @@ object TorrentSearchRepository {
                     val rawTitle = stream.optString("title", "")
                     val name = stream.optString("name", "Torrentio")
                     val infoHash = stream.optString("infoHash", "")
-                    val fileIdx = stream.optInt("fileIdx", 0)
 
                     val lines = rawTitle.split("\n")
                     val titleLine = lines.firstOrNull()?.trim() ?: "Stream $i"
@@ -242,10 +289,11 @@ object TorrentSearchRepository {
     ): List<TorrentStreamItem> {
         val list = mutableListOf<TorrentStreamItem>()
         try {
+            val cleanQ = query.replace(Regex("""(?i)\b(Temporada \d+|Season \d+|Audio Latino|Castellano|Latino|Dual)\b"""), "").trim()
             val epPattern = if (episodeNumber > 0 && !isMovie) {
-                String.format(Locale.US, "%s %02d 1080p", query, episodeNumber)
+                String.format(Locale.US, "%s %02d", cleanQ, episodeNumber)
             } else {
-                "$query 1080p"
+                cleanQ
             }
             val encoded = URLEncoder.encode(epPattern, "UTF-8")
             val url = "https://nyaa.si/?page=rss&q=$encoded&c=1_2&f=0"
@@ -297,23 +345,100 @@ object TorrentSearchRepository {
         return list
     }
 
-    private fun fetchFromJackett(
-        jackettUrl: String,
-        jackettApiKey: String,
+    /**
+     * Unified Indexer query supporting both Jackett and Prowlarr native REST APIs.
+     */
+    private fun fetchFromIndexer(
+        indexerUrl: String,
+        apiKey: String,
         query: String,
         seasonNumber: Int,
         episodeNumber: Int,
         isMovie: Boolean
     ): List<TorrentStreamItem> {
+        val q = if (!isMovie && seasonNumber > 0 && episodeNumber > 0) {
+            String.format(Locale.US, "%s S%02dE%02d", query, seasonNumber, episodeNumber)
+        } else {
+            query
+        }
+
+        // 1. If URL targets Prowlarr (port 9696 or 'prowlarr' in path), query Prowlarr API first
+        if (indexerUrl.contains(":9696") || indexerUrl.lowercase(Locale.ROOT).contains("prowlarr")) {
+            val prowlarrResults = queryProwlarr(indexerUrl, apiKey, q)
+            if (prowlarrResults.isNotEmpty()) return prowlarrResults
+        }
+
+        // 2. Query Jackett Torznab API
+        val jackettResults = queryJackett(indexerUrl, apiKey, q)
+        if (jackettResults.isNotEmpty()) return jackettResults
+
+        // 3. Fallback: If Jackett returned 404 or empty, attempt Prowlarr
+        return queryProwlarr(indexerUrl, apiKey, q)
+    }
+
+    private fun queryProwlarr(baseUrl: String, apiKey: String, query: String): List<TorrentStreamItem> {
         val list = mutableListOf<TorrentStreamItem>()
         try {
-            val q = if (!isMovie && seasonNumber > 0 && episodeNumber > 0) {
-                String.format(Locale.US, "%s S%02dE%02d", query, seasonNumber, episodeNumber)
-            } else {
-                query
+            val encoded = URLEncoder.encode(query, "UTF-8")
+            val url = "$baseUrl/api/v1/search?query=$encoded&type=search"
+            val req = Request.Builder()
+                .url(url)
+                .header("X-Api-Key", apiKey)
+                .header("User-Agent", "AnimeTV/2.8")
+                .header("Accept", "application/json")
+                .build()
+
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return list
+                val body = resp.body?.string() ?: return list
+                val jsonArr = org.json.JSONArray(body)
+
+                for (i in 0 until jsonArr.length()) {
+                    val item = jsonArr.getJSONObject(i)
+                    val title = item.optString("title", "")
+                    var magnetUri = item.optString("magnetUrl", "")
+                    val infoHash = item.optString("infoHash", "")
+                    val downloadUrl = item.optString("downloadUrl", "")
+
+                    if (magnetUri.isEmpty() && infoHash.isNotEmpty()) {
+                        magnetUri = "magnet:?xt=urn:btih:$infoHash&dn=${URLEncoder.encode(title, "UTF-8")}&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce"
+                    } else if (magnetUri.isEmpty() && downloadUrl.startsWith("magnet:")) {
+                        magnetUri = downloadUrl
+                    }
+
+                    val seeders = item.optInt("seeders", 0)
+                    val size = item.optLong("size", 0L)
+                    val sizeFormatted = formatFileSize(size)
+                    val indexer = item.optString("indexer", "Prowlarr")
+
+                    if (magnetUri.isNotEmpty()) {
+                        list.add(
+                            TorrentStreamItem(
+                                title = title,
+                                magnetUrl = magnetUri,
+                                seeders = seeders,
+                                sizeBytes = size,
+                                sizeFormatted = sizeFormatted,
+                                resolutionBadge = if (title.contains("1080p")) "1080p" else "720p",
+                                languageBadge = "🌐 Multi",
+                                languagePriority = 2,
+                                provider = "Prowlarr ($indexer)"
+                            )
+                        )
+                    }
+                }
             }
-            val encoded = URLEncoder.encode(q, "UTF-8")
-            val url = "$jackettUrl/api/v2.0/indexers/all/results?apikey=$jackettApiKey&Query=$encoded"
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return list
+    }
+
+    private fun queryJackett(baseUrl: String, apiKey: String, query: String): List<TorrentStreamItem> {
+        val list = mutableListOf<TorrentStreamItem>()
+        try {
+            val encoded = URLEncoder.encode(query, "UTF-8")
+            val url = "$baseUrl/api/v2.0/indexers/all/results?apikey=$apiKey&Query=$encoded"
 
             val req = Request.Builder()
                 .url(url)
