@@ -272,6 +272,17 @@
 
             </LinearLayout>
 
+            <!-- Season Selection Capsules (Stremio / Nuvio style) -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recyclerSeasons"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:orientation="horizontal"
+                android:clipToPadding="false"
+                android:overScrollMode="never"
+                android:visibility="gone" />
+
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/recyclerEpisodes"
                 android:layout_width="match_parent"

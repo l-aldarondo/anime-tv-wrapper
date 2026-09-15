@@ -44,8 +44,10 @@ class EpisodeAdapter(
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val ep = episodes[position]
-        holder.badge.text = if (ep.seasonNumber > 1) "T${ep.seasonNumber} • E${ep.episodeNumber}" else "Episodio ${ep.episodeNumber}"
-        holder.title.text = ep.title.ifEmpty { "Episodio ${ep.episodeNumber}" }
+        val sNum = if (ep.seasonNumber > 0) ep.seasonNumber else 1
+        val eNum = ep.episodeNumber
+        holder.badge.text = String.format(Locale.US, "S%02dE%02d", sNum, eNum)
+        holder.title.text = ep.title.ifEmpty { "Episodio $eNum" }
 
         if (ep.stillUrl.isNotEmpty()) {
             holder.still.visibility = View.VISIBLE

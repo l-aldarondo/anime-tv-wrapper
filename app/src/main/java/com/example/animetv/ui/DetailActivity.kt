@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import java.util.Locale
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.Button
@@ -37,6 +38,7 @@ import com.example.animetv.core.torrent.TorrentSettingsStore
 import com.example.animetv.core.torrent.TorrentStreamItem
 import com.example.animetv.core.util.CoverUtils
 import com.example.animetv.ui.adapter.EpisodeAdapter
+import com.example.animetv.ui.adapter.SeasonCapsuleAdapter
 import com.example.animetv.ui.adapter.TorrentItemAdapter
 import kotlinx.coroutines.launch
 
@@ -69,6 +71,7 @@ class DetailActivity : AppCompatActivity() {
     private lateinit var btnSortOrder: Button
     private lateinit var btnJumpStart: Button
     private lateinit var btnJumpEnd: Button
+    private lateinit var recyclerSeasons: RecyclerView
     private lateinit var recyclerEpisodes: RecyclerView
     private lateinit var progressBar: ProgressBar
     private lateinit var layoutFocusedEpisodeInfo: View
@@ -86,6 +89,8 @@ class DetailActivity : AppCompatActivity() {
     private var currentlyFocusedEpisode: AnimeEpisode? = null
     private var isAscendingOrder: Boolean = true
     private var episodeAdapter: EpisodeAdapter? = null
+    private var seasonAdapter: SeasonCapsuleAdapter? = null
+    private var selectedSeason: Int = 1
     private var rawEpisodes: List<AnimeEpisode> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -116,6 +121,8 @@ class DetailActivity : AppCompatActivity() {
         btnSortOrder = findViewById(R.id.btnSortOrder)
         btnJumpStart = findViewById(R.id.btnJumpStart)
         btnJumpEnd = findViewById(R.id.btnJumpEnd)
+        recyclerSeasons = findViewById(R.id.recyclerSeasons)
+        recyclerSeasons.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         recyclerEpisodes = findViewById(R.id.recyclerEpisodes)
         progressBar = findViewById(R.id.progressBarDetail)
         layoutFocusedEpisodeInfo = findViewById(R.id.layoutFocusedEpisodeInfo)
@@ -151,14 +158,16 @@ class DetailActivity : AppCompatActivity() {
         }
 
         btnJumpStart.setOnClickListener {
-            if (rawEpisodes.isNotEmpty()) {
+            val count = episodeAdapter?.itemCount ?: 0
+            if (count > 0) {
                 recyclerEpisodes.smoothScrollToPosition(0)
             }
         }
 
         btnJumpEnd.setOnClickListener {
-            if (rawEpisodes.isNotEmpty()) {
-                recyclerEpisodes.smoothScrollToPosition(rawEpisodes.size - 1)
+            val count = episodeAdapter?.itemCount ?: 0
+            if (count > 0) {
+                recyclerEpisodes.smoothScrollToPosition(count - 1)
             }
         }
 
@@ -266,19 +275,18 @@ class DetailActivity : AppCompatActivity() {
     private fun bindFocusedEpisode(ep: AnimeEpisode) {
         currentlyFocusedEpisode = ep
         layoutFocusedEpisodeInfo.visibility = View.VISIBLE
-        val baseHeader = if (ep.seasonNumber > 1) {
-            "TEMPORADA ${ep.seasonNumber} • EPISODIO ${ep.episodeNumber}"
-        } else {
-            "EPISODIO ${ep.episodeNumber}"
-        }
-        txtFocusedEpisodeHeader.text = if (ep.releaseDate.isNotEmpty()) "$baseHeader  •  ${ep.releaseDate}" else baseHeader
-        txtFocusedEpisodeTitle.text = ep.title.ifEmpty { "Episodio ${ep.episodeNumber}" }
+        val sNum = if (ep.seasonNumber > 0) ep.seasonNumber else 1
+        val eNum = ep.episodeNumber
+        val epCode = String.format(Locale.US, "S%02dE%02d", sNum, eNum)
+
+        txtFocusedEpisodeHeader.text = if (ep.releaseDate.isNotEmpty()) "$epCode  •  ${ep.releaseDate}" else epCode
+        txtFocusedEpisodeTitle.text = ep.title.ifEmpty { "Episodio $eNum" }
 
         val synopsisText = if (ep.synopsis.isNotEmpty()) {
             ep.synopsis
         } else {
             val showTitle = currentDetail?.title ?: "esta serie"
-            "Episodio ${ep.episodeNumber} de $showTitle.\n(Esta fuente no incluye sinopsis individual para cada capítulo)."
+            "$epCode de $showTitle.\n(Esta fuente no incluye sinopsis individual para cada capítulo)."
         }
         txtFocusedEpisodeSynopsis.text = synopsisText
 
@@ -294,20 +302,38 @@ class DetailActivity : AppCompatActivity() {
             frameFocusedStill.visibility = View.GONE
         }
 
-        btnSpotlightPlayWeb.text = "▶  WEB (Ep. ${ep.episodeNumber})"
-        btnSpotlightPlayTorrent.text = "⚡  TOR (Ep. ${ep.episodeNumber})"
+        btnSpotlightPlayWeb.text = "▶  WEB ($epCode)"
+        btnSpotlightPlayTorrent.text = "⚡  TOR ($epCode)"
+    }
+
+    private fun displayEpisodesForSeason(season: Int) {
+        val seasonEpisodes = if (rawEpisodes.any { it.seasonNumber > 1 }) {
+            rawEpisodes.filter { (if (it.seasonNumber > 0) it.seasonNumber else 1) == season }
+        } else {
+            rawEpisodes
+        }
+        val sortedList = getSortedEpisodes(seasonEpisodes, isAscendingOrder)
+        val record = currentCard?.let { com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this, it.detailUrl) }
+        episodeAdapter?.updateList(sortedList, record)
+        if (sortedList.isNotEmpty()) {
+            val focused = currentlyFocusedEpisode
+            val matching = if (focused != null) {
+                sortedList.firstOrNull { it.episodeUrl == focused.episodeUrl || (it.seasonNumber == focused.seasonNumber && it.episodeNumber == focused.episodeNumber) }
+            } else null
+            bindFocusedEpisode(matching ?: sortedList[0])
+        }
+        txtEpisodesHeader.text = if (rawEpisodes.any { it.seasonNumber > 1 }) {
+            "Temporada $season (${sortedList.size} Episodios)"
+        } else {
+            "Episodios Disponibles (${sortedList.size})"
+        }
+        recyclerEpisodes.scrollToPosition(0)
     }
 
     private fun toggleSortOrder() {
         isAscendingOrder = !isAscendingOrder
         btnSortOrder.text = if (isAscendingOrder) "⇄ Orden: 1 ➔ N" else "⇄ Orden: N ➔ 1"
-        val sorted = getSortedEpisodes(rawEpisodes, isAscendingOrder)
-        val record = currentCard?.let { com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this, it.detailUrl) }
-        episodeAdapter?.updateList(sorted, record)
-        if (sorted.isNotEmpty()) {
-            bindFocusedEpisode(sorted[0])
-        }
-        recyclerEpisodes.scrollToPosition(0)
+        displayEpisodesForSeason(selectedSeason)
     }
 
     private fun bindInitialCard(card: AnimeCard) {
@@ -445,8 +471,33 @@ class DetailActivity : AppCompatActivity() {
                 setupTrailerButton(effectiveTrailer, detail.title)
 
                 if (detail.episodes.isNotEmpty()) {
+                    val uniqueSeasons = detail.episodes.map { if (it.seasonNumber > 0) it.seasonNumber else 1 }.distinct().sorted()
                     val record = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this@DetailActivity, card.detailUrl)
-                    val sortedList = getSortedEpisodes(detail.episodes, isAscendingOrder)
+
+                    if (uniqueSeasons.size > 1) {
+                        val lastWatchedSeason = record?.let { rec ->
+                            detail.episodes.firstOrNull { it.episodeUrl == rec.episodeUrl || it.episodeNumber == rec.episodeNumber }?.seasonNumber
+                        } ?: uniqueSeasons.first()
+                        selectedSeason = if (uniqueSeasons.contains(lastWatchedSeason)) lastWatchedSeason else uniqueSeasons.first()
+
+                        recyclerSeasons.visibility = View.VISIBLE
+                        val sAdapter = SeasonCapsuleAdapter(uniqueSeasons, selectedSeason) { chosenSeason ->
+                            selectedSeason = chosenSeason
+                            displayEpisodesForSeason(chosenSeason)
+                        }
+                        seasonAdapter = sAdapter
+                        recyclerSeasons.adapter = sAdapter
+                    } else {
+                        recyclerSeasons.visibility = View.GONE
+                        selectedSeason = 1
+                    }
+
+                    val initialEpisodes = if (uniqueSeasons.size > 1) {
+                        detail.episodes.filter { (if (it.seasonNumber > 0) it.seasonNumber else 1) == selectedSeason }
+                    } else {
+                        detail.episodes
+                    }
+                    val sortedList = getSortedEpisodes(initialEpisodes, isAscendingOrder)
                     val adapter = EpisodeAdapter(
                         episodes = sortedList,
                         lastWatchedRecord = record,
@@ -462,7 +513,15 @@ class DetailActivity : AppCompatActivity() {
                     )
                     episodeAdapter = adapter
                     recyclerEpisodes.adapter = adapter
-                    bindFocusedEpisode(sortedList[0])
+                    if (sortedList.isNotEmpty()) {
+                        bindFocusedEpisode(sortedList[0])
+                    }
+
+                    txtEpisodesHeader.text = if (uniqueSeasons.size > 1) {
+                        "Temporada $selectedSeason (${sortedList.size} Episodios)"
+                    } else {
+                        "Episodios Disponibles (${sortedList.size})"
+                    }
 
                     refreshPlaybackState()
                     btnPlayFirst.requestFocus()
@@ -562,16 +621,7 @@ class DetailActivity : AppCompatActivity() {
                         }
                     }
 
-                    val record = currentCard?.let { com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this@DetailActivity, it.detailUrl) }
-                    val sortedList = getSortedEpisodes(rawEpisodes, isAscendingOrder)
-                    episodeAdapter?.updateList(sortedList, record)
-                    currentlyFocusedEpisode?.let { focused ->
-                        val updated = sortedList.firstOrNull { it.episodeUrl == focused.episodeUrl || it.episodeNumber == focused.episodeNumber }
-                            ?: sortedList.firstOrNull()
-                        if (updated != null) {
-                            bindFocusedEpisode(updated)
-                        }
-                    }
+                    displayEpisodesForSeason(selectedSeason)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -702,15 +752,14 @@ class DetailActivity : AppCompatActivity() {
     }
 
     private fun showEpisodeChoiceDialog(detail: AnimeDetail, episode: AnimeEpisode) {
-        val titleText = if (episode.seasonNumber > 1) {
-            "Temporada ${episode.seasonNumber} • Episodio ${episode.episodeNumber}"
-        } else {
-            "Episodio ${episode.episodeNumber}"
-        }
+        val sNum = if (episode.seasonNumber > 0) episode.seasonNumber else 1
+        val eNum = episode.episodeNumber
+        val titleText: CharSequence = String.format(Locale.US, "S%02dE%02d", sNum, eNum)
+        val msgText: CharSequence = if (episode.title.isNotEmpty()) episode.title else "¿Cómo deseas reproducir este capítulo?"
 
         AlertDialog.Builder(this)
             .setTitle(titleText)
-            .setMessage(episode.title.ifEmpty { "¿Cómo deseas reproducir este capítulo?" })
+            .setMessage(msgText)
             .setPositiveButton("▶ WEB") { _, _ ->
                 playEpisode(detail, episode)
             }
@@ -726,13 +775,19 @@ class DetailActivity : AppCompatActivity() {
         val detail = currentDetail
 
         val isMovie = card.detailUrl.contains("/pelicula/") || (detail != null && detail.episodes.isEmpty())
-        val sortedList = getSortedEpisodes(rawEpisodes, isAscendingOrder)
+        val targetSeason = targetEpisode?.let { if (it.seasonNumber > 0) it.seasonNumber else 1 } ?: selectedSeason
+        val seasonEpisodes = if (rawEpisodes.any { it.seasonNumber > 1 }) {
+            rawEpisodes.filter { (if (it.seasonNumber > 0) it.seasonNumber else 1) == targetSeason }
+        } else {
+            rawEpisodes
+        }
+        val sortedList = getSortedEpisodes(seasonEpisodes, isAscendingOrder)
 
         var currentEpIndex = if (targetEpisode != null) {
             val idx = sortedList.indexOfFirst {
                 it.episodeUrl == targetEpisode.episodeUrl ||
                         (it.seasonNumber == targetEpisode.seasonNumber && it.episodeNumber == targetEpisode.episodeNumber) ||
-                        (it.episodeNumber == targetEpisode.episodeNumber)
+                        (it.episodeNumber == targetEpisode.episodeNumber && it.seasonNumber == targetEpisode.seasonNumber)
             }
             if (idx >= 0) idx else 0
         } else {
@@ -740,14 +795,13 @@ class DetailActivity : AppCompatActivity() {
             if (focused != null) {
                 val idx = sortedList.indexOfFirst {
                     it.episodeUrl == focused.episodeUrl ||
-                            (it.seasonNumber == focused.seasonNumber && it.episodeNumber == focused.episodeNumber) ||
-                            (it.episodeNumber == focused.episodeNumber)
+                            (it.seasonNumber == focused.seasonNumber && it.episodeNumber == focused.episodeNumber)
                 }
                 if (idx >= 0) idx else 0
             } else {
                 val record = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this, card.detailUrl)
                 if (record != null) {
-                    val idx = sortedList.indexOfFirst { it.episodeUrl == record.episodeUrl || it.episodeNumber == record.episodeNumber }
+                    val idx = sortedList.indexOfFirst { it.episodeUrl == record.episodeUrl || (it.episodeNumber == record.episodeNumber && it.seasonNumber == targetSeason) }
                     if (idx >= 0) idx else 0
                 } else 0
             }
@@ -792,10 +846,11 @@ class DetailActivity : AppCompatActivity() {
 
         fun searchEpisode(ep: AnimeEpisode?) {
             searchJob?.cancel()
-            val seasonNum = ep?.seasonNumber ?: 1
+            val seasonNum = if (ep?.seasonNumber != null && ep.seasonNumber > 0) ep.seasonNumber else 1
             val epNum = ep?.episodeNumber ?: 1
+            val epCode = String.format(Locale.US, "S%02dE%02d", seasonNum, epNum)
 
-            txtHeader.text = if (isMovie) "⚡ Torrents: $titleDisplay" else "⚡ Torrents: $titleDisplay (Episodio $epNum)"
+            txtHeader.text = if (isMovie) "⚡ Torrents: $titleDisplay" else "⚡ Torrents: $titleDisplay ($epCode)"
             val qualityBadge = TorrentSettingsStore.getQualityFilter(this)
             val langFilter = TorrentSettingsStore.getLanguageFilter(this)
             val langText = when (langFilter) {
@@ -805,11 +860,11 @@ class DetailActivity : AppCompatActivity() {
                 else -> "Español > Dual > Seeds"
             }
             val epExtraTitle = if (ep?.title?.isNotEmpty() == true && !ep.title.startsWith("Episodio", true)) " • ${ep.title}" else ""
-            txtSubtitle.text = if (isMovie) "(Película) | $qualityBadge | $langText" else "T$seasonNum • Ep. $epNum$epExtraTitle | $qualityBadge | $langText"
+            txtSubtitle.text = if (isMovie) "(Película) | $qualityBadge | $langText" else "$epCode$epExtraTitle | $qualityBadge | $langText"
 
             if (sortedList.isNotEmpty() && !isMovie) {
                 layoutEpisodeNavigator.visibility = View.VISIBLE
-                txtTorrentCurrentEp.text = "T$seasonNum • Ep. $epNum (${currentEpIndex + 1}/${sortedList.size})"
+                txtTorrentCurrentEp.text = "$epCode (${currentEpIndex + 1}/${sortedList.size})"
                 btnTorrentEpFirst.isEnabled = currentEpIndex > 0
                 btnTorrentEpPrev.isEnabled = currentEpIndex > 0
                 btnTorrentEpNext.isEnabled = currentEpIndex < sortedList.size - 1
@@ -820,7 +875,7 @@ class DetailActivity : AppCompatActivity() {
 
             progressBar.visibility = View.VISIBLE
             txtEmpty.visibility = View.VISIBLE
-            txtEmpty.text = "Buscando torrents exclusivos para ${if (isMovie) "película" else "Episodio $epNum"}..."
+            txtEmpty.text = "Buscando torrents exclusivos para ${if (isMovie) "película" else epCode}..."
             recycler.visibility = View.GONE
 
             searchJob = lifecycleScope.launch {
@@ -856,7 +911,7 @@ class DetailActivity : AppCompatActivity() {
                     progressBar.visibility = View.GONE
                     if (results.isEmpty()) {
                         txtEmpty.visibility = View.VISIBLE
-                        txtEmpty.text = "No se encontraron torrents para T$seasonNum • Ep. $epNum.\nPuedes verificar los ajustes de Jackett / Prowlarr o reproducir desde Web."
+                        txtEmpty.text = "No se encontraron torrents para $epCode.\nPuedes verificar los ajustes de Jackett / Prowlarr o reproducir desde Web."
                         recycler.visibility = View.GONE
                     } else {
                         txtEmpty.visibility = View.GONE
