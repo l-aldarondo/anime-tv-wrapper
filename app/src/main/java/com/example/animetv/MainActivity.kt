@@ -148,9 +148,27 @@ class MainActivity : AppCompatActivity() {
             },
             onCardLongClick = { card ->
                 toggleCardFavorite(card)
-            }
+            },
+            rowLongClickOverrides = mapOf(
+                "Continuar Viendo" to { card ->
+                    showRemoveFromHistoryDialog(card)
+                }
+            )
         )
         recyclerCatalogRows.adapter = catalogRowAdapter
+    }
+
+    private fun showRemoveFromHistoryDialog(card: com.example.animetv.core.model.AnimeCard) {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Quitar de Continuar Viendo")
+            .setMessage("¿Deseas quitar \"${card.title}\" del historial de visualización?")
+            .setPositiveButton("Quitar") { _, _ ->
+                PlaybackHistoryStore.removeRecord(this, card.detailUrl)
+                refreshRowsWithFavorites()
+                Toast.makeText(this, "\"${card.title}\" eliminado del historial", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
     }
 
     private fun setupListeners() {

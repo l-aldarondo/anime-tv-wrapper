@@ -108,8 +108,13 @@ object SoloLatinoStreamResolver {
 
             if (candidateTokens.isEmpty()) return null
 
-            // 4. Request /api/player-url trying candidate tokens
-            var embedUrl = ""
+            // 4. Request /api/player-url for each candidate token, in priority order, but don't
+            // trust the button label (e.g. "Latino" vs "Castellano") to predict which server is
+            // actually clean. Instead, try each one and only settle for a candidate once we've
+            // confirmed (or exhausted every option and must fall back to) a usable result — this
+            // is what protects us when a show's ad-free server happens to sit behind a
+            // differently-labeled button than usual.
+            var fallbackResult: StreamResult? = null
             for (targetToken in candidateTokens.distinct()) {
                 var rawXsrf = cookieStore.values.flatten().find { it.name == "XSRF-TOKEN" }?.value ?: ""
                 if (rawXsrf.isEmpty()) {
@@ -148,39 +153,38 @@ object SoloLatinoStreamResolver {
                     }
                 }
 
-                if (resBody.isNotEmpty()) {
-                    val json = JSONObject(resBody)
-                    val url = json.optString("url")
-                    if (url.isNotEmpty() && !url.contains("premium") && !url.contains("vip")) {
-                        embedUrl = url
-                        break
-                    } else if (url.isNotEmpty() && embedUrl.isEmpty()) {
-                        embedUrl = url
+                if (resBody.isEmpty()) continue
+                val json = JSONObject(resBody)
+                var url = json.optString("url")
+                if (url.isEmpty()) continue
+                if (url.contains("player.pelisserieshoy.com/f/")) {
+                    url = url.replace("player.pelisserieshoy.com", "embed69.org")
+                }
+
+                if (url.contains("embed69.org/f/")) {
+                    val result = resolveEmbed69(url, episodeUrl)
+                    if (result != null) {
+                        if (result.isHls && !result.isEmbed) {
+                            // Confirmed direct, ad-free HLS stream — this is the best possible
+                            // outcome, so stop searching immediately.
+                            return result
+                        }
+                        // Only reached an embed fallback (ads possible) via this token; remember
+                        // it in case no other candidate does better, but keep trying the rest.
+                        if (fallbackResult == null) fallbackResult = result
                     }
+                } else if (!url.contains("premium") && !url.contains("vip") && fallbackResult == null) {
+                    fallbackResult = StreamResult(
+                        videoUrl = url,
+                        isHls = false,
+                        isEmbed = true,
+                        serverName = "SoloLatino Servidor 1",
+                        headers = mapOf("Referer" to episodeUrl)
+                    )
                 }
             }
 
-            if (embedUrl.isEmpty()) return null
-            if (embedUrl.contains("player.pelisserieshoy.com/f/")) {
-                embedUrl = embedUrl.replace("player.pelisserieshoy.com", "embed69.org")
-            }
-
-            // 5. Fetch and decrypt embed69 to obtain direct VidHide stream or alternative embeds
-            if (embedUrl.contains("embed69.org/f/")) {
-                val directStream = resolveEmbed69(embedUrl, episodeUrl)
-                if (directStream != null) {
-                    return directStream
-                }
-            }
-
-            // Fallback to embed URL if decryption was not applicable
-            return StreamResult(
-                videoUrl = embedUrl,
-                isHls = false,
-                isEmbed = true,
-                serverName = "SoloLatino Servidor 1",
-                headers = mapOf("Referer" to episodeUrl)
-            )
+            return fallbackResult
         } catch (e: Exception) {
             e.printStackTrace()
             return null

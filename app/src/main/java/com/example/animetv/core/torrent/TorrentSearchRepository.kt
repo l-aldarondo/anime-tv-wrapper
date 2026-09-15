@@ -111,6 +111,7 @@ object TorrentSearchRepository {
             preferSpanish = TorrentSettingsStore.isPreferSpanish(context),
             qualityFilter = TorrentSettingsStore.getQualityFilter(context),
             languageFilter = TorrentSettingsStore.getLanguageFilter(context),
+            maxFileSizeGb = TorrentSettingsStore.getMaxFileSizeGb(context),
             isSingleEpisode = episodeNumber > 0 && !isMovie,
             seasonNumber = seasonNumber,
             episodeNumber = episodeNumber,
@@ -167,6 +168,93 @@ object TorrentSearchRepository {
             return if (isLiveAction) "tt11737520" else "tt0388629"
         }
 
+        // ── Canonical IDs for shows where fuzzy Cinemeta search returns wrong season entries ──
+        // One Punch Man: IMDb has each season as a separate entry
+        if (normClean.contains("one punch man") || normRaw.contains("one punch man") ||
+            originalQuery.contains("one punch", true) || englishQuery.contains("one punch", true) ||
+            normClean.contains("onepunchman") || normRaw.contains("onepunchman")) {
+            // All seasons share the same root IMDb ID (tt4508902) in Torrentio
+            return "tt4508902"
+        }
+
+        if (normClean.contains("dragon ball super") || originalQuery.contains("dragon ball super", true) ||
+            englishQuery.contains("dragon ball super", true)) {
+            return "tt5491994"
+        }
+        if ((normClean.contains("dragon ball z") || originalQuery.contains("dragon ball z", true)) && !normClean.contains("super")) {
+            return "tt0214341"
+        }
+        if ((normClean.contains("dragon ball") || originalQuery.contains("dragon ball", true)) &&
+            !normClean.contains("super") && !normClean.contains(" z")) {
+            return "tt0088170"
+        }
+
+        if (normClean.contains("kimetsu no yaiba") || normClean.contains("demon slayer") ||
+            originalQuery.contains("kimetsu", true) || englishQuery.contains("demon slayer", true)) {
+            return "tt9335498"
+        }
+
+        if (normClean.contains("jujutsu kaisen") || originalQuery.contains("jujutsu", true) ||
+            englishQuery.contains("jujutsu kaisen", true)) {
+            // Movie vs series
+            return if (isMovie) "tt11847842" else "tt12343534"
+        }
+
+        if (normClean.contains("shingeki no kyojin") || normClean.contains("attack on titan") ||
+            originalQuery.contains("shingeki", true) || englishQuery.contains("attack on titan", true)) {
+            return "tt2560140"
+        }
+
+        if (normClean.contains("fullmetal alchemist") || originalQuery.contains("fullmetal", true) ||
+            englishQuery.contains("fullmetal alchemist", true)) {
+            return if (normClean.contains("brotherhood") || englishQuery.contains("brotherhood", true)) "tt1355642" else "tt0421357"
+        }
+
+        if (normClean.contains("naruto shippuden") || normClean.contains("naruto shippuuden") ||
+            originalQuery.contains("shippuden", true) || englishQuery.contains("shippuden", true)) {
+            return "tt0988824"
+        }
+        if ((normClean.contains("naruto") || originalQuery.contains("naruto", true)) && !normClean.contains("shippuden")) {
+            return "tt0409591"
+        }
+
+        if (normClean.contains("bleach") || originalQuery.contains("bleach", true)) {
+            return "tt0434665"
+        }
+
+        if (normClean.contains("my hero academia") || normClean.contains("boku no hero") ||
+            originalQuery.contains("boku no hero", true) || englishQuery.contains("hero academia", true)) {
+            return "tt5626028"
+        }
+
+        if (normClean.contains("hunter x hunter") || normClean.contains("hunter hunter") ||
+            originalQuery.contains("hunter x hunter", true) || englishQuery.contains("hunter x hunter", true)) {
+            return "tt2098220"
+        }
+
+        if (normClean.contains("sword art online") || originalQuery.contains("sword art", true) ||
+            englishQuery.contains("sword art online", true)) {
+            return "tt2250192"
+        }
+
+        if (normClean.contains("re:zero") || normClean.contains("re zero") ||
+            originalQuery.contains("re:zero", true) || englishQuery.contains("re:zero", true)) {
+            return "tt4439752"
+        }
+
+        if ((normClean.contains("black clover") || originalQuery.contains("black clover", true) ||
+            englishQuery.contains("black clover", true)) && !isMovie) {
+            return "tt6828390"
+        }
+
+        if (normClean.contains("fairy tail") || originalQuery.contains("fairy tail", true)) {
+            return "tt1215946"
+        }
+
+        if (normClean.contains("boruto") || originalQuery.contains("boruto", true)) {
+            return "tt5180504"
+        }
+
         val type = if (isMovie) "movie" else "series"
         for (term in searchTerms.distinct()) {
             try {
@@ -204,12 +292,20 @@ object TorrentSearchRepository {
         val q = query.lowercase(Locale.ROOT).replace(Regex("""[^a-z0-9\s]"""), " ").trim()
         if (c.isEmpty() || q.isEmpty()) return false
         if (c == q) return true
+
+        // If the candidate has an explicit season qualifier (e.g. "Season 2", "S3") but the query
+        // doesn't, they are DIFFERENT entries and should NOT match.
+        val seasonSuffix = Regex("""\b(?:season|s)\s*[2-9]\d*\b""")
+        val candidateHasSeasonSuffix = seasonSuffix.containsMatchIn(c)
+        val queryHasSeasonSuffix = seasonSuffix.containsMatchIn(q)
+        if (candidateHasSeasonSuffix && !queryHasSeasonSuffix) return false
+
         if (c.length >= 4 && q.length >= 4 && (c.contains(q) || q.contains(c))) return true
         val cWords = c.split(Regex("""\s+""")).filter { it.length > 2 }
         val qWords = q.split(Regex("""\s+""")).filter { it.length > 2 }
         if (qWords.isEmpty() || cWords.isEmpty()) return false
         val matches = qWords.count { qw -> cWords.any { cw -> cw == qw } }
-        return matches.toDouble() / maxOf(qWords.size, cWords.size) >= 0.4
+        return matches.toDouble() / maxOf(qWords.size, cWords.size) >= 0.6 // Raised threshold from 0.4 to 0.6
     }
 
     data class CanonicalVideo(
@@ -265,20 +361,77 @@ object TorrentSearchRepository {
         val videos = getCinemetaVideos(imdbId)
         if (videos.isEmpty()) return Pair(seasonNumber, episodeNumber)
 
+        // Case 1: Explicit (season, episode) provided — trust it if it exists in Cinemeta
+        if (seasonNumber > 0) {
+            val exact = videos.find { it.season == seasonNumber && it.episode == episodeNumber }
+            if (exact != null) return Pair(exact.season, exact.episode)
+        }
+
         val season1Vids = videos.filter { it.season == 1 }
-        // Case 1: Scraper has flat absolute numbering (season=1, but episodeNumber exceeds Season 1 count)
+
+        // Case 2: Scraper uses flat absolute numbering — season=1, episodeNumber exceeds S1 count
+        // Only trigger this when seasonNumber is ambiguous (<=1) AND episode clearly overflows S1
         if (seasonNumber <= 1 && episodeNumber > season1Vids.size && episodeNumber <= videos.size) {
             val canonical = videos[episodeNumber - 1]
             return Pair(canonical.season, canonical.episode)
         }
 
-        // Case 2: Exact (season, episode) exists in canonical Cinemeta list
-        val exact = videos.find { it.season == seasonNumber && it.episode == episodeNumber }
-        if (exact != null) {
-            return Pair(exact.season, exact.episode)
+        // Case 3: seasonNumber is valid but episode not found — return as-is and let Torrentio handle it
+        return Pair(seasonNumber, episodeNumber)
+    }
+
+    private enum class SeasonMatch { CONFIRMED, MISMATCH, UNKNOWN }
+
+    /**
+     * Determines whether a torrent title explicitly declares a season, and if so, whether it
+     * matches the requested one. Titles with no explicit season marker (common with absolute
+     * episode numbering in fansub releases) return UNKNOWN rather than MISMATCH, since we cannot
+     * prove they are wrong.
+     */
+    private fun classifySeasonMatch(titleLower: String, seasonNumber: Int): SeasonMatch {
+        val isWildcardPack = titleLower.contains("complete series") || titleLower.contains("all seasons") ||
+                titleLower.contains("serie completa") || titleLower.contains("temporadas completas")
+        if (isWildcardPack) return SeasonMatch.CONFIRMED
+
+        val seasons = mutableSetOf<Int>()
+
+        // Multi-season ranges: "S01-S03", "Season 1-3", "Temporada 1-3"
+        val rangeRegexes = listOf(
+            Regex("""(?i)\bs(\d{1,2})\s*[-–]\s*s?(\d{1,2})\b"""),
+            Regex("""(?i)\bseasons?\s*(\d{1,2})\s*[-–]\s*(\d{1,2})\b"""),
+            Regex("""(?i)\btemporadas?\s*(\d{1,2})\s*[-–]\s*(\d{1,2})\b""")
+        )
+        for (rx in rangeRegexes) {
+            val m = rx.find(titleLower) ?: continue
+            val a = m.groupValues[1].toIntOrNull()
+            val b = m.groupValues[2].toIntOrNull()
+            if (a != null && b != null && a <= b && (b - a) <= 20) {
+                seasons.addAll(a..b)
+            }
         }
 
-        return Pair(seasonNumber, episodeNumber)
+        // Single-season markers, most specific first
+        if (seasons.isEmpty()) {
+            val singleRegexes = listOf(
+                Regex("""(?i)\bs(\d{1,2})e\d{1,3}\b"""),
+                Regex("""(?i)\b(\d{1,2})x\d{1,3}\b"""),
+                Regex("""(?i)\b(\d{1,2})(?:st|nd|rd|th)\s*season\b"""),
+                Regex("""(?i)\bseason\s*(\d{1,2})\b"""),
+                Regex("""(?i)\b(\d{1,2})(?:ª|da|ra|to)\s*temporada\b"""),
+                Regex("""(?i)\btemporada\s*(\d{1,2})\b"""),
+                Regex("""(?i)\bs(\d{1,2})\b""")
+            )
+            for (rx in singleRegexes) {
+                val n = rx.find(titleLower)?.groupValues?.get(1)?.toIntOrNull()
+                if (n != null) {
+                    seasons.add(n)
+                    break
+                }
+            }
+        }
+
+        if (seasons.isEmpty()) return SeasonMatch.UNKNOWN
+        return if (seasons.contains(seasonNumber)) SeasonMatch.CONFIRMED else SeasonMatch.MISMATCH
     }
 
     private fun filterAndRankTorrents(
@@ -287,6 +440,7 @@ object TorrentSearchRepository {
         preferSpanish: Boolean,
         qualityFilter: String = "1080p",
         languageFilter: String = "all",
+        maxFileSizeGb: Float = 0.0f,
         isSingleEpisode: Boolean = false,
         seasonNumber: Int = 1,
         episodeNumber: Int = 1,
@@ -297,7 +451,7 @@ object TorrentSearchRepository {
         val sPad = String.format(Locale.US, "%02d", seasonNumber)
         val ePad = String.format(Locale.US, "%02d", episodeNumber)
 
-        val processed = items.map { item ->
+        val processed: List<Pair<TorrentStreamItem, SeasonMatch>> = items.map { item ->
             val lower = (item.title + " " + item.provider).lowercase(Locale.ROOT)
 
             val is4k = lower.contains("2160p") || lower.contains("4k") || lower.contains("uhd")
@@ -334,17 +488,27 @@ object TorrentSearchRepository {
                 else -> 2
             }
 
-            item.copy(
-                title = formattedTitle,
-                resolutionBadge = resBadge,
-                languageBadge = langBadge,
-                languagePriority = priority,
-                tier = tier
+            // Season declared in the title must match the requested season (or be absent/ambiguous).
+            val seasonMatch = if (!isSingleEpisode) SeasonMatch.CONFIRMED else classifySeasonMatch(lower, seasonNumber)
+
+            Pair(
+                item.copy(
+                    title = formattedTitle,
+                    resolutionBadge = resBadge,
+                    languageBadge = langBadge,
+                    languagePriority = priority,
+                    tier = tier
+                ),
+                seasonMatch
             )
         }
 
+        // 0. Exclude torrents whose title explicitly declares a different season than requested.
+        //    Titles with no season marker at all (absolute numbering) are kept.
+        val seasonSafe = processed.filter { (_, seasonMatch) -> seasonMatch != SeasonMatch.MISMATCH }
+
         // 1. Filter out 4k and CAM if requested
-        var candidates = processed.filter { item ->
+        var candidates = seasonSafe.filter { (item, _) ->
             val lower = item.title.lowercase(Locale.ROOT)
             val is4k = lower.contains("2160p") || lower.contains("4k") || lower.contains("uhd")
             val isCam = lower.contains("camrip") || lower.contains("telesync") || lower.contains("hdcam")
@@ -354,7 +518,7 @@ object TorrentSearchRepository {
         }
 
         // 2. Filter Live Action vs Anime
-        candidates = candidates.filter { item ->
+        candidates = candidates.filter { (item, _) ->
             val lower = item.title.lowercase(Locale.ROOT)
             val hasLiveActionTag = lower.contains("live action") || lower.contains("live-action") || lower.contains("accion real")
             if (isLiveAction && !hasLiveActionTag) {
@@ -366,40 +530,61 @@ object TorrentSearchRepository {
 
         // 3. Quality filter (soft filter: if matches exist, keep them; otherwise keep all)
         if (qualityFilter == "1080p") {
-            val q1080 = candidates.filter { it.resolutionBadge == "1080p" || it.title.contains("1080p", ignoreCase = true) }
+            val q1080 = candidates.filter { (item, _) -> item.resolutionBadge == "1080p" || item.title.contains("1080p", ignoreCase = true) }
             if (q1080.isNotEmpty()) candidates = q1080
         } else if (qualityFilter == "720p") {
-            val q720 = candidates.filter { it.resolutionBadge == "720p" }
+            val q720 = candidates.filter { (item, _) -> item.resolutionBadge == "720p" }
             if (q720.isNotEmpty()) candidates = q720
         }
 
         // 4. Language filter (soft filter: if matches exist, keep them; otherwise keep all)
         if (languageFilter == "spanish_only") {
-            val langFiltered = candidates.filter { it.languagePriority <= 2 }
+            val langFiltered = candidates.filter { (item, _) -> item.languagePriority <= 2 }
             if (langFiltered.isNotEmpty()) candidates = langFiltered
         } else if (languageFilter == "dual_audio") {
-            val langFiltered = candidates.filter { it.languagePriority <= 3 }
+            val langFiltered = candidates.filter { (item, _) -> item.languagePriority <= 3 }
             if (langFiltered.isNotEmpty()) candidates = langFiltered
         } else if (languageFilter == "sub_only") {
-            val langFiltered = candidates.filter { it.languageBadge.contains("Sub", ignoreCase = true) }
+            val langFiltered = candidates.filter { (item, _) -> item.languageBadge.contains("Sub", ignoreCase = true) }
             if (langFiltered.isNotEmpty()) candidates = langFiltered
         }
 
-        // 5. Fallback: If strict filters eliminated everything, return non-4k candidates so the user NEVER gets an empty screen!
+        // 5. Max file size filter (soft filter: if matches exist, keep them; otherwise keep all)
+        if (maxFileSizeGb > 0.0f) {
+            val maxBytes = (maxFileSizeGb * 1024L * 1024L * 1024L).toLong()
+            val sizeFiltered = candidates.filter { (item, _) ->
+                if (item.sizeBytes > 0) {
+                    item.sizeBytes <= maxBytes
+                } else if (item.sizeFormatted.isNotEmpty()) {
+                    val sizeMatch = Regex("""([\d\.]+)\s*(GB|MB)""", RegexOption.IGNORE_CASE).find(item.sizeFormatted)
+                    if (sizeMatch != null) {
+                        val num = sizeMatch.groupValues[1].toDoubleOrNull() ?: 0.0
+                        val unit = sizeMatch.groupValues[2].uppercase(Locale.US)
+                        val bytes = if (unit == "GB") (num * 1024 * 1024 * 1024).toLong() else (num * 1024 * 1024).toLong()
+                        bytes <= maxBytes
+                    } else true
+                } else true
+            }
+            if (sizeFiltered.isNotEmpty()) candidates = sizeFiltered
+        }
+
+        // 6. Fallback: If strict filters eliminated everything, return non-4k season-safe candidates
+        //    so the user NEVER gets an empty screen! (Season mismatches stay excluded — sourced from seasonSafe, not processed.)
         if (candidates.isEmpty()) {
-            candidates = processed.filter { item ->
+            candidates = seasonSafe.filter { (item, _) ->
                 val lower = item.title.lowercase(Locale.ROOT)
                 !(disallow4k && (lower.contains("2160p") || lower.contains("4k") || lower.contains("uhd")))
             }
         }
 
-        // Sort: Language priority ASC (1=Latino, 2=Castellano, 3=Dual, 4=Sub, 5=Eng), then Seeders DESC
+        // Sort: confirmed season match first, then Language priority ASC (1=Latino, 2=Castellano, 3=Dual, 4=Sub, 5=Eng), then Seeders DESC
         return candidates.sortedWith(
             compareBy(
-                { it.languagePriority },
-                { -it.seeders }
+                { (_, seasonMatch) -> if (seasonMatch == SeasonMatch.CONFIRMED) 0 else 1 },
+                { (item, _) -> item.languagePriority },
+                { (item, _) -> -item.seeders }
             )
-        )
+        ).map { (item, _) -> item }
     }
 
     private fun detectLanguage(titleLower: String, preferSpanish: Boolean): Pair<String, Int> {
@@ -428,7 +613,10 @@ object TorrentSearchRepository {
     ): List<TorrentStreamItem> {
         val list = mutableListOf<TorrentStreamItem>()
         try {
-            val (targetSeason, targetEp) = if (!isMovie && seasonNumber <= 1 && episodeNumber > 25) {
+            // Always resolve canonical (season, episode) via Cinemeta to correct:
+            // 1. Absolute-numbered episodes from scrapers (e.g. Ep14 -> S2E2)
+            // 2. Cross-validate the season from the UI TMDB capsule selection
+            val (targetSeason, targetEp) = if (!isMovie && imdbId.isNotEmpty()) {
                 resolveCanonicalEpisode(imdbId, seasonNumber, episodeNumber)
             } else {
                 Pair(seasonNumber, episodeNumber)
@@ -656,8 +844,10 @@ object TorrentSearchRepository {
 
         val searchTerms = mutableListOf<String>()
         if (episodeNumber > 0 && !isMovie) {
-            searchTerms.add(String.format(Locale.US, "%s %02d", cleanQ, episodeNumber))
+            // Try the season-qualified term first so it isn't skipped once the looser
+            // episode-only term below finds unrelated-season matches.
             searchTerms.add(String.format(Locale.US, "%s S%02dE%02d", cleanQ, seasonNumber, episodeNumber))
+            searchTerms.add(String.format(Locale.US, "%s %02d", cleanQ, episodeNumber))
         } else {
             searchTerms.add(cleanQ)
         }

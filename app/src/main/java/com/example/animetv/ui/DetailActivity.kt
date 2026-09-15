@@ -92,6 +92,8 @@ class DetailActivity : AppCompatActivity() {
     private var seasonAdapter: SeasonCapsuleAdapter? = null
     private var selectedSeason: Int = 1
     private var rawEpisodes: List<AnimeEpisode> = emptyList()
+    // TMDB-derived season count used to show capsules for shows where the scraper returns 1 season
+    private var tmdbSeasonCount: Int = 1
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -257,7 +259,7 @@ class DetailActivity : AppCompatActivity() {
 
         episodeAdapter?.let { adapter ->
             val list = getSortedEpisodes(rawEpisodes, isAscendingOrder)
-            adapter.updateList(list, record)
+            adapter.updateList(list, record = record)
             if (list.isNotEmpty()) {
                 bindFocusedEpisode(list[0])
             }
@@ -314,7 +316,7 @@ class DetailActivity : AppCompatActivity() {
         }
         val sortedList = getSortedEpisodes(seasonEpisodes, isAscendingOrder)
         val record = currentCard?.let { com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this, it.detailUrl) }
-        episodeAdapter?.updateList(sortedList, record)
+        episodeAdapter?.updateList(sortedList, record = record)
         if (sortedList.isNotEmpty()) {
             val focused = currentlyFocusedEpisode
             val matching = if (focused != null) {
@@ -428,6 +430,8 @@ class DetailActivity : AppCompatActivity() {
                     if (tmdb.trailerUrl.isNotEmpty()) {
                         setupTrailerButton(tmdb.trailerUrl, currentDetail?.title ?: card.title)
                     }
+                    // Apply TMDB-derived season capsules universally
+                    applyTmdbSeasonCapsules(tmdb, card)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -488,6 +492,7 @@ class DetailActivity : AppCompatActivity() {
                         seasonAdapter = sAdapter
                         recyclerSeasons.adapter = sAdapter
                     } else {
+                        // Season capsules may still be applied once TMDB metadata is available
                         recyclerSeasons.visibility = View.GONE
                         selectedSeason = 1
                     }
@@ -500,12 +505,10 @@ class DetailActivity : AppCompatActivity() {
                     val sortedList = getSortedEpisodes(initialEpisodes, isAscendingOrder)
                     val adapter = EpisodeAdapter(
                         episodes = sortedList,
+                        animeDetailUrl = card.detailUrl,
                         lastWatchedRecord = record,
                         onEpisodeFocus = { ep ->
                             bindFocusedEpisode(ep)
-                        },
-                        onEpisodeLongClick = { ep ->
-                            showTorrentSelectorDialog(ep)
                         },
                         onEpisodeClick = { ep ->
                             playEpisode(detail, ep)
@@ -624,6 +627,104 @@ class DetailActivity : AppCompatActivity() {
                     displayEpisodesForSeason(selectedSeason)
                 }
             } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    /**
+     * Applies season capsules universally using TMDB metadata.
+     * Called after TMDB search resolves. If the show has multiple seasons per TMDB
+     * but the scraper only loaded one season's episodes, we still display all season
+     * capsules so the user can navigate between them.
+     */
+    private fun applyTmdbSeasonCapsules(tmdb: TmdbMetadata, card: AnimeCard) {
+        val nSeasons = tmdb.numberOfSeasons
+        if (nSeasons <= 1) return
+        tmdbSeasonCount = nSeasons
+
+        // Only apply if the episode adapter already shows a single-season list
+        // (i.e., the scraper didn't already produce multi-season capsules)
+        val currentCapsuleCount = seasonAdapter?.itemCount ?: 0
+        if (currentCapsuleCount > 1) return // multi-season already shown by scraper data
+
+        val seasonList = (1..nSeasons).toList()
+        selectedSeason = selectedSeason.coerceIn(1, nSeasons)
+
+        recyclerSeasons.visibility = View.VISIBLE
+        val sAdapter = SeasonCapsuleAdapter(seasonList, selectedSeason) { chosenSeason ->
+            selectedSeason = chosenSeason
+            // If we have scraped episodes for this season, show them directly
+            val scrapedForSeason = rawEpisodes.filter { (if (it.seasonNumber > 0) it.seasonNumber else 1) == chosenSeason }
+            if (scrapedForSeason.isNotEmpty()) {
+                displayEpisodesForSeason(chosenSeason)
+            } else {
+                // Load TMDB stubs for this season since the scraper doesn't have them
+                loadTmdbStubsForSeason(tmdb, card, chosenSeason)
+            }
+        }
+        seasonAdapter = sAdapter
+        recyclerSeasons.adapter = sAdapter
+        txtEpisodesHeader.text = "Temporada $selectedSeason (${episodeAdapter?.itemCount ?: rawEpisodes.size} Episodios)"
+    }
+
+    /**
+     * When no scraped episodes exist for a season, load TMDB episode data and display as stubs.
+     * These stubs show title, synopsis, and still images from TMDB but clicking will attempt
+     * to play via the current scraper source.
+     */
+    private fun loadTmdbStubsForSeason(tmdb: TmdbMetadata, card: AnimeCard, season: Int) {
+        lifecycleScope.launch {
+            try {
+                progressBar.visibility = View.VISIBLE
+                val tmdbEps = TmdbMetadataRepository.getSeasonEpisodes(this@DetailActivity, tmdb.tmdbId, season)
+                progressBar.visibility = View.GONE
+
+                if (tmdbEps.isEmpty()) {
+                    txtEpisodesHeader.text = "Temporada $season (Sin episodios disponibles)"
+                    episodeAdapter?.updateList(emptyList())
+                    return@launch
+                }
+
+                // Create stub AnimeEpisodes from TMDB data
+                val stubs = tmdbEps.map { tEp ->
+                    AnimeEpisode(
+                        episodeNumber = tEp.episodeNumber,
+                        seasonNumber = season,
+                        title = if (tEp.name.isNotEmpty()) "${tEp.episodeNumber}. ${tEp.name}" else "Episodio ${tEp.episodeNumber}",
+                        episodeUrl = "", // No scraper URL — will trigger toast
+                        synopsis = tEp.overview,
+                        stillUrl = tEp.stillUrl,
+                        releaseDate = tEp.airDate
+                    )
+                }
+
+                val record = card.let { com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this@DetailActivity, it.detailUrl) }
+                val detail = currentDetail
+                if (detail != null) {
+                    // Wire up a fresh adapter if the season changes
+                    val adapter = EpisodeAdapter(
+                        episodes = stubs,
+                        animeDetailUrl = card.detailUrl,
+                        lastWatchedRecord = record,
+                        onEpisodeFocus = { ep -> bindFocusedEpisode(ep) },
+                        onEpisodeClick = { ep ->
+                            if (ep.episodeUrl.isEmpty()) {
+                                Toast.makeText(this@DetailActivity, "Episodio no disponible en esta fuente para T$season", Toast.LENGTH_SHORT).show()
+                            } else {
+                                playEpisode(detail, ep)
+                            }
+                        }
+                    )
+                    episodeAdapter = adapter
+                    recyclerEpisodes.adapter = adapter
+                    if (stubs.isNotEmpty()) bindFocusedEpisode(stubs[0])
+                }
+
+                txtEpisodesHeader.text = "Temporada $season (${stubs.size} Episodios • TMDB)"
+                recyclerEpisodes.scrollToPosition(0)
+            } catch (e: Exception) {
+                progressBar.visibility = View.GONE
                 e.printStackTrace()
             }
         }
@@ -1097,6 +1198,14 @@ class DetailActivity : AppCompatActivity() {
         val rbActionAsk = dialogView.findViewById<RadioButton>(R.id.rbActionAsk)
         val txtActionSummary = dialogView.findViewById<TextView>(R.id.txtActionSummary)
 
+        val rgFileSize = dialogView.findViewById<RadioGroup>(R.id.rgFileSize)
+        val rbSizeAll = dialogView.findViewById<RadioButton>(R.id.rbSizeAll)
+        val rbSize15Gb = dialogView.findViewById<RadioButton>(R.id.rbSize15Gb)
+        val rbSize3Gb = dialogView.findViewById<RadioButton>(R.id.rbSize3Gb)
+        val rbSize6Gb = dialogView.findViewById<RadioButton>(R.id.rbSize6Gb)
+        val rbSize12Gb = dialogView.findViewById<RadioButton>(R.id.rbSize12Gb)
+        val txtFileSizeSummary = dialogView.findViewById<TextView>(R.id.txtFileSizeSummary)
+
         fun updateQualitySummary(id: Int) {
             txtQualitySummary.text = when (id) {
                 R.id.rbQuality720p -> "✔ Activo: 720p"
@@ -1122,6 +1231,16 @@ class DetailActivity : AppCompatActivity() {
             }
         }
 
+        fun updateFileSizeSummary(id: Int) {
+            txtFileSizeSummary.text = when (id) {
+                R.id.rbSize15Gb -> "✔ Activo: ≤ 1.5 GB"
+                R.id.rbSize3Gb -> "✔ Activo: ≤ 3 GB"
+                R.id.rbSize6Gb -> "✔ Activo: ≤ 6 GB"
+                R.id.rbSize12Gb -> "✔ Activo: ≤ 12 GB"
+                else -> "✔ Activo: Sin límite"
+            }
+        }
+
         // Initialize values from store
         when (TorrentSettingsStore.getQualityFilter(this)) {
             "720p" -> rgQuality.check(R.id.rbQuality720p)
@@ -1143,13 +1262,24 @@ class DetailActivity : AppCompatActivity() {
             else -> rgEpisodeAction.check(R.id.rbActionWeb)
         }
 
+        val currentMaxSize = TorrentSettingsStore.getMaxFileSizeGb(this)
+        when {
+            currentMaxSize in 1.4f..1.6f -> rgFileSize.check(R.id.rbSize15Gb)
+            currentMaxSize in 2.9f..3.1f -> rgFileSize.check(R.id.rbSize3Gb)
+            currentMaxSize in 5.9f..6.1f -> rgFileSize.check(R.id.rbSize6Gb)
+            currentMaxSize in 11.9f..12.1f -> rgFileSize.check(R.id.rbSize12Gb)
+            else -> rgFileSize.check(R.id.rbSizeAll)
+        }
+
         updateQualitySummary(rgQuality.checkedRadioButtonId)
         updateLanguageSummary(rgLanguage.checkedRadioButtonId)
         updateActionSummary(rgEpisodeAction.checkedRadioButtonId)
+        updateFileSizeSummary(rgFileSize.checkedRadioButtonId)
 
         rgQuality.setOnCheckedChangeListener { _, id -> updateQualitySummary(id) }
         rgLanguage.setOnCheckedChangeListener { _, id -> updateLanguageSummary(id) }
         rgEpisodeAction.setOnCheckedChangeListener { _, id -> updateActionSummary(id) }
+        rgFileSize.setOnCheckedChangeListener { _, id -> updateFileSizeSummary(id) }
 
         editTorrServer.setText(TorrentSettingsStore.getTorrServerUrl(this))
         editJackett.setText(TorrentSettingsStore.getJackettUrl(this))
@@ -1185,6 +1315,15 @@ class DetailActivity : AppCompatActivity() {
                 else -> "web"
             }
             TorrentSettingsStore.setEpisodeClickAction(this, actionChoice)
+
+            val sizeChoice = when (rgFileSize.checkedRadioButtonId) {
+                R.id.rbSize15Gb -> 1.5f
+                R.id.rbSize3Gb -> 3.0f
+                R.id.rbSize6Gb -> 6.0f
+                R.id.rbSize12Gb -> 12.0f
+                else -> 0.0f
+            }
+            TorrentSettingsStore.setMaxFileSizeGb(this, sizeChoice)
 
             val tsUrl = editTorrServer.text.toString().trim()
             val jUrl = editJackett.text.toString().trim()

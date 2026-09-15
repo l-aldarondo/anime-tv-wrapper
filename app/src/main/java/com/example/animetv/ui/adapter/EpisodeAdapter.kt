@@ -15,9 +15,9 @@ import java.util.Locale
 
 class EpisodeAdapter(
     private var episodes: List<AnimeEpisode>,
+    private var animeDetailUrl: String = "",
     private var lastWatchedRecord: PlaybackRecord? = null,
     private val onEpisodeFocus: ((AnimeEpisode) -> Unit)? = null,
-    private val onEpisodeLongClick: ((AnimeEpisode) -> Unit)? = null,
     private val onEpisodeClick: (AnimeEpisode) -> Unit
 ) : RecyclerView.Adapter<EpisodeAdapter.ViewHolder>() {
 
@@ -26,10 +26,14 @@ class EpisodeAdapter(
         val badge: TextView = view.findViewById(R.id.txtEpisodeBadge)
         val title: TextView = view.findViewById(R.id.txtEpisodeTitle)
         val progress: TextView = view.findViewById(R.id.txtEpisodeProgress)
+        val watchedBadge: TextView = view.findViewById(R.id.txtEpisodeWatchedBadge)
     }
 
-    fun updateList(newList: List<AnimeEpisode>, record: PlaybackRecord? = null) {
+    fun updateList(newList: List<AnimeEpisode>, detailUrl: String = "", record: PlaybackRecord? = null) {
         this.episodes = newList
+        if (detailUrl.isNotEmpty()) {
+            this.animeDetailUrl = detailUrl
+        }
         if (record != null) {
             this.lastWatchedRecord = record
         }
@@ -62,11 +66,27 @@ class EpisodeAdapter(
             Glide.with(holder.itemView.context).clear(holder.still)
         }
 
+        val context = holder.itemView.context
+        val isExplicitWatched = com.example.animetv.core.history.WatchedEpisodeStore.isEpisodeWatched(
+            context,
+            animeDetailUrl,
+            sNum,
+            eNum,
+            ep.episodeUrl
+        )
+
         val rec = lastWatchedRecord
+        val isHistoryWatched = rec != null &&
+                (rec.episodeUrl == ep.episodeUrl || rec.episodeNumber == ep.episodeNumber) &&
+                rec.durationMs > 0 && rec.positionMs >= (rec.durationMs * 0.85)
+
+        val isWatched = isExplicitWatched || isHistoryWatched
+        holder.watchedBadge.visibility = if (isWatched) View.VISIBLE else View.GONE
+
         if (rec != null && (rec.episodeUrl == ep.episodeUrl || rec.episodeNumber == ep.episodeNumber)) {
             holder.progress.visibility = View.VISIBLE
-            if (rec.durationMs > 0 && rec.positionMs >= (rec.durationMs * 0.9)) {
-                holder.progress.text = "✓ Visto"
+            if (isWatched) {
+                holder.progress.text = "Completado"
                 holder.progress.setTextColor(0xFF81C784.toInt()) // Light green
             } else if (rec.positionMs > 5000) {
                 holder.progress.text = "▶ ${formatTime(rec.positionMs)}"
@@ -93,12 +113,16 @@ class EpisodeAdapter(
         }
 
         holder.itemView.setOnLongClickListener {
-            if (onEpisodeLongClick != null) {
-                onEpisodeLongClick.invoke(ep)
-                true
-            } else {
-                false
-            }
+            // Long-press toggles watched/unwatched status with immediate visual feedback
+            val ctx = holder.itemView.context
+            val sNum = if (ep.seasonNumber > 0) ep.seasonNumber else 1
+            val nowWatched = com.example.animetv.core.history.WatchedEpisodeStore.toggleEpisodeWatched(
+                ctx, animeDetailUrl, sNum, ep.episodeNumber, ep.episodeUrl
+            )
+            holder.watchedBadge.visibility = if (nowWatched) View.VISIBLE else View.GONE
+            val msg = if (nowWatched) "✓ Marcado como visto" else "↩ Marcado como no visto"
+            android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_SHORT).show()
+            true
         }
     }
 

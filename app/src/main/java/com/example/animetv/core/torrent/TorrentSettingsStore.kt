@@ -15,6 +15,7 @@ object TorrentSettingsStore {
     private const val KEY_QUALITY_FILTER = "quality_filter" // "1080p", "720p", "all"
     private const val KEY_LANGUAGE_FILTER = "language_filter" // "all", "spanish_only", "dual_audio", "sub_only"
     private const val KEY_EPISODE_CLICK_ACTION = "episode_click_action" // "web", "torrent", "ask"
+    private const val KEY_MAX_FILE_SIZE_GB = "max_file_size_gb" // 0.0f = no limit, 1.5f, 3.0f, 6.0f, 12.0f
 
     // Default public community TMDB API v3 key for out-of-the-box metadata enrichment
     const val DEFAULT_TMDB_API_KEY = "4e44d9029b1270a757cddc766a1bcb63"
@@ -96,5 +97,13 @@ object TorrentSettingsStore {
 
     fun setEpisodeClickAction(context: Context, action: String) {
         getPrefs(context).edit().putString(KEY_EPISODE_CLICK_ACTION, action).apply()
+    }
+
+    fun getMaxFileSizeGb(context: Context): Float {
+        return getPrefs(context).getFloat(KEY_MAX_FILE_SIZE_GB, 0.0f)
+    }
+
+    fun setMaxFileSizeGb(context: Context, sizeGb: Float) {
+        getPrefs(context).edit().putFloat(KEY_MAX_FILE_SIZE_GB, sizeGb).apply()
     }
 }

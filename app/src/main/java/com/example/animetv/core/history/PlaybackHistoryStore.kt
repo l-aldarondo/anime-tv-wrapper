@@ -121,6 +121,24 @@ object PlaybackHistoryStore {
         }
     }
 
+    fun removeRecord(context: Context, animeDetailUrl: String, episodeUrl: String = "") {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val all = loadAllRaw(context).toMutableList()
+        val targetAnime = animeDetailUrl.trimEnd('/')
+        val targetEp = episodeUrl.trimEnd('/')
+        val removed = all.removeAll { r ->
+            val rAnime = r.animeDetailUrl.trimEnd('/')
+            val rEp = r.episodeUrl.trimEnd('/')
+            (targetAnime.isNotEmpty() && (rAnime == targetAnime || 
+                (targetAnime.contains("/serie/") && rAnime.contains(targetAnime.substringAfter("/serie/").trimEnd('/'))) ||
+                (targetAnime.contains("/anime/") && rAnime.contains(targetAnime.substringAfter("/anime/").trimEnd('/'))))) ||
+            (targetEp.isNotEmpty() && rEp == targetEp)
+        }
+        if (removed) {
+            saveAll(prefs, all)
+        }
+    }
+
     private fun saveAll(prefs: android.content.SharedPreferences, list: List<PlaybackRecord>) {
         val trimmed = list.take(MAX_RECORDS)
         val arr = JSONArray()

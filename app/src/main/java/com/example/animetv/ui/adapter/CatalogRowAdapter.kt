@@ -13,7 +13,9 @@ import com.example.animetv.core.model.CatalogRow
 class CatalogRowAdapter(
     private val rows: MutableList<CatalogRow>,
     private val onCardClick: (AnimeCard) -> Unit,
-    private val onCardLongClick: ((AnimeCard) -> Unit)? = null
+    private val onCardLongClick: ((AnimeCard) -> Unit)? = null,
+    // Per-row overrides keyed by a substring of the row title
+    private val rowLongClickOverrides: Map<String, (AnimeCard) -> Unit> = emptyMap()
 ) : RecyclerView.Adapter<CatalogRowAdapter.ViewHolder>() {
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -34,10 +36,15 @@ class CatalogRowAdapter(
         val layoutManager = LinearLayoutManager(holder.itemView.context, LinearLayoutManager.HORIZONTAL, false)
         holder.recycler.layoutManager = layoutManager
 
+        // Determine the effective long-click handler for this row
+        val effectiveLongClick: ((AnimeCard) -> Unit)? = rowLongClickOverrides.entries
+            .firstOrNull { (key, _) -> row.title.contains(key, ignoreCase = true) }
+            ?.value ?: onCardLongClick
+
         val cardAdapter = AnimeCardAdapter(
             row.cards.toMutableList(),
             onCardClick = onCardClick,
-            onCardLongClick = onCardLongClick
+            onCardLongClick = effectiveLongClick
         )
         holder.recycler.adapter = cardAdapter
     }

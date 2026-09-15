@@ -25,7 +25,9 @@ data class TmdbMetadata(
     val ratingText: String,
     val releaseYear: String,
     val mediaType: String, // "tv" or "movie"
-    val isAnimation: Boolean = false
+    val isAnimation: Boolean = false,
+    val numberOfSeasons: Int = 1,
+    val seasonEpisodeCounts: Map<Int, Int> = emptyMap()
 )
 
 data class TmdbEpisode(
@@ -234,6 +236,9 @@ object TmdbMetadataRepository {
                 var englishTitle = ""
                 var trailerUrl = ""
 
+                var numSeasons = 1
+                val seasonCounts = mutableMapOf<Int, Int>()
+
                 if (tmdbId > 0) {
                     // Fetch External IDs (IMDb ID)
                     try {
@@ -247,7 +252,7 @@ object TmdbMetadataRepository {
                         }
                     } catch (e: Exception) {}
 
-                    // Fetch English Title (crucial for anime indexers like Cinemeta, Nyaa, Jackett)
+                    // Fetch English Title and Seasons info (crucial for anime/shows and season separation)
                     try {
                         val enUrl = "$BASE_URL/$mType/$tmdbId?api_key=$apiKey&language=en-US"
                         val enReq = Request.Builder().url(enUrl).build()
@@ -255,6 +260,21 @@ object TmdbMetadataRepository {
                             if (enResp.isSuccessful) {
                                 val enJson = JSONObject(enResp.body?.string() ?: "")
                                 englishTitle = enJson.optString("name", enJson.optString("title", "")).trim()
+                                if (mType == "tv") {
+                                    val nSeasons = enJson.optInt("number_of_seasons", 1)
+                                    if (nSeasons > 1) numSeasons = nSeasons
+                                    val sArray = enJson.optJSONArray("seasons")
+                                    if (sArray != null) {
+                                        for (s in 0 until sArray.length()) {
+                                            val sObj = sArray.getJSONObject(s)
+                                            val sNum = sObj.optInt("season_number", -1)
+                                            val count = sObj.optInt("episode_count", 0)
+                                            if (sNum > 0 && count > 0) {
+                                                seasonCounts[sNum] = count
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     } catch (e: Exception) {}
@@ -339,7 +359,9 @@ object TmdbMetadataRepository {
                     ratingText = ratingFormatted,
                     releaseYear = year,
                     mediaType = mType,
-                    isAnimation = isAnimation
+                    isAnimation = isAnimation,
+                    numberOfSeasons = numSeasons,
+                    seasonEpisodeCounts = seasonCounts
                 )
 
                 memoryCache[cacheKey] = meta

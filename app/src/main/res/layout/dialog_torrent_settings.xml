@@ -281,7 +281,115 @@
             android:textSize="11sp"
             android:textStyle="bold" />
 
-        <!-- 4. Opciones de Servidor / Red (Avanzado) -->
+        <!-- 4. Filtro de Tamaño Máximo de Archivo -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="Tamaño Máximo de Archivo:"
+            android:textColor="#FFD54F"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <RadioGroup
+            android:id="@+id/rgFileSize"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+
+            <RadioButton
+                android:id="@+id/rbSizeAll"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_filter_chip_selector"
+                android:button="@null"
+                android:gravity="center"
+                android:paddingHorizontal="4dp"
+                android:text="Sin límite"
+                android:textColor="@color/color_filter_chip_text"
+                android:textStyle="bold"
+                android:textSize="11sp"
+                android:focusable="true" />
+
+            <RadioButton
+                android:id="@+id/rbSize15Gb"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/bg_filter_chip_selector"
+                android:button="@null"
+                android:gravity="center"
+                android:paddingHorizontal="4dp"
+                android:text="≤ 1.5 GB"
+                android:textColor="@color/color_filter_chip_text"
+                android:textStyle="bold"
+                android:textSize="11sp"
+                android:focusable="true" />
+
+            <RadioButton
+                android:id="@+id/rbSize3Gb"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/bg_filter_chip_selector"
+                android:button="@null"
+                android:gravity="center"
+                android:paddingHorizontal="4dp"
+                android:text="≤ 3 GB"
+                android:textColor="@color/color_filter_chip_text"
+                android:textStyle="bold"
+                android:textSize="11sp"
+                android:focusable="true" />
+
+            <RadioButton
+                android:id="@+id/rbSize6Gb"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/bg_filter_chip_selector"
+                android:button="@null"
+                android:gravity="center"
+                android:paddingHorizontal="4dp"
+                android:text="≤ 6 GB"
+                android:textColor="@color/color_filter_chip_text"
+                android:textStyle="bold"
+                android:textSize="11sp"
+                android:focusable="true" />
+
+            <RadioButton
+                android:id="@+id/rbSize12Gb"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/bg_filter_chip_selector"
+                android:button="@null"
+                android:gravity="center"
+                android:paddingHorizontal="4dp"
+                android:text="≤ 12 GB"
+                android:textColor="@color/color_filter_chip_text"
+                android:textStyle="bold"
+                android:textSize="11sp"
+                android:focusable="true" />
+
+        </RadioGroup>
+
+        <TextView
+            android:id="@+id/txtFileSizeSummary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Activo: Sin límite"
+            android:textColor="#00E5FF"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <!-- 5. Opciones de Servidor / Red (Avanzado) -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
