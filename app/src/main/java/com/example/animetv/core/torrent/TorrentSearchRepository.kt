@@ -22,7 +22,8 @@ data class TorrentStreamItem(
     val languageBadge: String,   // "🇪🇸 Latino", "🇪🇸 Castellano", "🌐 Dual Audio", "🇺🇸 Inglés", "🌐 Multi"
     val languagePriority: Int,   // 1 = Latino/Castellano, 2 = Dual, 3 = English, 4 = other
     val provider: String,        // "Jackett", "Torrentio", "Nyaa"
-    val fileIndex: Int = 1
+    val fileIndex: Int = 1,
+    val tier: Int = 2            // 1 = Single episode exclusive, 2 = Season pack with target episode, 3 = Multi-season pack
 )
 
 object TorrentSearchRepository {
@@ -111,7 +112,10 @@ object TorrentSearchRepository {
         isMovie: Boolean,
         isLiveAction: Boolean
     ): String {
-        val cleanQ = query.replace(Regex("""(?i)\b(Temporada \d+|Season \d+|Audio Latino|Castellano|Latino|Dual)\b"""), "").trim()
+        val cleanQ = query
+            .replace(Regex("""(?i)\b(Temporada \d+|Season \d+|Audio Latino|Castellano|Latino|Dual)\b"""), "")
+            .replace(Regex("""[\[\(].*?[\]\)]"""), "") // Strip (2010), [Br-Rip]
+            .trim()
         val searchTerms = mutableListOf<String>()
         if (englishQuery.isNotEmpty()) searchTerms.add(englishQuery.trim())
         if (cleanQ.isNotEmpty()) searchTerms.add(cleanQ)
@@ -123,7 +127,9 @@ object TorrentSearchRepository {
         if (cleanQ.contains("yomi no tsugai", true) || originalQuery.contains("yomi", true)) {
             searchTerms.add(0, "Daemons of the Shadow Realm")
         }
-        if (cleanQ.contains("hora de aventura", true) || originalQuery.contains("adventure time", true)) {
+        if (cleanQ.contains("hora de aventura", true) || cleanQ.contains("adventure time", true) ||
+            originalQuery.contains("adventure time", true) || englishQuery.contains("adventure time", true) ||
+            query.contains("adventure time", true) || query.contains("hora de aventura", true)) {
             searchTerms.add(0, "Adventure Time")
         }
 
@@ -154,6 +160,11 @@ object TorrentSearchRepository {
 
                             // Precise matching for Yomi no Tsugai / Daemons of the Shadow Realm
                             if ((term.contains("yomi", true) || term.contains("shadow realm", true)) && id == "tt37532356") {
+                                return id
+                            }
+
+                            // Precise matching for Adventure Time (2010)
+                            if ((term.contains("adventure time", true) || term.contains("hora de aventura", true)) && id == "tt1305826") {
                                 return id
                             }
 
@@ -193,110 +204,109 @@ object TorrentSearchRepository {
         episodeNumber: Int = 1,
         isLiveAction: Boolean = false
     ): List<TorrentStreamItem> {
-        val filtered = mutableListOf<TorrentStreamItem>()
+        if (items.isEmpty()) return emptyList()
 
-        for (item in items) {
-            val lower = item.title.lowercase(Locale.ROOT)
+        val processed = items.map { item ->
+            val lower = (item.title + " " + item.provider).lowercase(Locale.ROOT)
 
-            // --- FILTRO LIVE ACTION VS ANIME ---
-            val hasLiveActionTag = lower.contains("live action") || lower.contains("live-action") || lower.contains("accion real")
-            if (isLiveAction && !hasLiveActionTag) {
-                if (lower.contains("anime") || lower.contains("[subsplease]") || lower.contains("[erai-raws]")) continue
-            } else if (!isLiveAction && hasLiveActionTag) {
-                continue
-            }
-
-            // --- FILTRO EPISODIO AISLADO: descartar paquetes de temporada completa / series completas ---
-            if (isSingleEpisode) {
-                val isMultiSeasonOrComplete = lower.contains("complete series") ||
-                        lower.contains("all seasons") ||
-                        lower.contains("temporadas 1-") ||
-                        lower.contains("temporadas completas") ||
-                        lower.contains("temporada completa") ||
-                        lower.contains("full season") ||
-                        lower.contains("batch") ||
-                        lower.contains("01-12") ||
-                        lower.contains("01-24") ||
-                        Regex("""(?i)\b(?:season|seasons|temporada|temporadas|s)\s*\d+\s*[-–]\s*s?\d+\b""").containsMatchIn(lower)
-                if (isMultiSeasonOrComplete) continue
-
-                // Check wrong season number
-                if (seasonNumber > 0) {
-                    val wrongSeasonMatch = Regex("""(?i)\b(?:s0?(\d+)e\d+|(\d+)x\d+)\b""").find(lower)
-                    if (wrongSeasonMatch != null) {
-                        val s = wrongSeasonMatch.groupValues[1].ifEmpty { wrongSeasonMatch.groupValues[2] }.toIntOrNull()
-                        if (s != null && s != seasonNumber) continue
-                    }
-                }
-            }
-
-            // --- FILTRO 1: PROHIBIDO 4K/2160p/UHD ---
             val is4k = lower.contains("2160p") || lower.contains("4k") || lower.contains("uhd")
-            if (disallow4k && is4k) continue
-
-            // Disallow very low quality CAM / TS / Telesync
-            if (lower.contains("camrip") || lower.contains("telesync") || lower.contains("hdcam")) continue
-
             val resBadge = when {
                 lower.contains("1080p") || item.resolutionBadge.contains("1080") -> "1080p"
                 lower.contains("720p") || item.resolutionBadge.contains("720") -> "720p"
                 is4k -> "4K"
                 else -> "HD"
             }
-
-            // --- FILTRO 2: Calidad Máxima Solicitada por el Usuario ---
-            if (qualityFilter == "1080p") {
-                // Keep 1080p and general HD, discard if strictly 720p or lower
-                if (resBadge == "720p" && !lower.contains("1080p")) continue
-            } else if (qualityFilter == "720p") {
-                // User wants 720p specifically
-                if (resBadge == "1080p" || resBadge == "4K") continue
-            }
-
             val (langBadge, priority) = detectLanguage(lower, preferSpanish)
 
-            // --- FILTRO 3: Filtro de Idioma Solicitado por el Usuario ---
-            if (languageFilter == "spanish_only" && priority > 1) {
-                continue
-            } else if (languageFilter == "dual_audio" && priority > 2) {
-                continue
-            } else if (languageFilter == "sub_only" && !langBadge.contains("Sub")) {
-                continue
+            val sPad = String.format(Locale.US, "%02d", seasonNumber)
+            val ePad = String.format(Locale.US, "%02d", episodeNumber)
+
+            val isMultiSeason = lower.contains("complete series") ||
+                    lower.contains("all seasons") ||
+                    lower.contains("temporadas 1-") ||
+                    Regex("""(?i)\b(?:season|seasons|temporada|temporadas|s)\s*\d+\s*[-–]\s*s?\d+\b""").containsMatchIn(lower)
+
+            val isSingleEp = (lower.contains("s${sPad}e${ePad}") || lower.contains("${seasonNumber}x${ePad}") || lower.contains("${seasonNumber}x${episodeNumber}")) &&
+                    !lower.contains("complete") && !isMultiSeason
+
+            val tier = when {
+                !isSingleEpisode -> 1
+                isSingleEp -> 1
+                !isMultiSeason -> 2
+                else -> 3
             }
 
-            filtered.add(
-                item.copy(
-                    resolutionBadge = resBadge,
-                    languageBadge = langBadge,
-                    languagePriority = priority
-                )
+            item.copy(
+                resolutionBadge = resBadge,
+                languageBadge = langBadge,
+                languagePriority = priority,
+                tier = tier
             )
         }
 
-        // Graceful Fallback: If strict filters eliminated everything, but raw streams exist,
-        // show the available non-4K streams instead of giving the user a blank empty screen!
-        if (filtered.isEmpty() && items.isNotEmpty()) {
-            return items.filter { item ->
-                val lower = item.title.lowercase(Locale.ROOT)
-                !(disallow4k && (lower.contains("2160p") || lower.contains("4k") || lower.contains("uhd")))
-            }.sortedWith(compareBy({ it.languagePriority }, { -it.seeders }))
+        // 1. Filter out 4k and CAM if requested
+        var candidates = processed.filter { item ->
+            val lower = item.title.lowercase(Locale.ROOT)
+            val is4k = lower.contains("2160p") || lower.contains("4k") || lower.contains("uhd")
+            val isCam = lower.contains("camrip") || lower.contains("telesync") || lower.contains("hdcam")
+            if (disallow4k && is4k) false
+            else if (isCam) false
+            else true
         }
 
-        // Ordenar: Prioridad de idioma ASC (1=Latino/Español, 2=Dual, 3=Inglés),
-        // luego episodios individuales puros primero, luego mayor número de Seeders DESC
-        return filtered.sortedWith(
+        // 2. Filter Live Action vs Anime
+        candidates = candidates.filter { item ->
+            val lower = item.title.lowercase(Locale.ROOT)
+            val hasLiveActionTag = lower.contains("live action") || lower.contains("live-action") || lower.contains("accion real")
+            if (isLiveAction && !hasLiveActionTag) {
+                !(lower.contains("anime") || lower.contains("[subsplease]") || lower.contains("[erai-raws]"))
+            } else if (!isLiveAction && hasLiveActionTag) {
+                false
+            } else true
+        }
+
+        // 3. For single episode searches: prioritize Tier 1 & Tier 2 over Tier 3 (multi-season packs)
+        if (isSingleEpisode) {
+            val tier1Or2 = candidates.filter { it.tier <= 2 }
+            if (tier1Or2.isNotEmpty()) {
+                candidates = tier1Or2
+            }
+        }
+
+        // 4. Quality filter
+        if (qualityFilter == "1080p") {
+            val q1080 = candidates.filter { it.resolutionBadge == "1080p" || it.title.contains("1080p", ignoreCase = true) }
+            if (q1080.isNotEmpty()) candidates = q1080
+        } else if (qualityFilter == "720p") {
+            val q720 = candidates.filter { it.resolutionBadge == "720p" }
+            if (q720.isNotEmpty()) candidates = q720
+        }
+
+        // 5. Language filter
+        if (languageFilter == "spanish_only") {
+            val langFiltered = candidates.filter { it.languagePriority == 1 }
+            if (langFiltered.isNotEmpty()) candidates = langFiltered
+        } else if (languageFilter == "dual_audio") {
+            val langFiltered = candidates.filter { it.languagePriority <= 2 }
+            if (langFiltered.isNotEmpty()) candidates = langFiltered
+        } else if (languageFilter == "sub_only") {
+            val langFiltered = candidates.filter { it.languageBadge.contains("Sub", ignoreCase = true) }
+            if (langFiltered.isNotEmpty()) candidates = langFiltered
+        }
+
+        // Fallback: If strict filters eliminated everything, return non-4k candidates so the user NEVER gets an empty screen!
+        if (candidates.isEmpty()) {
+            candidates = processed.filter { item ->
+                val lower = item.title.lowercase(Locale.ROOT)
+                !(disallow4k && (lower.contains("2160p") || lower.contains("4k") || lower.contains("uhd")))
+            }
+        }
+
+        // Sort: Tier ASC (1=single episode, 2=single season, 3=multi-season), then Language priority ASC (1=Spanish, 2=Dual, 3=Eng), then Seeders DESC
+        return candidates.sortedWith(
             compareBy(
+                { it.tier },
                 { it.languagePriority },
-                { item ->
-                    if (isSingleEpisode) {
-                        val lower = item.title.lowercase(Locale.ROOT)
-                        val sPad = String.format(Locale.US, "%02d", seasonNumber)
-                        val ePad = String.format(Locale.US, "%02d", episodeNumber)
-                        val isPureSingle = (lower.contains("s${sPad}e${ePad}") || lower.contains("${seasonNumber}x${ePad}") || lower.contains("${seasonNumber}x${episodeNumber}")) &&
-                                !lower.contains("season") && !lower.contains("temporada")
-                        if (isPureSingle) 0 else 1
-                    } else 0
-                },
                 { -it.seeders }
             )
         )
@@ -354,25 +364,6 @@ object TorrentSearchRepository {
                     val epFileName = if (lines.size > 1 && !lines[1].contains("👤")) lines[1].trim() else ""
                     val details = lines.find { it.contains("👤") } ?: lines.drop(1).joinToString(" ")
 
-                    // Filter out multi-season / complete series packs when querying a specific episode
-                    if (!isMovie && episodeNumber > 0) {
-                        val lowerRaw = rawTitle.lowercase(Locale.ROOT)
-                        val isMultiSeason = lowerRaw.contains("complete series") ||
-                                lowerRaw.contains("all seasons") ||
-                                lowerRaw.contains("temporadas 1-") ||
-                                Regex("""(?i)\b(?:season|seasons|temporada|temporadas|s)\s*\d+\s*[-–]\s*s?\d+\b""").containsMatchIn(lowerRaw)
-                        if (isMultiSeason) continue
-
-                        // Filter out mismatched season
-                        if (seasonNumber > 0) {
-                            val wrongSeasonMatch = Regex("""(?i)\b(?:s0?(\d+)e\d+|(\d+)x\d+)\b""").find(lowerRaw)
-                            if (wrongSeasonMatch != null) {
-                                val s = wrongSeasonMatch.groupValues[1].ifEmpty { wrongSeasonMatch.groupValues[2] }.toIntOrNull()
-                                if (s != null && s != seasonNumber) continue
-                            }
-                        }
-                    }
-
                     // Extract seeders from Torrentio details (e.g. "👤 45")
                     val seedersMatch = Regex("""👤\s*(\d+)""").find(details)
                     val seeders = seedersMatch?.groupValues?.get(1)?.toIntOrNull() ?: 5
@@ -383,7 +374,10 @@ object TorrentSearchRepository {
 
                     // Construct clear episode title for display
                     val displayTitle = if (epFileName.isNotEmpty()) {
-                        val cleanEp = epFileName.substringAfterLast("/").replace(Regex("""\.(?:mkv|mp4|avi)$""", RegexOption.IGNORE_CASE), "").replace(Regex("""[._]"""), " ").trim()
+                        val cleanEp = epFileName.substringAfterLast("/")
+                            .replace(Regex("""\.(?:mkv|mp4|avi)$""", RegexOption.IGNORE_CASE), "")
+                            .replace(Regex("""[._]"""), " ")
+                            .trim()
                         if (cleanEp.isNotEmpty() && !cleanEp.equals(packName, ignoreCase = true)) {
                             "$cleanEp  [$packName]"
                         } else {
@@ -409,7 +403,8 @@ object TorrentSearchRepository {
                                 languageBadge = "🌐 Multi",
                                 languagePriority = 3,
                                 provider = "Torrentio",
-                                fileIndex = fileIdx
+                                fileIndex = fileIdx,
+                                tier = 2
                             )
                         )
                     }

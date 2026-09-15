@@ -825,10 +825,21 @@ class DetailActivity : AppCompatActivity() {
 
             searchJob = lifecycleScope.launch {
                 try {
-                    val origTitle = currentTmdbMeta?.titleOriginal ?: ""
-                    val engTitle = currentTmdbMeta?.titleEnglish ?: ""
-                    val isLiveAction = currentTmdbMeta?.let { !it.isAnimation } ?: false
-                    val imdbId = currentTmdbMeta?.imdbId ?: ""
+                    var origTitle = currentTmdbMeta?.titleOriginal ?: ""
+                    var engTitle = currentTmdbMeta?.titleEnglish ?: ""
+                    var isLiveAction = currentTmdbMeta?.let { !it.isAnimation } ?: false
+                    var imdbId = currentTmdbMeta?.imdbId ?: ""
+
+                    if (imdbId.isEmpty()) {
+                        val fastTmdb = TmdbMetadataRepository.searchMetadata(this@DetailActivity, titleDisplay, isMovie = isMovie, isLiveAction = isLiveAction)
+                        if (fastTmdb != null) {
+                            currentTmdbMeta = fastTmdb
+                            origTitle = fastTmdb.titleOriginal
+                            engTitle = fastTmdb.titleEnglish
+                            isLiveAction = !fastTmdb.isAnimation
+                            imdbId = fastTmdb.imdbId
+                        }
+                    }
 
                     val results = TorrentSearchRepository.searchAndFilter(
                         context = this@DetailActivity,
