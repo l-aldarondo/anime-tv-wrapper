@@ -963,17 +963,21 @@ class DetailActivity : AppCompatActivity() {
                 return@launch
             }
 
+            val targetMagnet = if (item.fileIndex > 0 && !item.magnetUrl.contains("&indices=") && !item.magnetUrl.contains("&so=")) {
+                "${item.magnetUrl}&indices=${item.fileIndex - 1}"
+            } else item.magnetUrl
+
             // 2. Zero-Server / Zero-PC mode: check if Nova Video Player is installed
             if (TorrServerClient.isNovaPlayerInstalled(this@DetailActivity)) {
                 Toast.makeText(this@DetailActivity, "Iniciando streaming en Nova Video Player...", Toast.LENGTH_SHORT).show()
                 dialog.dismiss()
-                TorrServerClient.launchNovaPlayer(this@DetailActivity, item.magnetUrl, title)
+                TorrServerClient.launchNovaPlayer(this@DetailActivity, targetMagnet, title)
                 return@launch
             }
 
             // 3. Check if VLC is installed
             if (TorrServerClient.isVlcInstalled(this@DetailActivity)) {
-                showVlcOrNovaPromptDialog(item, title)
+                showVlcOrNovaPromptDialog(item, title, targetMagnet)
                 return@launch
             }
 
@@ -982,12 +986,12 @@ class DetailActivity : AppCompatActivity() {
         }
     }
 
-    private fun showVlcOrNovaPromptDialog(item: TorrentStreamItem, title: String) {
+    private fun showVlcOrNovaPromptDialog(item: TorrentStreamItem, title: String, targetMagnet: String = item.magnetUrl) {
         AlertDialog.Builder(this)
             .setTitle("🎬 Reproductor de Torrents")
             .setMessage("Se detectó VLC en este dispositivo.\n\nPara la mejor experiencia con motor BitTorrent integrado en la memoria, recomendamos Nova Video Player (gratuito y de código abierto).\n\n¿Cómo deseas reproducir?")
             .setPositiveButton("▶ Abrir en VLC") { _, _ ->
-                TorrServerClient.launchVlc(this, item.magnetUrl, title)
+                TorrServerClient.launchVlc(this, targetMagnet, title)
             }
             .setNeutralButton("📥 Instalar Nova Player") { _, _ ->
                 TorrServerClient.openPlayStoreForNova(this)

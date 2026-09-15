@@ -10,6 +10,7 @@ import org.json.JSONObject
 import org.jsoup.Jsoup
 import java.net.URLEncoder
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 data class TorrentStreamItem(
@@ -115,6 +116,7 @@ object TorrentSearchRepository {
         val cleanQ = query
             .replace(Regex("""(?i)\b(Temporada \d+|Season \d+|Audio Latino|Castellano|Latino|Dual)\b"""), "")
             .replace(Regex("""[\[\(].*?[\]\)]"""), "") // Strip (2010), [Br-Rip]
+            .replace(Regex("""\b(19\d{2}|20\d{2})\b"""), "") // Strip standalone 4-digit years
             .trim()
         val searchTerms = mutableListOf<String>()
         if (englishQuery.isNotEmpty()) searchTerms.add(englishQuery.trim())
@@ -193,6 +195,75 @@ object TorrentSearchRepository {
         return matches.toDouble() / qWords.size >= 0.5
     }
 
+    data class CanonicalVideo(
+        val season: Int,
+        val episode: Int,
+        val title: String
+    )
+
+    private val cinemetaSeriesCache = ConcurrentHashMap<String, List<CanonicalVideo>>()
+
+    /**
+     * Queries Cinemeta canonical episode catalog for a series to accurately map
+     * flat absolute numbering (e.g. Ep 27 on web scrapers -> Season 2 Ep 1 canonical).
+     */
+    private fun getCinemetaVideos(imdbId: String): List<CanonicalVideo> {
+        cinemetaSeriesCache[imdbId]?.let { return it }
+        try {
+            val url = "https://v3-cinemeta.strem.io/meta/series/$imdbId.json"
+            val req = Request.Builder()
+                .url(url)
+                .header("User-Agent", "Mozilla/5.0")
+                .header("Accept", "application/json")
+                .build()
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return emptyList()
+                val body = resp.body?.string() ?: return emptyList()
+                val json = JSONObject(body)
+                val meta = json.optJSONObject("meta") ?: return emptyList()
+                val vids = meta.optJSONArray("videos") ?: return emptyList()
+                val list = mutableListOf<CanonicalVideo>()
+                for (i in 0 until vids.length()) {
+                    val v = vids.getJSONObject(i)
+                    val s = v.optInt("season", 0)
+                    val e = v.optInt("episode", v.optInt("number", 0))
+                    val t = v.optString("title", "")
+                    if (s > 0 && e > 0) {
+                        list.add(CanonicalVideo(season = s, episode = e, title = t))
+                    }
+                }
+                list.sortWith(compareBy({ it.season }, { it.episode }))
+                if (list.isNotEmpty()) {
+                    cinemetaSeriesCache[imdbId] = list
+                }
+                return list
+            }
+        } catch (e: Exception) {
+            return emptyList()
+        }
+    }
+
+    fun resolveCanonicalEpisode(imdbId: String, seasonNumber: Int, episodeNumber: Int): Pair<Int, Int> {
+        if (imdbId.isEmpty() || !imdbId.startsWith("tt")) return Pair(seasonNumber, episodeNumber)
+        val videos = getCinemetaVideos(imdbId)
+        if (videos.isEmpty()) return Pair(seasonNumber, episodeNumber)
+
+        val season1Vids = videos.filter { it.season == 1 }
+        // Case 1: Scraper has flat absolute numbering (season=1, but episodeNumber exceeds Season 1 count)
+        if (seasonNumber <= 1 && episodeNumber > season1Vids.size && episodeNumber <= videos.size) {
+            val canonical = videos[episodeNumber - 1]
+            return Pair(canonical.season, canonical.episode)
+        }
+
+        // Case 2: Exact (season, episode) exists in canonical Cinemeta list
+        val exact = videos.find { it.season == seasonNumber && it.episode == episodeNumber }
+        if (exact != null) {
+            return Pair(exact.season, exact.episode)
+        }
+
+        return Pair(seasonNumber, episodeNumber)
+    }
+
     private fun filterAndRankTorrents(
         items: List<TorrentStreamItem>,
         disallow4k: Boolean,
@@ -206,6 +277,9 @@ object TorrentSearchRepository {
     ): List<TorrentStreamItem> {
         if (items.isEmpty()) return emptyList()
 
+        val sPad = String.format(Locale.US, "%02d", seasonNumber)
+        val ePad = String.format(Locale.US, "%02d", episodeNumber)
+
         val processed = items.map { item ->
             val lower = (item.title + " " + item.provider).lowercase(Locale.ROOT)
 
@@ -218,25 +292,33 @@ object TorrentSearchRepository {
             }
             val (langBadge, priority) = detectLanguage(lower, preferSpanish)
 
-            val sPad = String.format(Locale.US, "%02d", seasonNumber)
-            val ePad = String.format(Locale.US, "%02d", episodeNumber)
-
             val isMultiSeason = lower.contains("complete series") ||
                     lower.contains("all seasons") ||
                     lower.contains("temporadas 1-") ||
                     Regex("""(?i)\b(?:season|seasons|temporada|temporadas|s)\s*\d+\s*[-–]\s*s?\d+\b""").containsMatchIn(lower)
 
-            val isSingleEp = (lower.contains("s${sPad}e${ePad}") || lower.contains("${seasonNumber}x${ePad}") || lower.contains("${seasonNumber}x${episodeNumber}")) &&
-                    !lower.contains("complete") && !isMultiSeason
+            // High-seed Complete Series packs (e.g. 10 seasons with 400+ seeds)
+            val isHighHealthPack = isMultiSeason && item.seeders >= 30
 
+            // Tag display title for packs cleanly
+            val formattedTitle = if (isMultiSeason && !item.title.startsWith("[")) {
+                val packBadge = if (lower.contains("s01-s10") || lower.contains("1-10") || lower.contains("complete")) "[Pack S1-S10]" else "[Pack Temporada]"
+                "$packBadge ${item.title}"
+            } else {
+                item.title
+            }
+
+            // Tier 1: Direct single episode match or high-health pack (e.g. 10 seasons 400+ seeds)
+            // Tier 2: Regular torrents
             val tier = when {
                 !isSingleEpisode -> 1
-                isSingleEp -> 1
-                !isMultiSeason -> 2
-                else -> 3
+                isHighHealthPack -> 1
+                lower.contains("s${sPad}e${ePad}") || lower.contains("${seasonNumber}x${ePad}") -> 1
+                else -> 2
             }
 
             item.copy(
+                title = formattedTitle,
                 resolutionBadge = resBadge,
                 languageBadge = langBadge,
                 languagePriority = priority,
@@ -265,15 +347,7 @@ object TorrentSearchRepository {
             } else true
         }
 
-        // 3. For single episode searches: prioritize Tier 1 & Tier 2 over Tier 3 (multi-season packs)
-        if (isSingleEpisode) {
-            val tier1Or2 = candidates.filter { it.tier <= 2 }
-            if (tier1Or2.isNotEmpty()) {
-                candidates = tier1Or2
-            }
-        }
-
-        // 4. Quality filter
+        // 3. Quality filter (soft filter: if matches exist, keep them; otherwise keep all)
         if (qualityFilter == "1080p") {
             val q1080 = candidates.filter { it.resolutionBadge == "1080p" || it.title.contains("1080p", ignoreCase = true) }
             if (q1080.isNotEmpty()) candidates = q1080
@@ -282,7 +356,7 @@ object TorrentSearchRepository {
             if (q720.isNotEmpty()) candidates = q720
         }
 
-        // 5. Language filter
+        // 4. Language filter (soft filter: if matches exist, keep them; otherwise keep all)
         if (languageFilter == "spanish_only") {
             val langFiltered = candidates.filter { it.languagePriority == 1 }
             if (langFiltered.isNotEmpty()) candidates = langFiltered
@@ -294,7 +368,7 @@ object TorrentSearchRepository {
             if (langFiltered.isNotEmpty()) candidates = langFiltered
         }
 
-        // Fallback: If strict filters eliminated everything, return non-4k candidates so the user NEVER gets an empty screen!
+        // 5. Fallback: If strict filters eliminated everything, return non-4k candidates so the user NEVER gets an empty screen!
         if (candidates.isEmpty()) {
             candidates = processed.filter { item ->
                 val lower = item.title.lowercase(Locale.ROOT)
@@ -302,10 +376,9 @@ object TorrentSearchRepository {
             }
         }
 
-        // Sort: Tier ASC (1=single episode, 2=single season, 3=multi-season), then Language priority ASC (1=Spanish, 2=Dual, 3=Eng), then Seeders DESC
+        // Sort: Language priority ASC (1=Spanish, 2=Dual, 3=Eng/Multi), then Seeders DESC (439 seeds first!)
         return candidates.sortedWith(
             compareBy(
-                { it.tier },
                 { it.languagePriority },
                 { -it.seeders }
             )
@@ -334,81 +407,104 @@ object TorrentSearchRepository {
     ): List<TorrentStreamItem> {
         val list = mutableListOf<TorrentStreamItem>()
         try {
-            val path = if (isMovie) {
-                "stream/movie/$imdbId.json"
+            val (targetSeason, targetEp) = if (!isMovie) {
+                resolveCanonicalEpisode(imdbId, seasonNumber, episodeNumber)
             } else {
-                "stream/series/$imdbId:$seasonNumber:$episodeNumber.json"
+                Pair(seasonNumber, episodeNumber)
             }
-            val url = "https://torrentio.strem.fun/$path"
-            val req = Request.Builder()
-                .url(url)
-                .header("User-Agent", "Mozilla/5.0")
-                .header("Accept", "application/json")
-                .build()
 
-            client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) return list
-                val body = resp.body?.string() ?: return list
-                val json = JSONObject(body)
-                val streams = json.optJSONArray("streams") ?: return list
+            fun parseTorrentioStreams(queryPath: String): List<TorrentStreamItem> {
+                val subList = mutableListOf<TorrentStreamItem>()
+                val url = "https://torrentio.strem.fun/$queryPath"
+                val req = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "Mozilla/5.0")
+                    .header("Accept", "application/json")
+                    .build()
 
-                for (i in 0 until streams.length()) {
-                    val stream = streams.getJSONObject(i)
-                    val rawTitle = stream.optString("title", "")
-                    val name = stream.optString("name", "Torrentio")
-                    val infoHash = stream.optString("infoHash", "")
-                    val fileIdx = if (stream.has("fileIdx")) stream.optInt("fileIdx", 0) + 1 else 1
+                client.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) return subList
+                    val body = resp.body?.string() ?: return subList
+                    val json = JSONObject(body)
+                    val streams = json.optJSONArray("streams") ?: return subList
 
-                    val lines = rawTitle.split("\n")
-                    val packName = lines.firstOrNull()?.trim() ?: "Stream $i"
-                    val epFileName = if (lines.size > 1 && !lines[1].contains("👤")) lines[1].trim() else ""
-                    val details = lines.find { it.contains("👤") } ?: lines.drop(1).joinToString(" ")
+                    for (i in 0 until streams.length()) {
+                        val stream = streams.getJSONObject(i)
+                        val rawTitle = stream.optString("title", "")
+                        val name = stream.optString("name", "Torrentio")
+                        val infoHash = stream.optString("infoHash", "")
+                        val fileIdx = if (stream.has("fileIdx")) stream.optInt("fileIdx", 0) + 1 else 1
 
-                    // Extract seeders from Torrentio details (e.g. "👤 45")
-                    val seedersMatch = Regex("""👤\s*(\d+)""").find(details)
-                    val seeders = seedersMatch?.groupValues?.get(1)?.toIntOrNull() ?: 5
+                        val lines = rawTitle.split("\n")
+                        val packName = lines.firstOrNull()?.trim() ?: "Stream $i"
+                        val epFileName = if (lines.size > 1 && !lines[1].contains("👤")) lines[1].trim() else ""
+                        val details = lines.find { it.contains("👤") } ?: lines.drop(1).joinToString(" ")
 
-                    // Extract size
-                    val sizeMatch = Regex("""💾\s*([\d\.]+\s*(?:GB|MB))""").find(details)
-                    val sizeFormatted = sizeMatch?.groupValues?.get(1) ?: ""
+                        // Extract seeders from Torrentio details (e.g. "👤 45")
+                        val seedersMatch = Regex("""👤\s*(\d+)""").find(details)
+                        val seeders = seedersMatch?.groupValues?.get(1)?.toIntOrNull() ?: 5
 
-                    // Construct clear episode title for display
-                    val displayTitle = if (epFileName.isNotEmpty()) {
-                        val cleanEp = epFileName.substringAfterLast("/")
-                            .replace(Regex("""\.(?:mkv|mp4|avi)$""", RegexOption.IGNORE_CASE), "")
-                            .replace(Regex("""[._]"""), " ")
-                            .trim()
-                        if (cleanEp.isNotEmpty() && !cleanEp.equals(packName, ignoreCase = true)) {
-                            "$cleanEp  [$packName]"
+                        // Extract size
+                        val sizeMatch = Regex("""💾\s*([\d\.]+\s*(?:GB|MB))""").find(details)
+                        val sizeFormatted = sizeMatch?.groupValues?.get(1) ?: ""
+
+                        // Construct clear episode title for display
+                        val displayTitle = if (epFileName.isNotEmpty()) {
+                            val cleanEp = epFileName.substringAfterLast("/")
+                                .replace(Regex("""\.(?:mkv|mp4|avi)$""", RegexOption.IGNORE_CASE), "")
+                                .replace(Regex("""[._]"""), " ")
+                                .trim()
+                            if (cleanEp.isNotEmpty() && !cleanEp.equals(packName, ignoreCase = true)) {
+                                "$cleanEp  [$packName]"
+                            } else {
+                                packName
+                            }
                         } else {
                             packName
                         }
-                    } else {
-                        packName
-                    }
 
-                    val magnetUrl = if (infoHash.isNotEmpty()) {
-                        "magnet:?xt=urn:btih:$infoHash&dn=${URLEncoder.encode(packName, "UTF-8")}&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce"
-                    } else ""
+                        val magnetUrl = if (infoHash.isNotEmpty()) {
+                            "magnet:?xt=urn:btih:$infoHash&dn=${URLEncoder.encode(packName, "UTF-8")}&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce"
+                        } else ""
 
-                    if (magnetUrl.isNotEmpty()) {
-                        list.add(
-                            TorrentStreamItem(
-                                title = displayTitle,
-                                magnetUrl = magnetUrl,
-                                seeders = seeders,
-                                sizeBytes = 0L,
-                                sizeFormatted = sizeFormatted,
-                                resolutionBadge = if (displayTitle.contains("1080p") || name.contains("1080p")) "1080p" else "720p",
-                                languageBadge = "🌐 Multi",
-                                languagePriority = 3,
-                                provider = "Torrentio",
-                                fileIndex = fileIdx,
-                                tier = 2
+                        if (magnetUrl.isNotEmpty()) {
+                            subList.add(
+                                TorrentStreamItem(
+                                    title = displayTitle,
+                                    magnetUrl = magnetUrl,
+                                    seeders = seeders,
+                                    sizeBytes = 0L,
+                                    sizeFormatted = sizeFormatted,
+                                    resolutionBadge = if (displayTitle.contains("1080p") || name.contains("1080p")) "1080p" else "720p",
+                                    languageBadge = "🌐 Multi",
+                                    languagePriority = 3,
+                                    provider = "Torrentio",
+                                    fileIndex = fileIdx,
+                                    tier = 2
+                                )
                             )
-                        )
+                        }
                     }
                 }
+                return subList
+            }
+
+            val mainPath = if (isMovie) {
+                "stream/movie/$imdbId.json"
+            } else {
+                "stream/series/$imdbId:$targetSeason:$targetEp.json"
+            }
+
+            list.addAll(parseTorrentioStreams(mainPath))
+
+            // Fallback 1: If original differed from canonical and had 0 streams, try original
+            if (list.isEmpty() && !isMovie && (targetSeason != seasonNumber || targetEp != episodeNumber)) {
+                list.addAll(parseTorrentioStreams("stream/series/$imdbId:$seasonNumber:$episodeNumber.json"))
+            }
+
+            // Fallback 2: If still 0 streams, query Season 1 Ep 1 to capture Complete Multi-Season Packs
+            if (list.isEmpty() && !isMovie) {
+                list.addAll(parseTorrentioStreams("stream/series/$imdbId:1:1.json"))
             }
         } catch (e: Exception) {
             e.printStackTrace()

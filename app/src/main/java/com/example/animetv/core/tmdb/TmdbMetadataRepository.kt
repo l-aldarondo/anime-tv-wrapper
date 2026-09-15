@@ -299,6 +299,7 @@ object TmdbMetadataRepository {
             .replace(Regex("""(?i)\b(audio\s+latino|latino|castellano|sub\s+español|subtitulado|subbed|dubbed|dual)\b.*"""), "")
             .replace(Regex("""(?i)\b(1080p|720p|4k|hd|fhd|bluray|web-dl)\b.*"""), "")
             .replace(Regex("""[\[\(].*?[\]\)]"""), "") // Remove [Br-Rip] or (2024)
+            .replace(Regex("""\b(19\d{2}|20\d{2})\b"""), "") // Remove standalone 4-digit release years like 2010
             .replace("-", " ")
             .replace("_", " ")
             .replace(Regex("""\s+"""), " ")
