@@ -53,6 +53,46 @@ object TmdbMetadataRepository {
     private val memoryCache = ConcurrentHashMap<String, TmdbMetadata>()
     private val seasonCache = ConcurrentHashMap<String, List<TmdbEpisode>>()
 
+    fun getCanonicalSearchTitle(rawTitle: String): String {
+        val lower = rawTitle.lowercase(Locale.ROOT).trim()
+
+        // Adventure Time variations
+        if (Regex("""(?i)\b(?:la\s+)?hora\s+de\s+(?:la\s+)?aventuras?\b""").containsMatchIn(lower) || lower.contains("adventure time")) {
+            if (lower.contains("fionna")) return "Adventure Time: Fionna and Cake"
+            if (lower.contains("tierras lejanas") || lower.contains("distant lands")) return "Adventure Time: Distant Lands"
+            return "Adventure Time"
+        }
+
+        // Yomi no Tsugai / Daemons of the Shadow Realm
+        if (lower.contains("yomi no tsugai") || lower.contains("shadow realm") || lower.contains("daemons of the shadow")) {
+            return "Daemons of the Shadow Realm"
+        }
+
+        // One Piece
+        if (lower.contains("one piece")) {
+            return "One Piece"
+        }
+
+        return sanitizeTitle(rawTitle)
+    }
+
+    private fun titleSimilarity(s1: String, s2: String): Double {
+        val c1 = s1.lowercase(Locale.ROOT).replace(Regex("""[^a-z0-9\s]"""), " ").trim()
+        val c2 = s2.lowercase(Locale.ROOT).replace(Regex("""[^a-z0-9\s]"""), " ").trim()
+        if (c1.isEmpty() || c2.isEmpty()) return 0.0
+        if (c1 == c2) return 1.0
+
+        val w1 = c1.split(Regex("""\s+""")).filter { it.length > 2 }
+        val w2 = c2.split(Regex("""\s+""")).filter { it.length > 2 }
+        if (w1.isEmpty() || w2.isEmpty()) return 0.0
+
+        var matches = 0
+        for (qw in w1) {
+            if (w2.any { cw -> cw == qw }) matches++
+        }
+        return matches.toDouble() / maxOf(w1.size, w2.size)
+    }
+
     /**
      * Searches TMDB for rich metadata, high-resolution artwork, and original title.
      * Accurately distinguishes between Anime and Live Action adaptations (e.g. One Piece).
@@ -67,17 +107,19 @@ object TmdbMetadataRepository {
                 rawTitle.contains("Live Action", ignoreCase = true) ||
                 rawTitle.contains("Acción Real", ignoreCase = true)
 
+        val canonicalQuery = getCanonicalSearchTitle(rawTitle)
         val cleanQuery = sanitizeTitle(rawTitle)
-        if (cleanQuery.isEmpty()) return@withContext null
+        val queryToSearch = canonicalQuery.ifEmpty { cleanQuery }
+        if (queryToSearch.isEmpty()) return@withContext null
 
-        val cacheKey = "${cleanQuery.lowercase(Locale.ROOT)}_m${isMovie}_la$detectedLiveAction"
+        val cacheKey = "${queryToSearch.lowercase(Locale.ROOT)}_m${isMovie}_la$detectedLiveAction"
         memoryCache[cacheKey]?.let { return@withContext it }
 
         val apiKey = TorrentSettingsStore.getTmdbApiKey(context)
         if (apiKey.isEmpty()) return@withContext null
 
         try {
-            val encodedQuery = URLEncoder.encode(cleanQuery, "UTF-8")
+            val encodedQuery = URLEncoder.encode(queryToSearch, "UTF-8")
             // Use multi-search to capture both Movies and TV Shows/Anime in one call
             val url = "$BASE_URL/search/multi?api_key=$apiKey&query=$encodedQuery&language=es-MX&include_adult=false"
 
@@ -103,6 +145,18 @@ object TmdbMetadataRepository {
                     val mType = obj.optString("media_type", "")
                     if (mType != "movie" && mType != "tv") continue
 
+                    val candName = obj.optString("name", obj.optString("title", ""))
+                    val origName = obj.optString("original_name", obj.optString("original_title", ""))
+
+                    val sim = maxOf(
+                        titleSimilarity(queryToSearch, candName),
+                        titleSimilarity(queryToSearch, origName),
+                        titleSimilarity(cleanQuery, candName),
+                        titleSimilarity(cleanQuery, origName),
+                        titleSimilarity(rawTitle, candName),
+                        titleSimilarity(rawTitle, origName)
+                    )
+
                     val gArray = obj.optJSONArray("genre_ids")
                     val genreIds = mutableListOf<Int>()
                     if (gArray != null) {
@@ -113,6 +167,14 @@ object TmdbMetadataRepository {
                     val isJapanese = origLang == "ja"
 
                     var score = 0
+
+                    // Title similarity is highest priority: prevent unrelated anime hijacking
+                    if (sim < 0.2) {
+                        score -= 200
+                    } else {
+                        score += (sim * 100).toInt()
+                    }
+
                     // Type preference
                     if (isMovie && mType == "movie") score += 50
                     if (!isMovie && mType == "tv") score += 50
@@ -122,9 +184,9 @@ object TmdbMetadataRepository {
                         if (!hasAnimGenre) score += 50
                         if (!isJapanese) score += 20
                     } else {
-                        // Standard Anime: strong bonus for Animation genre and Japanese origin
-                        if (hasAnimGenre) score += 60
-                        if (isJapanese) score += 40
+                        // Standard Anime: bonus for Animation genre and Japanese origin
+                        if (hasAnimGenre) score += 40
+                        if (isJapanese) score += 20
                         // Heavy penalty if live action English series is returned for an anime
                         if (!hasAnimGenre && origLang == "en") score -= 80
                     }
@@ -253,7 +315,7 @@ object TmdbMetadataRepository {
                                         val mObj = metas.getJSONObject(m)
                                         val mName = mObj.optString("name", "").lowercase(Locale.ROOT)
                                         val mId = mObj.optString("imdb_id", mObj.optString("id", ""))
-                                        if (mId.startsWith("tt") && (mName.contains(qClean) || qClean.contains(mName))) {
+                                        if (mId.startsWith("tt") && titleSimilarity(mName, qClean) >= 0.4) {
                                             imdbId = mId
                                             break
                                         }

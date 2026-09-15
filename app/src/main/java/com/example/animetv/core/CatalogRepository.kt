@@ -103,7 +103,13 @@ object CatalogRepository {
         "parecido a un asesinato" to listOf("Hidden Murder"),
         "yomi no tsugai" to listOf("Daemons of the Shadow Realm", "Yomi no Tsugai: Dúo del Inframundo"),
         "daemons of the shadow realm" to listOf("Yomi no Tsugai", "Yomi no Tsugai: Dúo del Inframundo"),
-        "daemon of the shadow" to listOf("Yomi no Tsugai", "Daemons of the Shadow Realm")
+        "daemon of the shadow" to listOf("Yomi no Tsugai", "Daemons of the Shadow Realm"),
+        "hora de aventura" to listOf("Adventure Time", "Hora de Aventura", "Hora de Aventuras"),
+        "la hora de la aventura" to listOf("Adventure Time", "Hora de Aventura", "Hora de Aventuras"),
+        "hora de la aventura" to listOf("Adventure Time", "Hora de Aventura", "Hora de Aventuras"),
+        "la hora de aventura" to listOf("Adventure Time", "Hora de Aventura", "Hora de Aventuras"),
+        "hora de aventuras" to listOf("Adventure Time", "Hora de Aventura", "Hora de Aventuras"),
+        "adventure time" to listOf("Hora de Aventura", "Adventure Time", "Hora de Aventuras")
     )
 
     private fun getSearchQueries(query: String): List<String> {

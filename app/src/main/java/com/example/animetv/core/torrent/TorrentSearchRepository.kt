@@ -55,12 +55,13 @@ object TorrentSearchRepository {
 
         val rawResults = mutableListOf<TorrentStreamItem>()
 
-        // 1. Fast IMDb ID resolution if not yet provided by TMDB
-        val resolvedImdbId = if (imdbId.isNotEmpty()) {
+        // 1. Fast IMDb ID resolution (with canonical override protection)
+        val fastId = resolveImdbIdFast(query, originalQuery, englishQuery, isMovie, isLiveAction)
+        val resolvedImdbId = if (fastId.isNotEmpty()) {
+            fastId
+        } else if (imdbId.isNotEmpty()) {
             imdbId
-        } else {
-            resolveImdbIdFast(query, originalQuery, englishQuery, isMovie, isLiveAction)
-        }
+        } else ""
 
         // 2. Query Jackett or Prowlarr (if configured)
         val indexerDeferred = async {
@@ -125,14 +126,28 @@ object TorrentSearchRepository {
         val noColon = cleanQ.substringBefore(":").trim()
         if (noColon.isNotEmpty()) searchTerms.add(noColon)
 
-        // Known title aliases
-        if (cleanQ.contains("yomi no tsugai", true) || originalQuery.contains("yomi", true)) {
-            searchTerms.add(0, "Daemons of the Shadow Realm")
+        // Direct canonical identification for popular anime and cartoons to avoid fuzzy mismatch
+        val lowerClean = cleanQ.lowercase(Locale.ROOT)
+        val lowerRaw = query.lowercase(Locale.ROOT)
+        val isAdventureTime = lowerClean.contains("adventure time") ||
+                lowerRaw.contains("adventure time") ||
+                originalQuery.contains("adventure time", true) ||
+                englishQuery.contains("adventure time", true) ||
+                Regex("""(?i)\b(?:la\s+)?hora\s+de\s+(?:la\s+)?aventuras?\b""").containsMatchIn(lowerClean) ||
+                Regex("""(?i)\b(?:la\s+)?hora\s+de\s+(?:la\s+)?aventuras?\b""").containsMatchIn(lowerRaw)
+
+        if (isAdventureTime) {
+            if (lowerClean.contains("fionna") || lowerRaw.contains("fionna")) return "tt15248880"
+            if (lowerClean.contains("tierras lejanas") || lowerRaw.contains("tierras lejanas") || lowerClean.contains("distant lands")) return "tt11165358"
+            return "tt1305826"
         }
-        if (cleanQ.contains("hora de aventura", true) || cleanQ.contains("adventure time", true) ||
-            originalQuery.contains("adventure time", true) || englishQuery.contains("adventure time", true) ||
-            query.contains("adventure time", true) || query.contains("hora de aventura", true)) {
-            searchTerms.add(0, "Adventure Time")
+
+        if (lowerClean.contains("yomi no tsugai") || originalQuery.contains("yomi", true) || lowerClean.contains("shadow realm")) {
+            return "tt37532356"
+        }
+
+        if (lowerClean.contains("one piece")) {
+            return if (isLiveAction) "tt11737520" else "tt0388629"
         }
 
         val type = if (isMovie) "movie" else "series"
@@ -154,22 +169,6 @@ object TorrentSearchRepository {
                             val candidateName = metaObj.optString("name", "")
                             val id = metaObj.optString("imdb_id", metaObj.optString("id", ""))
 
-                            // Precise matching for One Piece (Anime vs Live Action)
-                            if (term.contains("one piece", true)) {
-                                if (!isLiveAction && id == "tt0388629") return id
-                                if (isLiveAction && id == "tt11737520") return id
-                            }
-
-                            // Precise matching for Yomi no Tsugai / Daemons of the Shadow Realm
-                            if ((term.contains("yomi", true) || term.contains("shadow realm", true)) && id == "tt37532356") {
-                                return id
-                            }
-
-                            // Precise matching for Adventure Time (2010)
-                            if ((term.contains("adventure time", true) || term.contains("hora de aventura", true)) && id == "tt1305826") {
-                                return id
-                            }
-
                             if (id.startsWith("tt") && (isTitleSimilar(candidateName, term) || isTitleSimilar(term, candidateName))) {
                                 return id
                             }
@@ -187,12 +186,13 @@ object TorrentSearchRepository {
         val c = candidateName.lowercase(Locale.ROOT).replace(Regex("""[^a-z0-9\s]"""), " ").trim()
         val q = query.lowercase(Locale.ROOT).replace(Regex("""[^a-z0-9\s]"""), " ").trim()
         if (c.isEmpty() || q.isEmpty()) return false
-        if (c == q || c.contains(q) || q.contains(c)) return true
+        if (c == q) return true
+        if (c.length >= 4 && q.length >= 4 && (c.contains(q) || q.contains(c))) return true
         val cWords = c.split(Regex("""\s+""")).filter { it.length > 2 }
         val qWords = q.split(Regex("""\s+""")).filter { it.length > 2 }
-        if (qWords.isEmpty()) return false
-        val matches = qWords.count { qw -> cWords.any { cw -> cw == qw || cw.contains(qw) || qw.contains(cw) } }
-        return matches.toDouble() / qWords.size >= 0.5
+        if (qWords.isEmpty() || cWords.isEmpty()) return false
+        val matches = qWords.count { qw -> cWords.any { cw -> cw == qw } }
+        return matches.toDouble() / maxOf(qWords.size, cWords.size) >= 0.4
     }
 
     data class CanonicalVideo(
