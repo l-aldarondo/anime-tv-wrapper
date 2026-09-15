@@ -4,9 +4,12 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.transition.AutoTransition
+import android.transition.TransitionManager
 import java.util.Locale
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
@@ -42,6 +45,32 @@ import com.example.animetv.ui.adapter.SeasonCapsuleAdapter
 import com.example.animetv.ui.adapter.TorrentItemAdapter
 import kotlinx.coroutines.launch
 
+/**
+ * Netflix/Prime-style action button: shows only [icon] at rest and expands to "[icon]  [label]"
+ * once the button gains D-pad focus, animating the width change on the parent row. [icon] and
+ * [label] can each be updated independently at any time (e.g. to swap the favorite icon between
+ * "+"/"✓", or to append an episode code to the WEB button's label) without re-registering focus
+ * handling.
+ */
+private class IconRevealButton(private val button: Button, icon: String, label: String) {
+    var icon: String = icon
+        set(value) { field = value; render() }
+    var label: String = label
+        set(value) { field = value; render() }
+
+    init {
+        button.setOnFocusChangeListener { _, _ -> render() }
+        render()
+    }
+
+    private fun render() {
+        (button.parent as? ViewGroup)?.let {
+            TransitionManager.beginDelayedTransition(it, AutoTransition().setDuration(150))
+        }
+        button.text = if (button.isFocused) "$icon  $label" else icon
+    }
+}
+
 class DetailActivity : AppCompatActivity() {
 
     companion object {
@@ -67,6 +96,15 @@ class DetailActivity : AppCompatActivity() {
     private lateinit var btnTrailer: Button
     private lateinit var btnToggleFavorite: Button
     private lateinit var btnBack: Button
+    // Icon-only/focus-reveal-label wrappers around the buttons above (same order as the row)
+    private lateinit var actionPlayFirst: IconRevealButton
+    private lateinit var actionRestart: IconRevealButton
+    private lateinit var actionTorrent: IconRevealButton
+    private lateinit var actionTrailer: IconRevealButton
+    private lateinit var actionFavorite: IconRevealButton
+    private lateinit var actionSettings: IconRevealButton
+    private lateinit var actionBack: IconRevealButton
+    private lateinit var layoutEpisodesHeaderRow: View
     private lateinit var txtEpisodesHeader: TextView
     private lateinit var btnSortOrder: Button
     private lateinit var btnJumpStart: Button
@@ -94,6 +132,9 @@ class DetailActivity : AppCompatActivity() {
     private var rawEpisodes: List<AnimeEpisode> = emptyList()
     // TMDB-derived season count used to show capsules for shows where the scraper returns 1 season
     private var tmdbSeasonCount: Int = 1
+    // True when the current detail page is a movie (some scrapers still return a single
+    // "episode" stub for movies, which must not be shown with a S01E01-style episode UI)
+    private var isCurrentMovie: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -112,6 +153,14 @@ class DetailActivity : AppCompatActivity() {
         btnToggleFavorite = findViewById(R.id.btnToggleFavorite)
         btnBack = findViewById(R.id.btnBack)
 
+        actionPlayFirst = IconRevealButton(btnPlayFirst, "▶", "WEB")
+        actionTorrent = IconRevealButton(btnPlayTorrent, "⚡", "TOR")
+        actionRestart = IconRevealButton(btnRestartEpisode, "↺", "Reiniciar")
+        actionTrailer = IconRevealButton(btnTrailer, "🎬", "Tráiler")
+        actionFavorite = IconRevealButton(btnToggleFavorite, "+", "Mi Lista")
+        actionSettings = IconRevealButton(btnTorrentSettings, "⚙", "Ajustes")
+        actionBack = IconRevealButton(btnBack, "↩", "Volver")
+
         btnPlayTorrent.setOnClickListener {
             val ep = currentlyFocusedEpisode ?: rawEpisodes.firstOrNull()
             showTorrentSelectorDialog(ep)
@@ -119,6 +168,7 @@ class DetailActivity : AppCompatActivity() {
         btnTorrentSettings.setOnClickListener {
             showTorrentSettingsDialog()
         }
+        layoutEpisodesHeaderRow = findViewById(R.id.layoutEpisodesHeaderRow)
         txtEpisodesHeader = findViewById(R.id.txtEpisodesHeader)
         btnSortOrder = findViewById(R.id.btnSortOrder)
         btnJumpStart = findViewById(R.id.btnJumpStart)
@@ -197,7 +247,7 @@ class DetailActivity : AppCompatActivity() {
         val record = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this, card.detailUrl)
         
         if (record != null) {
-            btnPlayFirst.text = "▶  WEB (E${record.episodeNumber})"
+            actionPlayFirst.label = "WEB (E${record.episodeNumber})"
             btnPlayFirst.setOnClickListener {
                 // Play last watched episode with auto-resume
                 val detail = currentDetail
@@ -227,7 +277,7 @@ class DetailActivity : AppCompatActivity() {
             // Show dedicated Restart button if user has watched more than 5s
             if (record.positionMs > 5000) {
                 btnRestartEpisode.visibility = View.VISIBLE
-                btnRestartEpisode.text = "↺  Reiniciar Ep"
+                actionRestart.label = "Reiniciar Ep"
                 btnRestartEpisode.setOnClickListener {
                     val detail = currentDetail
                     val ep = rawEpisodes.firstOrNull { it.episodeUrl == record.episodeUrl || it.episodeNumber == record.episodeNumber }
@@ -244,18 +294,18 @@ class DetailActivity : AppCompatActivity() {
             }
         } else if (rawEpisodes.isNotEmpty()) {
             val firstEp = rawEpisodes.first()
-            btnPlayFirst.text = "▶  WEB"
+            actionPlayFirst.label = "WEB"
             btnPlayFirst.setOnLongClickListener(null)
             btnPlayFirst.setOnClickListener {
                 currentDetail?.let { playEpisode(it, firstEp, startOver = false) }
             }
             btnRestartEpisode.visibility = View.GONE
         } else {
-            btnPlayFirst.text = "▶  WEB"
+            actionPlayFirst.label = "WEB"
             btnRestartEpisode.visibility = View.GONE
         }
 
-        btnPlayTorrent.text = "⚡  TOR"
+        actionTorrent.label = "TOR"
 
         episodeAdapter?.let { adapter ->
             val list = getSortedEpisodes(rawEpisodes, isAscendingOrder)
@@ -276,6 +326,12 @@ class DetailActivity : AppCompatActivity() {
 
     private fun bindFocusedEpisode(ep: AnimeEpisode) {
         currentlyFocusedEpisode = ep
+        if (isCurrentMovie) {
+            // Movies don't need the "S01E01 + title" spotlight panel — it's redundant with the
+            // movie's own title/synopsis already shown above.
+            layoutFocusedEpisodeInfo.visibility = View.GONE
+            return
+        }
         layoutFocusedEpisodeInfo.visibility = View.VISIBLE
         val sNum = if (ep.seasonNumber > 0) ep.seasonNumber else 1
         val eNum = ep.episodeNumber
@@ -370,9 +426,11 @@ class DetailActivity : AppCompatActivity() {
     private fun updateFavoriteButton(card: AnimeCard) {
         val isFav = FavoritesStore.isFavorite(this, card.detailUrl)
         if (isFav) {
-            btnToggleFavorite.text = "✓  En Mi Lista"
+            actionFavorite.icon = "✓"
+            actionFavorite.label = "En Mi Lista"
         } else {
-            btnToggleFavorite.text = "+  Mi Lista"
+            actionFavorite.icon = "+"
+            actionFavorite.label = "Mi Lista"
         }
     }
 
@@ -420,7 +478,10 @@ class DetailActivity : AppCompatActivity() {
                             .diskCacheStrategy(DiskCacheStrategy.ALL)
                             .into(imgPoster)
                     }
-                    if (tmdb.overview.isNotEmpty() && (txtSynopsis.text.isNullOrEmpty() || txtSynopsis.text.length < 50 || txtSynopsis.text.contains("Cargando"))) {
+                    // TMDB's overview is authoritative and always wins over the scraper's synopsis,
+                    // which is frequently just an SEO description (e.g. "Ver X en español latino
+                    // online...") rather than an actual plot summary.
+                    if (tmdb.overview.isNotEmpty()) {
                         txtSynopsis.text = tmdb.overview
                     }
                     if (tmdb.ratingText.isNotEmpty() && !txtMeta.text.contains("★")) {
@@ -443,6 +504,7 @@ class DetailActivity : AppCompatActivity() {
                 val detail = CatalogRepository.getAnimeDetail(card)
                 currentDetail = detail
                 rawEpisodes = detail.episodes
+                isCurrentMovie = card.detailUrl.contains("/pelicula/")
                 progressBar.visibility = View.GONE
 
                 val bestPoster = CoverUtils.pickBestCover(currentTmdbMeta?.posterUrl ?: detail.posterUrl, card.posterUrl)
@@ -473,6 +535,13 @@ class DetailActivity : AppCompatActivity() {
                 // Trailer Button
                 val effectiveTrailer = detail.trailerUrl.ifEmpty { currentTmdbMeta?.trailerUrl ?: "" }
                 setupTrailerButton(effectiveTrailer, detail.title)
+
+                // Movies never need the S01E01-style episode UI, even if the scraper returned a
+                // single "episode" stub for the movie itself — the WEB/TOR buttons still play it
+                // correctly via the existing episode-based wiring below, only the episode chrome
+                // (header, grid, spotlight panel) is hidden.
+                layoutEpisodesHeaderRow.visibility = if (isCurrentMovie) View.GONE else View.VISIBLE
+                recyclerEpisodes.visibility = if (isCurrentMovie) View.GONE else View.VISIBLE
 
                 if (detail.episodes.isNotEmpty()) {
                     val uniqueSeasons = detail.episodes.map { if (it.seasonNumber > 0) it.seasonNumber else 1 }.distinct().sorted()
@@ -529,7 +598,7 @@ class DetailActivity : AppCompatActivity() {
                     refreshPlaybackState()
                     btnPlayFirst.requestFocus()
                 } else {
-                    btnPlayFirst.text = if (detail.detailUrl.contains("/pelicula/")) "▶  WEB (Película)" else "▶  WEB"
+                    actionPlayFirst.label = if (detail.detailUrl.contains("/pelicula/")) "WEB (Película)" else "WEB"
                     btnPlayFirst.setOnClickListener {
                         playDirectUrl(detail.detailUrl, detail.title)
                     }
