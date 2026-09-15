@@ -6,6 +6,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.Jsoup
 import java.net.URLEncoder
@@ -86,9 +87,19 @@ object TorrentSearchRepository {
             } else emptyList()
         }
 
+        // 5. Query AnimeTosho API for anime (fast JSON feed mirroring Nyaa, TokyoTosho, AniDex)
+        val animetoshoDeferred = async {
+            if (!isLiveAction) {
+                val searchQuery = if (englishQuery.isNotEmpty()) englishQuery
+                else if (originalQuery.isNotEmpty()) originalQuery else query
+                fetchFromAnimeTosho(searchQuery, seasonNumber, episodeNumber, isMovie)
+            } else emptyList()
+        }
+
         rawResults.addAll(indexerDeferred.await())
         rawResults.addAll(torrentioDeferred.await())
         rawResults.addAll(nyaaDeferred.await())
+        rawResults.addAll(animetoshoDeferred.await())
 
         // Deduplicate by info_hash or magnet
         val uniqueByHash = rawResults.distinctBy { extractInfoHash(it.magnetUrl).ifEmpty { it.title } }
@@ -364,10 +375,10 @@ object TorrentSearchRepository {
 
         // 4. Language filter (soft filter: if matches exist, keep them; otherwise keep all)
         if (languageFilter == "spanish_only") {
-            val langFiltered = candidates.filter { it.languagePriority == 1 }
+            val langFiltered = candidates.filter { it.languagePriority <= 2 }
             if (langFiltered.isNotEmpty()) candidates = langFiltered
         } else if (languageFilter == "dual_audio") {
-            val langFiltered = candidates.filter { it.languagePriority <= 2 }
+            val langFiltered = candidates.filter { it.languagePriority <= 3 }
             if (langFiltered.isNotEmpty()) candidates = langFiltered
         } else if (languageFilter == "sub_only") {
             val langFiltered = candidates.filter { it.languageBadge.contains("Sub", ignoreCase = true) }
@@ -382,7 +393,7 @@ object TorrentSearchRepository {
             }
         }
 
-        // Sort: Language priority ASC (1=Spanish, 2=Dual, 3=Eng/Multi), then Seeders DESC (439 seeds first!)
+        // Sort: Language priority ASC (1=Latino, 2=Castellano, 3=Dual, 4=Sub, 5=Eng), then Seeders DESC
         return candidates.sortedWith(
             compareBy(
                 { it.languagePriority },
@@ -392,16 +403,20 @@ object TorrentSearchRepository {
     }
 
     private fun detectLanguage(titleLower: String, preferSpanish: Boolean): Pair<String, Int> {
-        val hasLatino = titleLower.contains("latino") || titleLower.contains("audio latino") || titleLower.contains("es-la")
-        val hasCastellano = titleLower.contains("castellano") || titleLower.contains("spanish") || titleLower.contains("es-es")
+        val hasLatino = titleLower.contains("latino") || titleLower.contains("audio latino") ||
+                titleLower.contains("es-la") || titleLower.contains("cinecalidad") ||
+                titleLower.contains("latin") || titleLower.contains("mex")
+        val hasCastellano = titleLower.contains("castellano") || titleLower.contains("spanish") ||
+                titleLower.contains("es-es") || titleLower.contains("español") ||
+                titleLower.contains("mejortorrent") || titleLower.contains("cast")
         val hasDual = titleLower.contains("dual") || titleLower.contains("multi") || (hasLatino && titleLower.contains("eng"))
 
         return when {
-            hasLatino -> Pair("🇪🇸 Latino", if (preferSpanish) 1 else 2)
-            hasCastellano -> Pair("🇪🇸 Castellano", if (preferSpanish) 1 else 2)
-            hasDual -> Pair("🌐 Dual Audio", 2)
-            titleLower.contains("sub") || titleLower.contains("vostfr") -> Pair("💬 Subtitulado", 3)
-            else -> Pair("🇺🇸 Inglés", 3)
+            hasLatino -> Pair("🇲🇽 Latino", 1) // Prioridad 1: Latinoamericano siempre primero
+            hasCastellano -> Pair("🇪🇸 Castellano", 2) // Prioridad 2: Castellano
+            hasDual -> Pair("🌐 Dual Audio", 3)
+            titleLower.contains("sub") || titleLower.contains("vostfr") -> Pair("💬 Subtitulado", 4)
+            else -> Pair("🇺🇸 Inglés", 5)
         }
     }
 
@@ -422,8 +437,8 @@ object TorrentSearchRepository {
             fun parseTorrentioStreams(queryPath: String): List<TorrentStreamItem> {
                 val subList = mutableListOf<TorrentStreamItem>()
                 val endpoints = listOf(
-                    "https://torrentio.strem.fun/$queryPath",
-                    "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex/$queryPath"
+                    "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,nyaasi,tokyotosho,anidex,mejortorrent,cinecalidad,wolfmax4k,besttorrents/$queryPath",
+                    "https://torrentio.strem.fun/$queryPath"
                 )
 
                 for (url in endpoints) {
@@ -481,6 +496,15 @@ object TorrentSearchRepository {
                                 } else ""
 
                                 if (magnetUrl.isNotEmpty()) {
+                                    val lowerForLang = "${displayTitle.lowercase(Locale.ROOT)} ${rawTitle.lowercase(Locale.ROOT)} ${name.lowercase(Locale.ROOT)}"
+                                    val (langBadge, langPriority) = detectLanguage(lowerForLang, true)
+                                    val resBadge = when {
+                                        lowerForLang.contains("2160p") || lowerForLang.contains("4k") || lowerForLang.contains("uhd") -> "4K"
+                                        lowerForLang.contains("1080p") -> "1080p"
+                                        lowerForLang.contains("720p") -> "720p"
+                                        else -> "HD"
+                                    }
+
                                     subList.add(
                                         TorrentStreamItem(
                                             title = displayTitle,
@@ -488,9 +512,9 @@ object TorrentSearchRepository {
                                             seeders = seeders,
                                             sizeBytes = 0L,
                                             sizeFormatted = sizeFormatted,
-                                            resolutionBadge = if (displayTitle.contains("1080p") || name.contains("1080p")) "1080p" else "720p",
-                                            languageBadge = "🌐 Multi",
-                                            languagePriority = 3,
+                                            resolutionBadge = resBadge,
+                                            languageBadge = langBadge,
+                                            languagePriority = langPriority,
                                             provider = "Torrentio",
                                             fileIndex = fileIdx,
                                             tier = 2
@@ -612,6 +636,105 @@ object TorrentSearchRepository {
             }
         }
         return list
+    }
+
+    private fun fetchFromAnimeTosho(
+        query: String,
+        seasonNumber: Int,
+        episodeNumber: Int,
+        isMovie: Boolean
+    ): List<TorrentStreamItem> {
+        val list = mutableListOf<TorrentStreamItem>()
+        fun cleanForTosho(s: String): String {
+            return s.replace(Regex("""(?i)\b(Temporada \d+|Season \d+|Audio Latino|Castellano|Latino|Dual)\b"""), "")
+                .replace(Regex(""":.*"""), "")
+                .trim()
+        }
+
+        val cleanQ = cleanForTosho(query)
+        if (cleanQ.isEmpty()) return list
+
+        val searchTerms = mutableListOf<String>()
+        if (episodeNumber > 0 && !isMovie) {
+            searchTerms.add(String.format(Locale.US, "%s %02d", cleanQ, episodeNumber))
+            searchTerms.add(String.format(Locale.US, "%s S%02dE%02d", cleanQ, seasonNumber, episodeNumber))
+        } else {
+            searchTerms.add(cleanQ)
+        }
+
+        for (term in searchTerms.distinct()) {
+            try {
+                val encoded = URLEncoder.encode(term, "UTF-8")
+                val url = "https://feed.animetosho.org/json?q=$encoded"
+                val req = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "Mozilla/5.0")
+                    .header("Accept", "application/json")
+                    .build()
+
+                client.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) return@use
+                    val body = resp.body?.string() ?: return@use
+                    val arr = JSONArray(body)
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.getJSONObject(i)
+                        val title = obj.optString("title", "")
+                        val magnet = obj.optString("magnet_uri", "")
+                        val infoHash = obj.optString("info_hash", "")
+                        val seeders = obj.optInt("seeders", 1)
+                        val totalBytes = obj.optLong("total_size", 0L)
+                        val sizeFormatted = formatBytes(totalBytes)
+
+                        val finalMagnet = if (magnet.isNotEmpty()) {
+                            magnet
+                        } else if (infoHash.isNotEmpty()) {
+                            "magnet:?xt=urn:btih:$infoHash&dn=${URLEncoder.encode(title, "UTF-8")}&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce"
+                        } else ""
+
+                        if (finalMagnet.isNotEmpty() && title.isNotEmpty()) {
+                            val lower = title.lowercase(Locale.ROOT)
+                            val resBadge = when {
+                                lower.contains("2160p") || lower.contains("4k") || lower.contains("uhd") -> "4K"
+                                lower.contains("1080p") -> "1080p"
+                                lower.contains("720p") -> "720p"
+                                else -> "HD"
+                            }
+                            val (langBadge, langPriority) = detectLanguage(lower, true)
+
+                            list.add(
+                                TorrentStreamItem(
+                                    title = title,
+                                    magnetUrl = finalMagnet,
+                                    seeders = seeders,
+                                    sizeBytes = totalBytes,
+                                    sizeFormatted = sizeFormatted,
+                                    resolutionBadge = resBadge,
+                                    languageBadge = langBadge,
+                                    languagePriority = langPriority,
+                                    provider = "AnimeTosho",
+                                    fileIndex = 1
+                                )
+                            )
+                        }
+                    }
+                }
+                if (list.isNotEmpty()) break
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        return list
+    }
+
+    private fun formatBytes(bytes: Long): String {
+        if (bytes <= 0) return ""
+        val gb = bytes.toDouble() / (1024 * 1024 * 1024)
+        return if (gb >= 1.0) {
+            String.format(Locale.US, "%.1f GB", gb)
+        } else {
+            val mb = bytes.toDouble() / (1024 * 1024)
+            String.format(Locale.US, "%.0f MB", mb)
+        }
     }
 
     /**
