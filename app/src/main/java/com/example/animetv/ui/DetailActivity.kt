@@ -36,6 +36,8 @@ import com.example.animetv.core.util.CoverUtils
 import com.example.animetv.ui.adapter.EpisodeAdapter
 import com.example.animetv.ui.adapter.SeasonCapsuleAdapter
 import com.example.animetv.ui.adapter.TorrentItemAdapter
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
 class DetailActivity : AppCompatActivity() {
@@ -56,6 +58,8 @@ class DetailActivity : AppCompatActivity() {
     private lateinit var txtTitle: TextView
     private lateinit var txtMeta: TextView
     private lateinit var txtSynopsis: TextView
+    private lateinit var txtMovieBadges: TextView
+    private lateinit var txtMovieCredits: TextView
     private lateinit var btnPlayFirst: Button
     private lateinit var btnRestartEpisode: Button
     private lateinit var btnPlayTorrent: Button
@@ -66,9 +70,9 @@ class DetailActivity : AppCompatActivity() {
     private lateinit var actionPlayFirst: IconRevealButton
     private lateinit var actionRestart: IconRevealButton
     private lateinit var actionTorrent: IconRevealButton
-    private lateinit var actionTrailer: IconRevealButton
+    private lateinit var actionTrailer: IconDrawableRevealButton
     private lateinit var actionFavorite: IconRevealButton
-    private lateinit var actionWatched: IconRevealButton
+    private lateinit var actionWatched: IconDrawableRevealButton
     private lateinit var layoutEpisodesHeaderRow: View
     private lateinit var txtEpisodesHeader: TextView
     private lateinit var btnSortOrder: Button
@@ -77,14 +81,6 @@ class DetailActivity : AppCompatActivity() {
     private lateinit var recyclerSeasons: RecyclerView
     private lateinit var recyclerEpisodes: RecyclerView
     private lateinit var progressBar: ProgressBar
-    private lateinit var layoutFocusedEpisodeInfo: View
-    private lateinit var frameFocusedStill: View
-    private lateinit var imgFocusedEpisodeStill: ImageView
-    private lateinit var txtFocusedEpisodeHeader: TextView
-    private lateinit var txtFocusedEpisodeTitle: TextView
-    private lateinit var txtFocusedEpisodeSynopsis: TextView
-    private lateinit var btnSpotlightPlayWeb: Button
-    private lateinit var btnSpotlightPlayTorrent: Button
 
     private var currentCard: AnimeCard? = null
     private var currentDetail: AnimeDetail? = null
@@ -110,6 +106,8 @@ class DetailActivity : AppCompatActivity() {
         txtTitle = findViewById(R.id.txtDetailTitle)
         txtMeta = findViewById(R.id.txtDetailMeta)
         txtSynopsis = findViewById(R.id.txtDetailSynopsis)
+        txtMovieBadges = findViewById(R.id.txtMovieBadges)
+        txtMovieCredits = findViewById(R.id.txtMovieCredits)
         btnPlayFirst = findViewById(R.id.btnPlayFirst)
         btnRestartEpisode = findViewById(R.id.btnRestartEpisode)
         btnPlayTorrent = findViewById(R.id.btnPlayTorrent)
@@ -120,9 +118,9 @@ class DetailActivity : AppCompatActivity() {
         actionPlayFirst = IconRevealButton(btnPlayFirst, "▶", "WEB")
         actionTorrent = IconRevealButton(btnPlayTorrent, "⚡", "TOR")
         actionRestart = IconRevealButton(btnRestartEpisode, "↺", "Reiniciar")
-        actionTrailer = IconRevealButton(btnTrailer, "🎬", "Tráiler")
+        actionTrailer = IconDrawableRevealButton(btnTrailer, R.drawable.ic_movie, "Tráiler")
         actionFavorite = IconRevealButton(btnToggleFavorite, "+", "Mi Lista")
-        actionWatched = IconRevealButton(btnToggleWatched, "👁", "Marcar Visto")
+        actionWatched = IconDrawableRevealButton(btnToggleWatched, R.drawable.ic_eye, "Marcar Visto")
 
         btnPlayTorrent.setOnClickListener {
             val ep = currentlyFocusedEpisode ?: rawEpisodes.firstOrNull()
@@ -140,31 +138,11 @@ class DetailActivity : AppCompatActivity() {
         recyclerSeasons.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         recyclerEpisodes = findViewById(R.id.recyclerEpisodes)
         progressBar = findViewById(R.id.progressBarDetail)
-        layoutFocusedEpisodeInfo = findViewById(R.id.layoutFocusedEpisodeInfo)
-        frameFocusedStill = findViewById(R.id.frameFocusedStill)
-        imgFocusedEpisodeStill = findViewById(R.id.imgFocusedEpisodeStill)
-        txtFocusedEpisodeHeader = findViewById(R.id.txtFocusedEpisodeHeader)
-        txtFocusedEpisodeTitle = findViewById(R.id.txtFocusedEpisodeTitle)
-        txtFocusedEpisodeSynopsis = findViewById(R.id.txtFocusedEpisodeSynopsis)
-        btnSpotlightPlayWeb = findViewById(R.id.btnSpotlightPlayWeb)
-        btnSpotlightPlayTorrent = findViewById(R.id.btnSpotlightPlayTorrent)
-
-        btnSpotlightPlayWeb.setOnClickListener {
-            val ep = currentlyFocusedEpisode ?: rawEpisodes.firstOrNull()
-            val detail = currentDetail
-            if (ep != null && detail != null) {
-                playEpisode(detail, ep)
-            }
-        }
-
-        btnSpotlightPlayTorrent.setOnClickListener {
-            val ep = currentlyFocusedEpisode ?: rawEpisodes.firstOrNull()
-            if (ep != null) {
-                showTorrentSelectorDialog(ep)
-            }
-        }
 
         recyclerEpisodes.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+
+        isAscendingOrder = com.example.animetv.core.history.UiPreferencesStore.isEpisodesAscending(this)
+        btnSortOrder.text = if (isAscendingOrder) "⇄ Orden: 1 ➔ N" else "⇄ Orden: N ➔ 1"
 
         btnSortOrder.setOnClickListener {
             toggleSortOrder()
@@ -285,44 +263,13 @@ class DetailActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Tracks which episode currently has D-pad focus, so the top WEB/TOR action buttons act on
+     * it. Each episode card is now self-contained (still, title, synopsis) per the redesign, so
+     * there's no separate "spotlight" panel left to populate here.
+     */
     private fun bindFocusedEpisode(ep: AnimeEpisode) {
         currentlyFocusedEpisode = ep
-        if (isCurrentMovie) {
-            // Movies don't need the "S01E01 + title" spotlight panel — it's redundant with the
-            // movie's own title/synopsis already shown above.
-            layoutFocusedEpisodeInfo.visibility = View.GONE
-            return
-        }
-        layoutFocusedEpisodeInfo.visibility = View.VISIBLE
-        val sNum = if (ep.seasonNumber > 0) ep.seasonNumber else 1
-        val eNum = ep.episodeNumber
-        val epCode = String.format(Locale.US, "S%02dE%02d", sNum, eNum)
-
-        txtFocusedEpisodeHeader.text = if (ep.releaseDate.isNotEmpty()) "$epCode  •  ${ep.releaseDate}" else epCode
-        txtFocusedEpisodeTitle.text = ep.title.ifEmpty { "Episodio $eNum" }
-
-        val synopsisText = if (ep.synopsis.isNotEmpty()) {
-            ep.synopsis
-        } else {
-            val showTitle = currentDetail?.title ?: "esta serie"
-            "$epCode de $showTitle.\n(Esta fuente no incluye sinopsis individual para cada capítulo)."
-        }
-        txtFocusedEpisodeSynopsis.text = synopsisText
-
-        if (ep.stillUrl.isNotEmpty()) {
-            frameFocusedStill.visibility = View.VISIBLE
-            Glide.with(this)
-                .load(ep.stillUrl)
-                .centerCrop()
-                .placeholder(R.drawable.bg_card_poster_placeholder)
-                .diskCacheStrategy(DiskCacheStrategy.ALL)
-                .into(imgFocusedEpisodeStill)
-        } else {
-            frameFocusedStill.visibility = View.GONE
-        }
-
-        btnSpotlightPlayWeb.text = "▶  WEB ($epCode)"
-        btnSpotlightPlayTorrent.text = "⚡  TOR ($epCode)"
     }
 
     private fun displayEpisodesForSeason(season: Int) {
@@ -335,23 +282,32 @@ class DetailActivity : AppCompatActivity() {
         val record = currentCard?.let { com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this, it.detailUrl) }
         episodeAdapter?.updateList(sortedList, record = record)
         if (sortedList.isNotEmpty()) {
+            // Prefer keeping the previously focused episode's position (e.g. after a sort
+            // toggle); otherwise land on the last-watched episode for this season, if any.
             val focused = currentlyFocusedEpisode
-            val matching = if (focused != null) {
-                sortedList.firstOrNull { it.episodeUrl == focused.episodeUrl || (it.seasonNumber == focused.seasonNumber && it.episodeNumber == focused.episodeNumber) }
-            } else null
-            bindFocusedEpisode(matching ?: sortedList[0])
+            val focusedIndex = focused?.let { f ->
+                sortedList.indexOfFirst { it.episodeUrl == f.episodeUrl || (it.seasonNumber == f.seasonNumber && it.episodeNumber == f.episodeNumber) }
+            }?.takeIf { it >= 0 }
+            val recordIndex = record?.let { rec ->
+                sortedList.indexOfFirst { it.episodeUrl == rec.episodeUrl || it.episodeNumber == rec.episodeNumber }
+            }?.takeIf { it >= 0 }
+            val resumeIndex = focusedIndex ?: recordIndex ?: 0
+            bindFocusedEpisode(sortedList[resumeIndex])
+            recyclerEpisodes.scrollToPosition(resumeIndex)
+        } else {
+            recyclerEpisodes.scrollToPosition(0)
         }
         txtEpisodesHeader.text = if (rawEpisodes.any { it.seasonNumber > 1 }) {
             "Temporada $season (${sortedList.size} Episodios)"
         } else {
             "Episodios Disponibles (${sortedList.size})"
         }
-        recyclerEpisodes.scrollToPosition(0)
         refreshWatchedButtonState()
     }
 
     private fun toggleSortOrder() {
         isAscendingOrder = !isAscendingOrder
+        com.example.animetv.core.history.UiPreferencesStore.setEpisodesAscending(this, isAscendingOrder)
         btnSortOrder.text = if (isAscendingOrder) "⇄ Orden: 1 ➔ N" else "⇄ Orden: N ➔ 1"
         displayEpisodesForSeason(selectedSeason)
     }
@@ -473,10 +429,34 @@ class DetailActivity : AppCompatActivity() {
     private fun loadDetail(card: AnimeCard) {
         progressBar.visibility = View.VISIBLE
 
-        // Asynchronously fetch TMDB metadata & high-resolution artwork
+        // Fetch the scraper's own detail page once and share it between both consumers below.
+        // `detail.title` (scraped fresh from the actual show page) is authoritative — unlike
+        // `card.title`, which comes from a listing/grid row and can carry a stale or mismatched
+        // alt-text from the source site. Searching TMDB with a wrong card.title was the root
+        // cause of a show's synopsis/poster/torrent search occasionally resolving to a
+        // completely unrelated title (e.g. a Dragon Ball movie's data on One Punch Man's page).
+        val detailDeferred = lifecycleScope.async(Dispatchers.IO) {
+            try {
+                CatalogRepository.getAnimeDetail(card)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                null
+            }
+        }
+
+        // Asynchronously fetch TMDB metadata & high-resolution artwork. When the scraped page
+        // carries an exact TMDB id (from its own JSON-LD), use it directly instead of guessing
+        // from a title — that's what correctly tells apart e.g. One Piece from its live-action
+        // adaptation, or Dragon Ball from Z/GT, which a fuzzy title search can't reliably do.
         lifecycleScope.launch {
             try {
-                val tmdb = TmdbMetadataRepository.searchMetadata(this@DetailActivity, card.title)
+                val detail = detailDeferred.await()
+                val tmdb = if (detail != null && detail.tmdbId > 0 && detail.tmdbMediaType.isNotEmpty()) {
+                    TmdbMetadataRepository.getMetadataByTmdbId(this@DetailActivity, detail.tmdbId, detail.tmdbMediaType)
+                } else {
+                    val titleForTmdb = detail?.title?.takeIf { it.isNotBlank() && it != "Anime" } ?: card.title
+                    TmdbMetadataRepository.searchMetadata(this@DetailActivity, titleForTmdb)
+                }
                 if (tmdb != null) {
                     currentTmdbMeta = tmdb
                     val bestBackdrop = if (tmdb.backdropUrl.isNotEmpty()) tmdb.backdropUrl else tmdb.posterUrl
@@ -504,6 +484,28 @@ class DetailActivity : AppCompatActivity() {
                     if (tmdb.ratingText.isNotEmpty() && !txtMeta.text.contains("★")) {
                         txtMeta.text = "${txtMeta.text}  •  ${tmdb.ratingText}"
                     }
+
+                    val badgeParts = mutableListOf<String>()
+                    if (tmdb.certification.isNotEmpty()) badgeParts.add(tmdb.certification)
+                    if (tmdb.runtimeMinutes > 0) {
+                        val h = tmdb.runtimeMinutes / 60
+                        val m = tmdb.runtimeMinutes % 60
+                        badgeParts.add(if (h > 0) "${h}h ${m}min" else "${m}min")
+                    }
+                    if (tmdb.genres.isNotEmpty()) badgeParts.add(tmdb.genres.take(3).joinToString(", "))
+                    if (badgeParts.isNotEmpty()) {
+                        txtMovieBadges.text = badgeParts.joinToString("  •  ")
+                        txtMovieBadges.visibility = View.VISIBLE
+                    }
+
+                    val creditsParts = mutableListOf<String>()
+                    if (tmdb.director.isNotEmpty()) creditsParts.add("Director: ${tmdb.director}")
+                    if (tmdb.cast.isNotEmpty()) creditsParts.add("Reparto: ${tmdb.cast.joinToString(", ")}")
+                    if (creditsParts.isNotEmpty()) {
+                        txtMovieCredits.text = creditsParts.joinToString("\n")
+                        txtMovieCredits.visibility = View.VISIBLE
+                    }
+
                     enrichEpisodesWithTmdb(tmdb)
                     if (tmdb.trailerUrl.isNotEmpty()) {
                         setupTrailerButton(tmdb.trailerUrl, currentDetail?.title ?: card.title)
@@ -518,7 +520,10 @@ class DetailActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                val detail = CatalogRepository.getAnimeDetail(card)
+                val detail = detailDeferred.await() ?: run {
+                    progressBar.visibility = View.GONE
+                    return@launch
+                }
                 currentDetail = detail
                 rawEpisodes = detail.episodes
                 isCurrentMovie = card.detailUrl.contains("/pelicula/")
@@ -589,21 +594,34 @@ class DetailActivity : AppCompatActivity() {
                         detail.episodes
                     }
                     val sortedList = getSortedEpisodes(initialEpisodes, isAscendingOrder)
+                    val showPoster = CoverUtils.pickBestCover(currentTmdbMeta?.posterUrl ?: detail.posterUrl, card.posterUrl)
                     val adapter = EpisodeAdapter(
                         episodes = sortedList,
                         animeDetailUrl = card.detailUrl,
+                        showPosterUrl = showPoster,
                         lastWatchedRecord = record,
                         onEpisodeFocus = { ep ->
                             bindFocusedEpisode(ep)
                         },
                         onEpisodeClick = { ep ->
                             playEpisode(detail, ep)
+                        },
+                        onEpisodeTorrentClick = { ep ->
+                            showTorrentSelectorDialog(ep)
                         }
                     )
                     episodeAdapter = adapter
                     recyclerEpisodes.adapter = adapter
                     if (sortedList.isNotEmpty()) {
-                        bindFocusedEpisode(sortedList[0])
+                        // Land on the last-watched episode's card (e.g. S08E03) instead of
+                        // always starting the row scrolled to episode 1.
+                        val resumeIndex = record?.let { rec ->
+                            sortedList.indexOfFirst { it.episodeUrl == rec.episodeUrl || it.episodeNumber == rec.episodeNumber }
+                        }?.takeIf { it >= 0 } ?: 0
+                        bindFocusedEpisode(sortedList[resumeIndex])
+                        if (resumeIndex > 0) {
+                            recyclerEpisodes.scrollToPosition(resumeIndex)
+                        }
                     }
 
                     txtEpisodesHeader.text = if (uniqueSeasons.size > 1) {
@@ -790,9 +808,11 @@ class DetailActivity : AppCompatActivity() {
                 val detail = currentDetail
                 if (detail != null) {
                     // Wire up a fresh adapter if the season changes
+                    val showPoster = CoverUtils.pickBestCover(currentTmdbMeta?.posterUrl ?: detail.posterUrl, card.posterUrl)
                     val adapter = EpisodeAdapter(
                         episodes = stubs,
                         animeDetailUrl = card.detailUrl,
+                        showPosterUrl = showPoster,
                         lastWatchedRecord = record,
                         onEpisodeFocus = { ep -> bindFocusedEpisode(ep) },
                         onEpisodeClick = { ep ->
@@ -801,6 +821,9 @@ class DetailActivity : AppCompatActivity() {
                             } else {
                                 playEpisode(detail, ep)
                             }
+                        },
+                        onEpisodeTorrentClick = { ep ->
+                            showTorrentSelectorDialog(ep)
                         }
                     )
                     episodeAdapter = adapter
@@ -1020,7 +1043,11 @@ class DetailActivity : AppCompatActivity() {
         val btnTorrentEpNext = dialogView.findViewById<Button>(R.id.btnTorrentEpNext)
         val btnTorrentEpLast = dialogView.findViewById<Button>(R.id.btnTorrentEpLast)
 
-        val titleDisplay = card.title
+        // Prefer the freshly-scraped detail page title over card.title: the latter comes from a
+        // listing/grid row and can carry stale/mismatched alt-text from the source site, which
+        // was feeding the wrong show's title into both the TMDB re-lookup and the torrent query
+        // below (e.g. Dragon Ball torrents showing up for One Punch Man).
+        val titleDisplay = detail?.title?.takeIf { it.isNotBlank() && it != "Anime" } ?: card.title
 
         btnClose.setOnClickListener { dialog.dismiss() }
 
@@ -1074,7 +1101,11 @@ class DetailActivity : AppCompatActivity() {
                     var imdbId = currentTmdbMeta?.imdbId ?: ""
 
                     if (imdbId.isEmpty()) {
-                        val fastTmdb = TmdbMetadataRepository.searchMetadata(this@DetailActivity, titleDisplay, isMovie = isMovie, isLiveAction = isLiveAction)
+                        val fastTmdb = if (detail != null && detail.tmdbId > 0 && detail.tmdbMediaType.isNotEmpty()) {
+                            TmdbMetadataRepository.getMetadataByTmdbId(this@DetailActivity, detail.tmdbId, detail.tmdbMediaType)
+                        } else {
+                            TmdbMetadataRepository.searchMetadata(this@DetailActivity, titleDisplay, isMovie = isMovie, isLiveAction = isLiveAction)
+                        }
                         if (fastTmdb != null) {
                             currentTmdbMeta = fastTmdb
                             origTitle = fastTmdb.titleOriginal

@@ -1,88 +1,163 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="164dp"
-    android:layout_height="94dp"
-    android:layout_marginEnd="12dp"
-    android:focusable="true"
-    android:focusableInTouchMode="true"
-    android:clickable="true"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="300dp"
+    android:layout_height="wrap_content"
+    android:layout_marginEnd="16dp"
+    android:orientation="vertical"
     android:background="@drawable/bg_favorite_card">
 
-    <!-- Episode Screenshot Still Image (TMDB) -->
-    <ImageView
-        android:id="@+id/imgEpisodeStill"
+    <!-- Episode Screenshot Still Image (16:9) -->
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:scaleType="centerCrop"
-        android:alpha="0.45"
-        android:visibility="gone"
-        android:contentDescription="@null" />
+        android:layout_height="169dp"
+        android:background="@color/surface_layer">
 
-    <!-- Dark Vignette / Gradient Overlay -->
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@drawable/bg_bottom_fader" />
+        <ImageView
+            android:id="@+id/imgEpisodeStill"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:visibility="gone"
+            android:contentDescription="@null" />
 
-    <!-- Watched Checkmark Badge (Top Right) -->
-    <TextView
-        android:id="@+id/txtEpisodeWatchedBadge"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top|end"
-        android:layout_margin="6dp"
-        android:background="@drawable/bg_watched_badge"
-        android:paddingHorizontal="6dp"
-        android:paddingVertical="2dp"
-        android:text="✓ Visto"
-        android:textColor="#00E676"
-        android:textSize="10sp"
-        android:textStyle="bold"
-        android:visibility="gone" />
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:layout_gravity="bottom"
+            android:background="@drawable/bg_bottom_fader" />
+
+        <!-- Watched Checkmark Badge (Top Right) -->
+        <TextView
+            android:id="@+id/txtEpisodeWatchedBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|end"
+            android:layout_margin="8dp"
+            android:background="@drawable/bg_watched_badge"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="2dp"
+            android:text="✓ Visto"
+            android:textColor="#00E676"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
+    </FrameLayout>
 
     <!-- Episode Details Content -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingHorizontal="10dp"
-        android:paddingVertical="8dp"
-        android:gravity="bottom">
+        android:padding="12dp">
 
-        <!-- Season & Episode Tag -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <!-- Season & Episode Tag -->
+            <TextView
+                android:id="@+id/txtEpisodeBadge"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="#FFD54F"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.04"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <!-- Watch State / Progress -->
+            <TextView
+                android:id="@+id/txtEpisodeProgress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#81C784"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+        </LinearLayout>
+
+        <!-- Release Date -->
         <TextView
-            android:id="@+id/txtEpisodeBadge"
+            android:id="@+id/txtEpisodeReleaseDate"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="#FFD54F"
-            android:textSize="11sp"
-            android:textStyle="bold"
-            android:maxLines="1"
-            android:ellipsize="end" />
+            android:layout_marginTop="2dp"
+            android:textColor="@color/secondary_text"
+            android:textSize="10sp"
+            android:visibility="gone" />
 
         <!-- Real Episode Name / Chapter Title -->
         <TextView
             android:id="@+id/txtEpisodeTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp"
+            android:layout_marginTop="3dp"
+            android:textColor="@color/primary_text"
+            android:textSize="14sp"
             android:textStyle="bold"
-            android:maxLines="2"
+            android:maxLines="1"
             android:ellipsize="end" />
 
-        <!-- Watch State / Progress -->
+        <!-- Episode Synopsis (folded in from the old "spotlight" panel) -->
         <TextView
-            android:id="@+id/txtEpisodeProgress"
-            android:layout_width="wrap_content"
+            android:id="@+id/txtEpisodeSynopsis"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:textColor="#81C784"
-            android:textSize="10sp"
-            android:textStyle="bold"
-            android:visibility="gone" />
+            android:layout_marginTop="4dp"
+            android:lineSpacingExtra="2dp"
+            android:textColor="@color/secondary_text"
+            android:textSize="12sp"
+            android:maxLines="3"
+            android:ellipsize="end" />
+
+        <!-- Direct actions for this specific episode -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnEpisodeWeb"
+                android:layout_width="0dp"
+                android:layout_height="34dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_netflix_btn_play"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingHorizontal="0dp"
+                android:text="▶  WEB"
+                android:textColor="@color/color_netflix_btn_play"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/btnEpisodeTorrent"
+                android:layout_width="0dp"
+                android:layout_height="34dp"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_netflix_btn_secondary"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingHorizontal="0dp"
+                android:text="⚡  TOR"
+                android:textColor="#00E5FF"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+        </LinearLayout>
 
     </LinearLayout>
 
-</FrameLayout>
+</LinearLayout>

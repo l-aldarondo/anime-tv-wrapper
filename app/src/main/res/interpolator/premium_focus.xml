@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- cubic-bezier(0.25, 1, 0.5, 1) — the "premium split" focus-motion curve -->
+<pathInterpolator xmlns:android="http://schemas.android.com/apk/res/android"
+    android:controlX1="0.25"
+    android:controlY1="1"
+    android:controlX2="0.5"
+    android:controlY2="1" />

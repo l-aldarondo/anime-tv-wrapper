@@ -9,6 +9,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.example.animetv.R
 import com.example.animetv.core.model.AnimeCard
 import com.example.animetv.core.model.CatalogRow
+import com.example.animetv.core.model.CatalogRowType
 
 class CatalogRowAdapter(
     private val rows: MutableList<CatalogRow>,
@@ -41,12 +42,19 @@ class CatalogRowAdapter(
             .firstOrNull { (key, _) -> row.title.contains(key, ignoreCase = true) }
             ?.value ?: onCardLongClick
 
-        val cardAdapter = AnimeCardAdapter(
-            row.cards.toMutableList(),
-            onCardClick = onCardClick,
-            onCardLongClick = effectiveLongClick
-        )
-        holder.recycler.adapter = cardAdapter
+        holder.recycler.adapter = if (row.type == CatalogRowType.CONTINUE_WATCHING) {
+            ContinueWatchingCardAdapter(
+                row.cards.toMutableList(),
+                onCardClick = onCardClick,
+                onCardLongClick = effectiveLongClick
+            )
+        } else {
+            AnimeCardAdapter(
+                row.cards.toMutableList(),
+                onCardClick = onCardClick,
+                onCardLongClick = effectiveLongClick
+            )
+        }
     }
 
     override fun getItemCount(): Int = rows.size

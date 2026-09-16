@@ -1,10 +1,40 @@
 <resources>
     <style name="Theme.AnimeTV" parent="Theme.AppCompat.NoActionBar">
-        <item name="android:windowBackground">#000000</item>
-        <item name="android:colorBackground">#000000</item>
+        <item name="android:windowBackground">@color/primary_canvas</item>
+        <item name="android:colorBackground">@color/primary_canvas</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowActionBar">false</item>
         <item name="android:windowFullscreen">true</item>
         <item name="android:windowContentOverlay">@null</item>
+    </style>
+
+    <!-- Premium 4K type scale. Weight is approximated with bold/normal since no variable-weight
+         font is bundled — a true 500/600 "medium/semi-bold" would need a custom font family. -->
+    <style name="TextAppearance.HeroTitle" parent="">
+        <item name="android:textSize">@dimen/text_hero_title</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/primary_text</item>
+    </style>
+
+    <style name="TextAppearance.SectionHeader" parent="">
+        <item name="android:textSize">@dimen/text_section_header</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/primary_text</item>
+    </style>
+
+    <style name="TextAppearance.CardTitle" parent="">
+        <item name="android:textSize">@dimen/text_card_title</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/primary_text</item>
+    </style>
+
+    <style name="TextAppearance.MetadataLabel" parent="">
+        <item name="android:textSize">@dimen/text_metadata_label</item>
+        <item name="android:textColor">@color/secondary_text</item>
+    </style>
+
+    <style name="TextAppearance.BodyText" parent="">
+        <item name="android:textSize">@dimen/text_body</item>
+        <item name="android:textColor">@color/secondary_text</item>
     </style>
 </resources>

@@ -13,3 +13,4 @@ build/
 .cxx
 *.apk
 *.aab
+/scratch/

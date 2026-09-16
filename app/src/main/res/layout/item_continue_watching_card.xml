@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="280dp"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="6dp"
+    android:layout_marginEnd="16dp"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:clickable="true"
+    android:background="@drawable/bg_favorite_card">
+
+    <!-- Landscape Still (16:9) with embedded progress bar -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="158dp">
+
+        <ImageView
+            android:id="@+id/imgPoster"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:background="@color/surface_layer"
+            android:contentDescription="@null" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_gravity="bottom"
+            android:background="@drawable/bg_bottom_fader" />
+
+        <!-- Progress Bar, pinned along the bottom edge of the thumbnail -->
+        <ProgressBar
+            android:id="@+id/progressWatched"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:layout_gravity="bottom"
+            android:max="100"
+            android:progress="0"
+            android:minHeight="4dp"
+            android:maxHeight="4dp"
+            android:progressTint="@color/active_accent"
+            android:progressBackgroundTint="#66FFFFFF" />
+
+    </FrameLayout>
+
+    <!-- Title -->
+    <TextView
+        android:id="@+id/txtTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        style="@style/TextAppearance.CardTitle" />
+
+    <!-- Episode / Progress Metadata -->
+    <TextView
+        android:id="@+id/txtBadge"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        style="@style/TextAppearance.MetadataLabel" />
+
+</LinearLayout>

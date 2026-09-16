@@ -220,6 +220,17 @@ class SoloLatinoSource : AnimeSource {
             val trailerId = doc.selectFirst("[data-trailer]")?.attr("data-trailer")?.trim() ?: ""
             val trailerUrl = if (trailerId.isNotEmpty()) "https://www.youtube.com/embed/$trailerId?autoplay=1" else ""
 
+            // The page's own schema.org JSON-LD often links straight to the exact TMDB entry
+            // (e.g. "sameAs":["https://www.themoviedb.org/tv/111110"]). When present, this is a
+            // far more reliable signal than fuzzy title search — it's how a fresh scrape tells
+            // the One Piece anime apart from its live-action adaptation, or Dragon Ball from Z/GT.
+            val tmdbMatch = doc.select("script[type=application/ld+json]")
+                .asSequence()
+                .mapNotNull { Regex("""themoviedb\.org/(tv|movie)/(\d+)""").find(it.data()) }
+                .firstOrNull()
+            val tmdbId = tmdbMatch?.groupValues?.get(2)?.toIntOrNull() ?: 0
+            val tmdbMediaType = tmdbMatch?.groupValues?.get(1) ?: ""
+
             AnimeDetail(
                 title = title,
                 posterUrl = posterUrl,
@@ -228,7 +239,9 @@ class SoloLatinoSource : AnimeSource {
                 source = name,
                 detailUrl = detailUrl,
                 trailerUrl = trailerUrl,
-                episodes = episodes.sortedWith(compareBy({ it.seasonNumber }, { it.episodeNumber }))
+                episodes = episodes.sortedWith(compareBy({ it.seasonNumber }, { it.episodeNumber })),
+                tmdbId = tmdbId,
+                tmdbMediaType = tmdbMediaType
             )
         } catch (e: Exception) {
             e.printStackTrace()

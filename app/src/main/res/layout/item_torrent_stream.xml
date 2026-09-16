@@ -15,7 +15,7 @@
         android:id="@+id/txtTorrentTitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textColor="#FFFFFF"
+        android:textColor="@color/primary_text"
         android:textSize="16sp"
         android:textStyle="bold"
         android:lineSpacingExtra="3dp" />
@@ -79,7 +79,7 @@
             android:paddingHorizontal="10dp"
             android:paddingVertical="4dp"
             android:text="1.4 GB"
-            android:textColor="#B0B3C6"
+            android:textColor="@color/secondary_text"
             android:textSize="13sp" />
 
         <View
@@ -92,7 +92,7 @@
             android:id="@+id/txtBadgeProvider"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="#8F94A6"
+            android:textColor="@color/secondary_text"
             android:textSize="12sp" />
 
     </LinearLayout>

@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#0F0F0F">
+    android:background="@color/primary_canvas">
 
     <!-- Top Persistent Header Bar -->
     <LinearLayout
@@ -13,15 +13,15 @@
         android:layout_height="56dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:background="#141414"
-        android:paddingHorizontal="24dp">
+        android:background="@color/surface_layer"
+        android:paddingHorizontal="@dimen/safe_zone_margin">
 
         <!-- App Logo / Title -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="NuVibe TV"
-            android:textColor="#E50914"
+            android:textColor="@color/active_accent"
             android:textSize="20sp"
             android:textStyle="bold"
             android:letterSpacing="0.08" />
@@ -34,7 +34,7 @@
             android:paddingHorizontal="6dp"
             android:paddingVertical="2dp"
             android:text="NATIVE"
-            android:textColor="#FFFFFF"
+            android:textColor="@color/primary_text"
             android:textSize="9sp"
             android:textStyle="bold" />
 
@@ -51,11 +51,13 @@
             android:background="@drawable/bg_topbar_item"
             android:focusable="true"
             android:focusableInTouchMode="true"
-            android:paddingHorizontal="12dp"
-            android:text="🏠"
-            android:textColor="#FFFFFF"
-            android:textSize="15sp"
-            android:textStyle="bold" />
+            android:paddingHorizontal="10dp"
+            android:text=""
+            android:textColor="@color/primary_text"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end" />
 
         <Button
             android:id="@+id/btnNavSearch"
@@ -65,10 +67,12 @@
             android:background="@drawable/bg_topbar_item"
             android:focusable="true"
             android:focusableInTouchMode="true"
-            android:paddingHorizontal="12dp"
-            android:text="🔍"
-            android:textColor="#F0F0FF"
-            android:textSize="15sp" />
+            android:paddingHorizontal="10dp"
+            android:text=""
+            android:textColor="@color/primary_text"
+            android:textSize="13sp"
+            android:maxLines="1"
+            android:ellipsize="end" />
 
         <Button
             android:id="@+id/btnNavRefresh"
@@ -80,8 +84,10 @@
             android:focusableInTouchMode="true"
             android:paddingHorizontal="12dp"
             android:text="↻"
-            android:textColor="#F0F0FF"
-            android:textSize="15sp" />
+            android:textColor="@color/primary_text"
+            android:textSize="15sp"
+            android:maxLines="1"
+            android:ellipsize="end" />
 
         <Button
             android:id="@+id/btnNavSettings"
@@ -93,8 +99,10 @@
             android:focusableInTouchMode="true"
             android:paddingHorizontal="12dp"
             android:text="⚙"
-            android:textColor="#F0F0FF"
-            android:textSize="15sp" />
+            android:textColor="@color/primary_text"
+            android:textSize="15sp"
+            android:maxLines="1"
+            android:ellipsize="end" />
 
     </LinearLayout>
 
@@ -108,44 +116,60 @@
             android:id="@+id/scrollMain"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:clipChildren="false"
             android:fillViewport="true">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
+                android:clipChildren="false"
                 android:paddingBottom="40dp">
 
-                <!-- Featured Hero Billboard (Netflix / Stremio Top Banner) -->
+                <!-- Featured Hero Billboard (Netflix / Stremio Top Banner). 420dp is roughly a
+                     16:9 crop of the full-bleed width on a typical TV layout viewport — tall
+                     enough to feel cinematic without pushing the catalog rows too far down. -->
                 <FrameLayout
                     android:id="@+id/layoutHeroBanner"
                     android:layout_width="match_parent"
-                    android:layout_height="260dp"
-                    android:background="#151722">
+                    android:layout_height="420dp"
+                    android:background="@color/surface_layer">
 
-                    <!-- Hero Backdrop Image -->
+                    <!-- Hero Backdrop Image at full brightness — legibility comes from the two
+                         targeted gradients below, not a flat dim, so the artwork stays vivid
+                         wherever it isn't directly behind text. -->
                     <ImageView
                         android:id="@+id/imgHeroBackdrop"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
                         android:scaleType="centerCrop"
-                        android:alpha="0.4"
                         android:contentDescription="@null" />
 
-                    <!-- Bottom Gradient Fader -->
-                    <View
+                    <!-- Text-protection mask: solid canvas color on the left ~35%, dissolving to
+                         fully transparent by the right edge, so titles/buttons sit on a clean
+                         dark pocket while the rest of the artwork stays crisp. -->
+                    <com.example.animetv.ui.GradientOverlayView
+                        android:id="@+id/viewHeroTextGradient"
                         android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:background="@drawable/bg_bottom_fader" />
+                        android:layout_height="match_parent" />
 
-                    <!-- Hero Info Container -->
+                    <!-- Row-protection mask: darkens just the bottom edge so the artwork doesn't
+                         clash with the catalog row title sitting directly beneath the banner. -->
+                    <com.example.animetv.ui.GradientOverlayView
+                        android:id="@+id/viewHeroRowGradient"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent" />
+
+                    <!-- Hero Info Container. 48dp horizontal padding matches Android TV's
+                         standard overscan-safe margin so the title/buttons never sit too close
+                         to the screen edge on a real television. -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_gravity="bottom"
                         android:orientation="vertical"
-                        android:paddingHorizontal="24dp"
-                        android:paddingBottom="16dp">
+                        android:paddingHorizontal="@dimen/safe_zone_margin"
+                        android:paddingBottom="28dp">
 
                         <!-- Featured Tag -->
                         <TextView
@@ -156,7 +180,7 @@
                             android:paddingHorizontal="8dp"
                             android:paddingVertical="2dp"
                             android:text="★ DESTACADO DE LA SEMANA"
-                            android:textColor="#FFFFFF"
+                            android:textColor="@color/primary_text"
                             android:textSize="10sp"
                             android:textStyle="bold" />
 
@@ -165,23 +189,36 @@
                             android:id="@+id/txtHeroTitle"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="6dp"
-                            android:textColor="#FFFFFF"
-                            android:textSize="24sp"
-                            android:textStyle="bold"
+                            android:layout_marginTop="10dp"
+                            style="@style/TextAppearance.HeroTitle"
                             android:shadowColor="#000000"
                             android:shadowRadius="10" />
 
-                        <!-- Hero Synopsis -->
+                        <!-- Quick-scan metadata line: year • rating • runtime/seasons — filled in
+                             lazily once TMDB data resolves for whichever title is featured, and
+                             hidden entirely if that lookup comes back empty rather than showing
+                             wrong or partial data. -->
+                        <TextView
+                            android:id="@+id/txtHeroMeta"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            style="@style/TextAppearance.MetadataLabel"
+                            android:shadowColor="#000000"
+                            android:shadowRadius="6"
+                            android:visibility="gone" />
+
+                        <!-- Hero Synopsis. Narrower than before so it stays inside the dark
+                             text-protection pocket instead of running into the brighter artwork. -->
                         <TextView
                             android:id="@+id/txtHeroSynopsis"
-                            android:layout_width="600dp"
+                            android:layout_width="620dp"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:maxLines="2"
+                            android:layout_marginTop="8dp"
+                            android:maxLines="3"
                             android:ellipsize="end"
-                            android:textColor="#D0D3E2"
-                            android:textSize="13sp"
+                            style="@style/TextAppearance.BodyText"
+                            android:lineSpacingExtra="3dp"
                             android:shadowColor="#000000"
                             android:shadowRadius="6" />
 
@@ -189,13 +226,13 @@
                         <LinearLayout
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="12dp"
+                            android:layout_marginTop="18dp"
                             android:orientation="horizontal">
 
                             <Button
                                 android:id="@+id/btnHeroPlay"
                                 android:layout_width="wrap_content"
-                                android:layout_height="40dp"
+                                android:layout_height="44dp"
                                 android:background="@drawable/bg_netflix_btn_play"
                                 android:focusable="true"
                                 android:focusableInTouchMode="true"
@@ -208,14 +245,14 @@
                             <Button
                                 android:id="@+id/btnHeroFavorite"
                                 android:layout_width="wrap_content"
-                                android:layout_height="40dp"
+                                android:layout_height="44dp"
                                 android:layout_marginStart="12dp"
                                 android:background="@drawable/bg_netflix_btn_secondary"
                                 android:focusable="true"
                                 android:focusableInTouchMode="true"
                                 android:paddingHorizontal="16dp"
                                 android:text="⭐  Mi Lista"
-                                android:textColor="#FFFFFF"
+                                android:textColor="@color/primary_text"
                                 android:textSize="13sp"
                                 android:textStyle="bold" />
 
@@ -225,13 +262,17 @@
 
                 </FrameLayout>
 
-                <!-- Vertical RecyclerView for Horizontal Category Rows -->
+                <!-- Vertical RecyclerView for Horizontal Category Rows. clipChildren="false" so a
+                     focused card's scale-up glow (see item_catalog_row.xml) never gets clipped
+                     against this container's own bounds either. -->
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/recyclerCatalogRows"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="16dp"
                     android:nestedScrollingEnabled="false"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
                     android:overScrollMode="never" />
 
             </LinearLayout>
@@ -244,7 +285,7 @@
             android:layout_width="60dp"
             android:layout_height="60dp"
             android:layout_gravity="center"
-            android:indeterminateTint="#E50914"
+            android:indeterminateTint="@color/active_accent"
             android:visibility="gone" />
 
     </FrameLayout>

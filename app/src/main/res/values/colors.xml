@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Premium 4K design-system tokens. No pure black/white: reduces backlight blooming
+         and eye strain on large OLED/QLED TVs viewed from ~10ft. -->
+    <color name="primary_canvas">#0D1117</color>
+    <color name="surface_layer">#161B22</color>
+    <color name="surface_layer_focused">#1C2128</color>
+    <color name="surface_border">#30363D</color>
+    <color name="active_accent">#5842F4</color>
+    <color name="active_accent_soft">#7C6AF7</color>
+    <color name="active_accent_deep">#3D2FA8</color>
+    <color name="primary_text">#F0F6FC</color>
+    <color name="secondary_text">#8B949E</color>
+</resources>

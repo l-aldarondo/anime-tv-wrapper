@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Typography scale, proportioned from the 4K spec's px ratios to sp values legible
+         from a 10-foot couch distance rather than translated literally. -->
+    <dimen name="text_hero_title">40sp</dimen>
+    <dimen name="text_section_header">20sp</dimen>
+    <dimen name="text_card_title">15sp</dimen>
+    <dimen name="text_metadata_label">11sp</dimen>
+    <dimen name="text_body">13sp</dimen>
+
+    <!-- Spacing & shape -->
+    <dimen name="safe_zone_margin">48dp</dimen>
+    <dimen name="card_corner_radius">14dp</dimen>
+    <dimen name="focus_border_width">3dp</dimen>
+</resources>

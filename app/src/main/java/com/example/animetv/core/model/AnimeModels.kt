@@ -14,7 +14,10 @@ data class AnimeCard(
     val source: String,
     val episodeBadge: String = "",
     val rating: String = "",
-    val synopsis: String = ""
+    val synopsis: String = "",
+    // 0-100 watch progress, used by the "Continuar Viendo" row's landscape cards to draw a
+    // progress bar on the thumbnail. Unused (0) for any other row.
+    val progressPercent: Int = 0
 ) : Serializable
 
 /**
@@ -29,15 +32,28 @@ data class AnimeDetail(
     val source: String,
     val detailUrl: String,
     val trailerUrl: String = "",
-    val episodes: List<AnimeEpisode> = emptyList()
+    val episodes: List<AnimeEpisode> = emptyList(),
+    // Exact TMDB id scraped from the page's own JSON-LD ("sameAs" schema.org link), when
+    // present. Lets metadata be fetched by id instead of fuzzy title search, which is what
+    // caused franchise entries with similar names (One Piece vs. its live-action adaptation,
+    // Dragon Ball vs. Z vs. GT, etc.) to occasionally resolve to the wrong title's data.
+    val tmdbId: Int = 0,
+    val tmdbMediaType: String = ""
 ) : Serializable
+
+/**
+ * The three visually distinct Home-screen row treatments: a dense poster grid for browsing the
+ * library, and landscape cards with a progress bar for resuming something already in progress.
+ */
+enum class CatalogRowType { LIBRARY, CONTINUE_WATCHING }
 
 /**
  * Clean data model representing a row of anime cards in the catalog.
  */
 data class CatalogRow(
     val title: String,
-    val cards: List<AnimeCard>
+    val cards: List<AnimeCard>,
+    val type: CatalogRowType = CatalogRowType.LIBRARY
 ) : Serializable
 
 /**

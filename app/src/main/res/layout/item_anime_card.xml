@@ -10,17 +10,17 @@
     android:clickable="true"
     android:background="@drawable/bg_favorite_card">
 
-    <!-- Poster with Badges Container -->
+    <!-- Poster with Badges Container (true 2:3 poster ratio at 160dp width) -->
     <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="220dp">
+        android:layout_height="240dp">
 
         <ImageView
             android:id="@+id/imgPoster"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:scaleType="centerCrop"
-            android:background="#151722"
+            android:background="@color/surface_layer"
             android:contentDescription="@null" />
 
         <!-- Episode / Rating Badge Overlay -->
@@ -33,7 +33,7 @@
             android:background="@drawable/bg_netflix_badge"
             android:paddingHorizontal="6dp"
             android:paddingVertical="2dp"
-            android:textColor="#FFFFFF"
+            android:textColor="@color/primary_text"
             android:textSize="11sp"
             android:textStyle="bold"
             android:visibility="gone" />
@@ -54,16 +54,17 @@
 
     </FrameLayout>
 
-    <!-- Anime Title -->
+    <!-- Anime Title. minLines locks this to always reserve 2 lines' worth of height, even for
+         a short 1-line title, so every card in a row ends up the same total height regardless
+         of title length. -->
     <TextView
         android:id="@+id/txtTitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
+        android:minLines="2"
         android:maxLines="2"
         android:ellipsize="end"
-        android:textColor="#FFFFFF"
-        android:textSize="13sp"
-        android:textStyle="bold" />
+        style="@style/TextAppearance.CardTitle" />
 
 </LinearLayout>

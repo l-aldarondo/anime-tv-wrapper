@@ -1,22 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Focused state on TV remote: Netflix Red with clean white border -->
+    <!-- Focused state on TV remote -->
     <item android:state_focused="true">
         <shape android:shape="rectangle">
-            <solid android:color="#E50914" />
-            <stroke android:width="3dp" android:color="#FFFFFF" />
+            <solid android:color="@color/active_accent" />
+            <stroke android:width="3dp" android:color="@color/primary_text" />
             <corners android:radius="8dp" />
         </shape>
     </item>
     <!-- Pressed state -->
     <item android:state_pressed="true">
         <shape android:shape="rectangle">
-            <solid android:color="#B20710" />
-            <stroke android:width="2dp" android:color="#FFFFFF" />
+            <solid android:color="@color/active_accent_deep" />
+            <stroke android:width="2dp" android:color="@color/primary_text" />
             <corners android:radius="8dp" />
         </shape>
     </item>
-    <!-- Idle state: Classic Netflix White button -->
+    <!-- Idle state: light pill so the CTA still reads as primary even unfocused -->
     <item>
         <shape android:shape="rectangle">
             <solid android:color="#FFFFFF" />

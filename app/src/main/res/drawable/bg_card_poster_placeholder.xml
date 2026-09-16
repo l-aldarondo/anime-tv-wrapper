@@ -7,12 +7,12 @@
     <!-- Dark sleek cinema background -->
     <path
         android:pathData="M0,0h160v240h-160z"
-        android:fillColor="#151722" />
+        android:fillColor="#161B22" />
 
     <!-- Subtle darker contrast frame -->
     <path
         android:pathData="M0,0h160v240h-160z"
-        android:fillColor="#0E1017"
+        android:fillColor="#0D1117"
         android:fillAlpha="0.45" />
 
     <!-- Film clapperboard / play symbol in the center, perfectly proportioned -->

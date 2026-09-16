@@ -16,11 +16,11 @@
             </shape>
         </clip>
     </item>
-    <!-- Watched progress: Netflix Red filling from left to right -->
+    <!-- Watched progress: ACTIVE_ACCENT filling from left to right -->
     <item android:id="@android:id/progress">
         <clip>
             <shape android:shape="rectangle">
-                <solid android:color="#E50914" />
+                <solid android:color="@color/active_accent" />
                 <corners android:radius="4dp" />
             </shape>
         </clip>

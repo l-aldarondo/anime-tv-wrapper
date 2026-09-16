@@ -41,7 +41,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="top|start"
-            android:textColor="#FFFFFF"
+            android:textColor="@color/primary_text"
             android:textSize="20sp"
             android:textStyle="bold"
             android:shadowColor="#000000"
@@ -88,7 +88,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="00:00"
-                    android:textColor="#FFFFFF"
+                    android:textColor="@color/primary_text"
                     android:textSize="14sp" />
 
                 <View
@@ -101,7 +101,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="◄/►: ±10s  •  ▲: Saltar Intro (+85s)  •  OK: Pausa  •  0/↺: Reiniciar"
-                    android:textColor="#B0B3C6"
+                    android:textColor="@color/secondary_text"
                     android:textSize="13sp" />
 
                 <View
@@ -114,7 +114,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="00:00"
-                    android:textColor="#FFFFFF"
+                    android:textColor="@color/primary_text"
                     android:textSize="14sp" />
 
             </LinearLayout>
@@ -129,7 +129,7 @@
         android:layout_width="64dp"
         android:layout_height="64dp"
         android:layout_gravity="center"
-        android:indeterminateTint="#E50914"
+        android:indeterminateTint="@color/active_accent"
         android:visibility="gone" />
 
 </FrameLayout>

@@ -51,8 +51,11 @@ class MainActivity : AppCompatActivity() {
 
     // Hero Billboard Views
     private lateinit var imgHeroBackdrop: ImageView
+    private lateinit var viewHeroTextGradient: com.example.animetv.ui.GradientOverlayView
+    private lateinit var viewHeroRowGradient: com.example.animetv.ui.GradientOverlayView
     private lateinit var txtHeroBadge: TextView
     private lateinit var txtHeroTitle: TextView
+    private lateinit var txtHeroMeta: TextView
     private lateinit var txtHeroSynopsis: TextView
     private lateinit var btnHeroPlay: Button
     private lateinit var btnHeroFavorite: Button
@@ -64,8 +67,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnNavSettings: Button
 
     // Icon-only/focus-reveal-label wrappers around the buttons above (same order as the bar)
-    private lateinit var navCatalog: com.example.animetv.ui.IconRevealButton
-    private lateinit var navSearch: com.example.animetv.ui.IconRevealButton
+    private lateinit var navCatalog: com.example.animetv.ui.IconDrawableRevealButton
+    private lateinit var navSearch: com.example.animetv.ui.IconDrawableRevealButton
     private lateinit var navRefresh: com.example.animetv.ui.IconRevealButton
     private lateinit var navSettings: com.example.animetv.ui.IconRevealButton
 
@@ -76,6 +79,7 @@ class MainActivity : AppCompatActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var heroSuggestions = listOf<AnimeCard>()
     private var heroIndex = 0
+    private var heroMetaJob: kotlinx.coroutines.Job? = null
 
     private val heroRotateRunnable = object : Runnable {
         override fun run() {
@@ -133,8 +137,12 @@ class MainActivity : AppCompatActivity() {
         progressBarHome = findViewById(R.id.progressBarHome)
 
         imgHeroBackdrop = findViewById(R.id.imgHeroBackdrop)
+        viewHeroTextGradient = findViewById(R.id.viewHeroTextGradient)
+        viewHeroRowGradient = findViewById(R.id.viewHeroRowGradient)
+        setupHeroGradients()
         txtHeroBadge = findViewById(R.id.txtHeroBadge)
         txtHeroTitle = findViewById(R.id.txtHeroTitle)
+        txtHeroMeta = findViewById(R.id.txtHeroMeta)
         txtHeroSynopsis = findViewById(R.id.txtHeroSynopsis)
         btnHeroPlay = findViewById(R.id.btnHeroPlay)
         btnHeroFavorite = findViewById(R.id.btnHeroFavorite)
@@ -144,10 +152,43 @@ class MainActivity : AppCompatActivity() {
         btnNavRefresh = findViewById(R.id.btnNavRefresh)
         btnNavSettings = findViewById(R.id.btnNavSettings)
 
-        navCatalog = com.example.animetv.ui.IconRevealButton(btnNavCatalog, "🏠", "Home")
-        navSearch = com.example.animetv.ui.IconRevealButton(btnNavSearch, "🔍", "Buscar")
+        navCatalog = com.example.animetv.ui.IconDrawableRevealButton(btnNavCatalog, R.drawable.ic_home, "Home")
+        navSearch = com.example.animetv.ui.IconDrawableRevealButton(btnNavSearch, R.drawable.ic_search, "Buscar")
         navRefresh = com.example.animetv.ui.IconRevealButton(btnNavRefresh, "↻", "Actualizar")
         navSettings = com.example.animetv.ui.IconRevealButton(btnNavSettings, "⚙", "Ajustes")
+    }
+
+    /**
+     * Configures the hero banner's two targeted gradient overlays. Instead of a flat dim over
+     * the whole backdrop (which looks muddy and hides artwork uniformly), this keeps the image
+     * at full brightness and only darkens: (1) a left-side pocket wide enough for the title/
+     * synopsis/buttons to stay legible, dissolving away by the right edge, and (2) a thin strip
+     * along the bottom so the artwork doesn't clash with the catalog row title beneath it.
+     */
+    private fun setupHeroGradients() {
+        val canvas = androidx.core.content.ContextCompat.getColor(this, R.color.primary_canvas)
+        fun withAlpha(color: Int, alpha: Int): Int = (color and 0x00FFFFFF) or (alpha shl 24)
+
+        viewHeroTextGradient.setGradient(
+            com.example.animetv.ui.GradientOverlayView.Direction.LEFT_TO_RIGHT,
+            intArrayOf(
+                withAlpha(canvas, 255),
+                withAlpha(canvas, 255),
+                withAlpha(canvas, 204),
+                withAlpha(canvas, 0)
+            ),
+            floatArrayOf(0f, 0.35f, 0.55f, 1f)
+        )
+
+        viewHeroRowGradient.setGradient(
+            com.example.animetv.ui.GradientOverlayView.Direction.BOTTOM_TO_TOP,
+            intArrayOf(
+                withAlpha(canvas, 255),
+                withAlpha(canvas, 153),
+                withAlpha(canvas, 0)
+            ),
+            floatArrayOf(0f, 0.25f, 0.6f)
+        )
     }
 
     private fun setupRecyclerView() {
@@ -271,6 +312,7 @@ class MainActivity : AppCompatActivity() {
         txtHeroTitle.text = anime.title
         txtHeroSynopsis.text = anime.synopsis.ifEmpty { "Contenido disponible en SoloLatino en alta definición y audio latino." }
         txtHeroBadge.text = "★ DESTACADO DE LA SEMANA"
+        loadHeroMeta(anime)
 
         val imageToLoad = anime.backdropUrl.ifEmpty { anime.posterUrl }
         if (imageToLoad.isNotEmpty()) {
@@ -297,6 +339,47 @@ class MainActivity : AppCompatActivity() {
         if (!animate) {
             // Give initial TV remote focus to the Hero Play button on first load
             btnHeroPlay.requestFocus()
+        }
+    }
+
+    /**
+     * Quick-scan metadata line (year • rating • runtime/seasons) for the currently featured
+     * hero card. Resolved lazily per-card rather than prefetched for the whole rotation pool,
+     * and the row stays hidden until a confident TMDB match comes back — silently doing nothing
+     * on failure is safer than showing a wrong or franchise-mismatched year/rating.
+     */
+    private fun loadHeroMeta(anime: AnimeCard) {
+        txtHeroMeta.visibility = View.GONE
+        heroMetaJob?.cancel()
+        heroMetaJob = lifecycleScope.launch {
+            val meta = try {
+                com.example.animetv.core.tmdb.TmdbMetadataRepository.searchMetadata(this@MainActivity, anime.title)
+            } catch (e: Exception) {
+                null
+            }
+            if (meta == null || featuredAnime?.detailUrl != anime.detailUrl) return@launch
+
+            val parts = mutableListOf<String>()
+            if (meta.releaseYear.isNotEmpty()) parts.add(meta.releaseYear)
+            if (meta.certification.isNotEmpty()) parts.add(meta.certification)
+            if (meta.mediaType == "movie" && meta.runtimeMinutes > 0) {
+                val h = meta.runtimeMinutes / 60
+                val m = meta.runtimeMinutes % 60
+                parts.add(if (h > 0) "${h}h ${m}min" else "${m}min")
+            } else if (meta.mediaType == "tv" && meta.numberOfSeasons > 0) {
+                parts.add(if (meta.numberOfSeasons == 1) "1 Temporada" else "${meta.numberOfSeasons} Temporadas")
+            }
+
+            if (parts.isNotEmpty()) {
+                txtHeroMeta.text = parts.joinToString("   •   ")
+                txtHeroMeta.visibility = View.VISIBLE
+            }
+            // The scraper's own listing cards never carry a synopsis (only the detail page
+            // does), so the hero always fell back to a generic placeholder line. TMDB's real
+            // overview is now available here from the same lookup — use it once it resolves.
+            if (meta.overview.isNotEmpty()) {
+                txtHeroSynopsis.text = meta.overview
+            }
         }
     }
 
@@ -350,12 +433,19 @@ class MainActivity : AppCompatActivity() {
                     posterUrl = resolvedPoster,
                     detailUrl = cleanDetailUrl,
                     source = rec.source.ifEmpty { "Continuar" },
-                    episodeBadge = badge
+                    episodeBadge = badge,
+                    progressPercent = progressPct
                 )
             }.distinctBy { it.detailUrl }
 
             if (continueCards.isNotEmpty()) {
-                allRows.add(CatalogRow(title = "▶ Continuar Viendo", cards = continueCards))
+                allRows.add(
+                    CatalogRow(
+                        title = "▶ Continuar Viendo",
+                        cards = continueCards,
+                        type = com.example.animetv.core.model.CatalogRowType.CONTINUE_WATCHING
+                    )
+                )
             }
 
             if (missingCovers.isNotEmpty()) {
