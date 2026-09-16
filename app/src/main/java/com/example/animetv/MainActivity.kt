@@ -2,7 +2,9 @@ package com.example.animetv
 
 import android.app.Dialog
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
@@ -23,8 +25,12 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.DataSource
 import com.bumptech.glide.load.engine.DiskCacheStrategy
+import com.bumptech.glide.load.engine.GlideException
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions
+import com.bumptech.glide.request.RequestListener
+import com.bumptech.glide.request.target.Target
 import com.example.animetv.core.CatalogRepository
 import com.example.animetv.core.HomeCatalogData
 import com.example.animetv.core.history.PlaybackHistoryStore
@@ -307,6 +313,47 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val heroFocalCropListener = object : RequestListener<Drawable> {
+        override fun onLoadFailed(
+            e: GlideException?, model: Any?, target: Target<Drawable>, isFirstResource: Boolean
+        ): Boolean = false
+
+        override fun onResourceReady(
+            resource: Drawable, model: Any, target: Target<Drawable>?, dataSource: DataSource, isFirstResource: Boolean
+        ): Boolean {
+            imgHeroBackdrop.post { applyHeroFocalCrop(resource) }
+            return false
+        }
+    }
+
+    /**
+     * Android's centerCrop always anchors on the image's center — same gap as CSS
+     * `object-fit: cover` without `object-position`. Since the hero's text sits on the left
+     * (see the text-protection gradient), centering the crop chops off whatever character art
+     * sits on the right half of a wide backdrop. This replicates the CSS
+     * `object-position: 75% 20%` formula by hand via an ImageView matrix: scale to cover the
+     * view exactly like centerCrop, but bias the crop toward the upper-right instead of the
+     * middle. There's no per-title focal-point data available from TMDB/the scraper, so this is
+     * a fixed default rather than a per-movie value.
+     */
+    private fun applyHeroFocalCrop(drawable: Drawable, focalX: Float = 0.75f, focalY: Float = 0.20f) {
+        val vw = imgHeroBackdrop.width.toFloat()
+        val vh = imgHeroBackdrop.height.toFloat()
+        val bw = drawable.intrinsicWidth.toFloat()
+        val bh = drawable.intrinsicHeight.toFloat()
+        if (vw <= 0f || vh <= 0f || bw <= 0f || bh <= 0f) return
+
+        val scale = maxOf(vw / bw, vh / bh)
+        val dx = (vw - bw * scale) * focalX
+        val dy = (vh - bh * scale) * focalY
+
+        val matrix = Matrix()
+        matrix.setScale(scale, scale)
+        matrix.postTranslate(dx, dy)
+        imgHeroBackdrop.scaleType = ImageView.ScaleType.MATRIX
+        imgHeroBackdrop.imageMatrix = matrix
+    }
+
     private fun bindHero(anime: AnimeCard, animate: Boolean = false) {
         featuredAnime = anime
         txtHeroTitle.text = anime.title
@@ -318,8 +365,9 @@ class MainActivity : AppCompatActivity() {
         if (imageToLoad.isNotEmpty()) {
             val req = Glide.with(this)
                 .load(imageToLoad)
-                .centerCrop()
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
+                .override(Target.SIZE_ORIGINAL)
+                .listener(heroFocalCropListener)
             if (animate) {
                 req.transition(DrawableTransitionOptions.withCrossFade(700))
             }
@@ -379,6 +427,20 @@ class MainActivity : AppCompatActivity() {
             // overview is now available here from the same lookup — use it once it resolves.
             if (meta.overview.isNotEmpty()) {
                 txtHeroSynopsis.text = meta.overview
+            }
+            // The scraper's listing cards only carry a tiny w185 poster thumbnail (~185px wide,
+            // meant for small grid tiles) — stretched across the full-width hero it looks soft.
+            // Swap in TMDB's real w1280 backdrop once it resolves, cross-fading over the
+            // low-res placeholder that's already on screen.
+            val hdBackdrop = meta.backdropUrl.ifEmpty { meta.posterUrl }
+            if (hdBackdrop.isNotEmpty()) {
+                Glide.with(this@MainActivity)
+                    .load(hdBackdrop)
+                    .diskCacheStrategy(DiskCacheStrategy.ALL)
+                    .override(Target.SIZE_ORIGINAL)
+                    .listener(heroFocalCropListener)
+                    .transition(DrawableTransitionOptions.withCrossFade(400))
+                    .into(imgHeroBackdrop)
             }
         }
     }
