@@ -59,9 +59,15 @@ class MainActivity : AppCompatActivity() {
 
     // Top Header Navigation Buttons
     private lateinit var btnNavCatalog: Button
-    private lateinit var btnNavMyList: Button
     private lateinit var btnNavSearch: Button
     private lateinit var btnNavRefresh: Button
+    private lateinit var btnNavSettings: Button
+
+    // Icon-only/focus-reveal-label wrappers around the buttons above (same order as the bar)
+    private lateinit var navCatalog: com.example.animetv.ui.IconRevealButton
+    private lateinit var navSearch: com.example.animetv.ui.IconRevealButton
+    private lateinit var navRefresh: com.example.animetv.ui.IconRevealButton
+    private lateinit var navSettings: com.example.animetv.ui.IconRevealButton
 
     private lateinit var catalogRowAdapter: CatalogRowAdapter
     private var featuredAnime: AnimeCard? = null
@@ -134,9 +140,14 @@ class MainActivity : AppCompatActivity() {
         btnHeroFavorite = findViewById(R.id.btnHeroFavorite)
 
         btnNavCatalog = findViewById(R.id.btnNavCatalog)
-        btnNavMyList = findViewById(R.id.btnNavMyList)
         btnNavSearch = findViewById(R.id.btnNavSearch)
         btnNavRefresh = findViewById(R.id.btnNavRefresh)
+        btnNavSettings = findViewById(R.id.btnNavSettings)
+
+        navCatalog = com.example.animetv.ui.IconRevealButton(btnNavCatalog, "🏠", "Home")
+        navSearch = com.example.animetv.ui.IconRevealButton(btnNavSearch, "🔍", "Buscar")
+        navRefresh = com.example.animetv.ui.IconRevealButton(btnNavRefresh, "↻", "Actualizar")
+        navSettings = com.example.animetv.ui.IconRevealButton(btnNavSettings, "⚙", "Ajustes")
     }
 
     private fun setupRecyclerView() {
@@ -180,18 +191,16 @@ class MainActivity : AppCompatActivity() {
             btnHeroPlay.requestFocus()
         }
 
-        btnNavMyList.setOnClickListener {
-            // Scroll down to catalog rows (Continuar Viendo & Mi Lista)
-            scrollMain.smoothScrollTo(0, 350)
-            recyclerCatalogRows.requestFocus()
-        }
-
         btnNavSearch.setOnClickListener {
             showSearchDialog()
         }
 
         btnNavRefresh.setOnClickListener {
             fetchCatalog(forceRefresh = true, isSilent = false)
+        }
+
+        btnNavSettings.setOnClickListener {
+            com.example.animetv.ui.TorrentSettingsDialog.show(this)
         }
     }
 

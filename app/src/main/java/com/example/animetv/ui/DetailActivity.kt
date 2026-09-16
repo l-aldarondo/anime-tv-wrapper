@@ -4,19 +4,12 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.transition.AutoTransition
-import android.transition.TransitionManager
 import java.util.Locale
 import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
 import android.widget.Button
-import android.widget.CheckBox
-import android.widget.EditText
 import android.widget.ImageView
 import android.widget.ProgressBar
-import android.widget.RadioButton
-import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -45,32 +38,6 @@ import com.example.animetv.ui.adapter.SeasonCapsuleAdapter
 import com.example.animetv.ui.adapter.TorrentItemAdapter
 import kotlinx.coroutines.launch
 
-/**
- * Netflix/Prime-style action button: shows only [icon] at rest and expands to "[icon]  [label]"
- * once the button gains D-pad focus, animating the width change on the parent row. [icon] and
- * [label] can each be updated independently at any time (e.g. to swap the favorite icon between
- * "+"/"✓", or to append an episode code to the WEB button's label) without re-registering focus
- * handling.
- */
-private class IconRevealButton(private val button: Button, icon: String, label: String) {
-    var icon: String = icon
-        set(value) { field = value; render() }
-    var label: String = label
-        set(value) { field = value; render() }
-
-    init {
-        button.setOnFocusChangeListener { _, _ -> render() }
-        render()
-    }
-
-    private fun render() {
-        (button.parent as? ViewGroup)?.let {
-            TransitionManager.beginDelayedTransition(it, AutoTransition().setDuration(150))
-        }
-        button.text = if (button.isFocused) "$icon  $label" else icon
-    }
-}
-
 class DetailActivity : AppCompatActivity() {
 
     companion object {
@@ -92,18 +59,16 @@ class DetailActivity : AppCompatActivity() {
     private lateinit var btnPlayFirst: Button
     private lateinit var btnRestartEpisode: Button
     private lateinit var btnPlayTorrent: Button
-    private lateinit var btnTorrentSettings: Button
     private lateinit var btnTrailer: Button
     private lateinit var btnToggleFavorite: Button
-    private lateinit var btnBack: Button
+    private lateinit var btnToggleWatched: Button
     // Icon-only/focus-reveal-label wrappers around the buttons above (same order as the row)
     private lateinit var actionPlayFirst: IconRevealButton
     private lateinit var actionRestart: IconRevealButton
     private lateinit var actionTorrent: IconRevealButton
     private lateinit var actionTrailer: IconRevealButton
     private lateinit var actionFavorite: IconRevealButton
-    private lateinit var actionSettings: IconRevealButton
-    private lateinit var actionBack: IconRevealButton
+    private lateinit var actionWatched: IconRevealButton
     private lateinit var layoutEpisodesHeaderRow: View
     private lateinit var txtEpisodesHeader: TextView
     private lateinit var btnSortOrder: Button
@@ -148,25 +113,23 @@ class DetailActivity : AppCompatActivity() {
         btnPlayFirst = findViewById(R.id.btnPlayFirst)
         btnRestartEpisode = findViewById(R.id.btnRestartEpisode)
         btnPlayTorrent = findViewById(R.id.btnPlayTorrent)
-        btnTorrentSettings = findViewById(R.id.btnTorrentSettings)
         btnTrailer = findViewById(R.id.btnTrailer)
         btnToggleFavorite = findViewById(R.id.btnToggleFavorite)
-        btnBack = findViewById(R.id.btnBack)
+        btnToggleWatched = findViewById(R.id.btnToggleWatched)
 
         actionPlayFirst = IconRevealButton(btnPlayFirst, "▶", "WEB")
         actionTorrent = IconRevealButton(btnPlayTorrent, "⚡", "TOR")
         actionRestart = IconRevealButton(btnRestartEpisode, "↺", "Reiniciar")
         actionTrailer = IconRevealButton(btnTrailer, "🎬", "Tráiler")
         actionFavorite = IconRevealButton(btnToggleFavorite, "+", "Mi Lista")
-        actionSettings = IconRevealButton(btnTorrentSettings, "⚙", "Ajustes")
-        actionBack = IconRevealButton(btnBack, "↩", "Volver")
+        actionWatched = IconRevealButton(btnToggleWatched, "👁", "Marcar Visto")
 
         btnPlayTorrent.setOnClickListener {
             val ep = currentlyFocusedEpisode ?: rawEpisodes.firstOrNull()
             showTorrentSelectorDialog(ep)
         }
-        btnTorrentSettings.setOnClickListener {
-            showTorrentSettingsDialog()
+        btnToggleWatched.setOnClickListener {
+            toggleWatchedForCurrentSeason()
         }
         layoutEpisodesHeaderRow = findViewById(R.id.layoutEpisodesHeaderRow)
         txtEpisodesHeader = findViewById(R.id.txtEpisodesHeader)
@@ -202,8 +165,6 @@ class DetailActivity : AppCompatActivity() {
         }
 
         recyclerEpisodes.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
-
-        btnBack.setOnClickListener { finish() }
 
         btnSortOrder.setOnClickListener {
             toggleSortOrder()
@@ -386,12 +347,68 @@ class DetailActivity : AppCompatActivity() {
             "Episodios Disponibles (${sortedList.size})"
         }
         recyclerEpisodes.scrollToPosition(0)
+        refreshWatchedButtonState()
     }
 
     private fun toggleSortOrder() {
         isAscendingOrder = !isAscendingOrder
         btnSortOrder.text = if (isAscendingOrder) "⇄ Orden: 1 ➔ N" else "⇄ Orden: N ➔ 1"
         displayEpisodesForSeason(selectedSeason)
+    }
+
+    /** Episodes belonging to [selectedSeason] (or all raw episodes for single-season shows). */
+    private fun currentSeasonEpisodes(): List<AnimeEpisode> {
+        return if (rawEpisodes.any { it.seasonNumber > 1 }) {
+            rawEpisodes.filter { (if (it.seasonNumber > 0) it.seasonNumber else 1) == selectedSeason }
+        } else {
+            rawEpisodes
+        }
+    }
+
+    /**
+     * Updates the 👁 watched-toggle button's label to reflect whether the relevant scope (the
+     * whole movie, or every episode of [selectedSeason] for a show) is already fully watched.
+     */
+    private fun refreshWatchedButtonState() {
+        val card = currentCard ?: return
+        val episodes = if (isCurrentMovie) rawEpisodes else currentSeasonEpisodes()
+        if (episodes.isEmpty()) return
+        val watchedCount = com.example.animetv.core.history.WatchedEpisodeStore.getWatchedCount(this, card.detailUrl, episodes)
+        val allWatched = watchedCount >= episodes.size
+        actionWatched.label = when {
+            isCurrentMovie && allWatched -> "Vista ✓"
+            isCurrentMovie -> "Marcar Vista"
+            allWatched -> "Temporada Vista ✓"
+            else -> "Marcar Vista"
+        }
+    }
+
+    /**
+     * Toggles watched status for the whole movie, or for every episode of the currently selected
+     * season (so a 20-season show can be marked watched one season at a time while newer,
+     * still-unwatched seasons are tracked episode-by-episode as usual via the episode cards).
+     */
+    private fun toggleWatchedForCurrentSeason() {
+        val card = currentCard ?: return
+        val episodes = if (isCurrentMovie) rawEpisodes else currentSeasonEpisodes()
+        if (episodes.isEmpty()) return
+        val watchedCount = com.example.animetv.core.history.WatchedEpisodeStore.getWatchedCount(this, card.detailUrl, episodes)
+        val markAsWatched = watchedCount < episodes.size
+        com.example.animetv.core.history.WatchedEpisodeStore.markSeasonWatched(this, card.detailUrl, episodes, markAsWatched)
+
+        val msg = when {
+            markAsWatched && isCurrentMovie -> "✓ Marcada como vista"
+            markAsWatched -> "✓ Temporada marcada como vista"
+            isCurrentMovie -> "↩ Marcada como no vista"
+            else -> "↩ Temporada marcada como no vista"
+        }
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+
+        if (isCurrentMovie) {
+            refreshWatchedButtonState()
+        } else {
+            displayEpisodesForSeason(selectedSeason)
+        }
     }
 
     private fun bindInitialCard(card: AnimeCard) {
@@ -604,6 +621,7 @@ class DetailActivity : AppCompatActivity() {
                     }
                 }
 
+                refreshWatchedButtonState()
                 currentTmdbMeta?.let { enrichEpisodesWithTmdb(it) }
             } catch (e: Exception) {
                 progressBar.visibility = View.GONE
@@ -1132,7 +1150,7 @@ class DetailActivity : AppCompatActivity() {
         }
 
         btnSettings.setOnClickListener {
-            showTorrentSettingsDialog {
+            TorrentSettingsDialog.show(this@DetailActivity) {
                 searchEpisode(currentEp)
             }
         }
@@ -1233,180 +1251,10 @@ class DetailActivity : AppCompatActivity() {
                 TorrServerClient.openPlayStoreForNova(this)
             }
             .setNeutralButton("⚙ Ajustes Avanzados") { _, _ ->
-                showTorrentSettingsDialog()
+                TorrentSettingsDialog.show(this)
             }
             .setNegativeButton("Cancelar", null)
             .show()
     }
 
-    private fun showTorrentSettingsDialog(onSaved: (() -> Unit)? = null) {
-        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_torrent_settings, null)
-        val editTorrServer = dialogView.findViewById<EditText>(R.id.editTorrServerUrl)
-        val editJackett = dialogView.findViewById<EditText>(R.id.editJackettUrl)
-        val editJackettKey = dialogView.findViewById<EditText>(R.id.editJackettApiKey)
-        val btnCancel = dialogView.findViewById<Button>(R.id.btnCancelTorrentSettings)
-        val btnSave = dialogView.findViewById<Button>(R.id.btnSaveTorrentSettings)
-
-        val rgQuality = dialogView.findViewById<RadioGroup>(R.id.rgQuality)
-        val rbQuality1080p = dialogView.findViewById<RadioButton>(R.id.rbQuality1080p)
-        val rbQuality720p = dialogView.findViewById<RadioButton>(R.id.rbQuality720p)
-        val rbQualityAll = dialogView.findViewById<RadioButton>(R.id.rbQualityAll)
-        val chkAllow4k = dialogView.findViewById<CheckBox>(R.id.chkAllow4k)
-        val txtQualitySummary = dialogView.findViewById<TextView>(R.id.txtQualitySummary)
-
-        val rgLanguage = dialogView.findViewById<RadioGroup>(R.id.rgLanguage)
-        val rbLangSpanish = dialogView.findViewById<RadioButton>(R.id.rbLangSpanish)
-        val rbLangDual = dialogView.findViewById<RadioButton>(R.id.rbLangDual)
-        val rbLangSub = dialogView.findViewById<RadioButton>(R.id.rbLangSub)
-        val rbLangAll = dialogView.findViewById<RadioButton>(R.id.rbLangAll)
-        val txtLanguageSummary = dialogView.findViewById<TextView>(R.id.txtLanguageSummary)
-
-        val rgEpisodeAction = dialogView.findViewById<RadioGroup>(R.id.rgEpisodeAction)
-        val rbActionWeb = dialogView.findViewById<RadioButton>(R.id.rbActionWeb)
-        val rbActionTorrent = dialogView.findViewById<RadioButton>(R.id.rbActionTorrent)
-        val rbActionAsk = dialogView.findViewById<RadioButton>(R.id.rbActionAsk)
-        val txtActionSummary = dialogView.findViewById<TextView>(R.id.txtActionSummary)
-
-        val rgFileSize = dialogView.findViewById<RadioGroup>(R.id.rgFileSize)
-        val rbSizeAll = dialogView.findViewById<RadioButton>(R.id.rbSizeAll)
-        val rbSize15Gb = dialogView.findViewById<RadioButton>(R.id.rbSize15Gb)
-        val rbSize3Gb = dialogView.findViewById<RadioButton>(R.id.rbSize3Gb)
-        val rbSize6Gb = dialogView.findViewById<RadioButton>(R.id.rbSize6Gb)
-        val rbSize12Gb = dialogView.findViewById<RadioButton>(R.id.rbSize12Gb)
-        val txtFileSizeSummary = dialogView.findViewById<TextView>(R.id.txtFileSizeSummary)
-
-        fun updateQualitySummary(id: Int) {
-            txtQualitySummary.text = when (id) {
-                R.id.rbQuality720p -> "✔ Activo: 720p"
-                R.id.rbQualityAll -> "✔ Activo: Cualquiera (HD)"
-                else -> "✔ Activo: 1080p (Óptimo)"
-            }
-        }
-
-        fun updateLanguageSummary(id: Int) {
-            txtLanguageSummary.text = when (id) {
-                R.id.rbLangSpanish -> "✔ Activo: 🇪🇸 Solo Español"
-                R.id.rbLangDual -> "✔ Activo: 🌐 Dual Audio"
-                R.id.rbLangSub -> "✔ Activo: 💬 Sub / Orig"
-                else -> "✔ Activo: 🌍 Todos"
-            }
-        }
-
-        fun updateActionSummary(id: Int) {
-            txtActionSummary.text = when (id) {
-                R.id.rbActionTorrent -> "✔ Activo: ⚡ TOR"
-                R.id.rbActionAsk -> "✔ Activo: ❓ Preguntar"
-                else -> "✔ Activo: ▶ WEB"
-            }
-        }
-
-        fun updateFileSizeSummary(id: Int) {
-            txtFileSizeSummary.text = when (id) {
-                R.id.rbSize15Gb -> "✔ Activo: ≤ 1.5 GB"
-                R.id.rbSize3Gb -> "✔ Activo: ≤ 3 GB"
-                R.id.rbSize6Gb -> "✔ Activo: ≤ 6 GB"
-                R.id.rbSize12Gb -> "✔ Activo: ≤ 12 GB"
-                else -> "✔ Activo: Sin límite"
-            }
-        }
-
-        // Initialize values from store
-        when (TorrentSettingsStore.getQualityFilter(this)) {
-            "720p" -> rgQuality.check(R.id.rbQuality720p)
-            "all" -> rgQuality.check(R.id.rbQualityAll)
-            else -> rgQuality.check(R.id.rbQuality1080p)
-        }
-        chkAllow4k.isChecked = !TorrentSettingsStore.isDisallow4k(this)
-
-        when (TorrentSettingsStore.getLanguageFilter(this)) {
-            "spanish_only" -> rgLanguage.check(R.id.rbLangSpanish)
-            "dual_audio" -> rgLanguage.check(R.id.rbLangDual)
-            "sub_only" -> rgLanguage.check(R.id.rbLangSub)
-            else -> rgLanguage.check(R.id.rbLangAll)
-        }
-
-        when (TorrentSettingsStore.getEpisodeClickAction(this)) {
-            "torrent" -> rgEpisodeAction.check(R.id.rbActionTorrent)
-            "ask" -> rgEpisodeAction.check(R.id.rbActionAsk)
-            else -> rgEpisodeAction.check(R.id.rbActionWeb)
-        }
-
-        val currentMaxSize = TorrentSettingsStore.getMaxFileSizeGb(this)
-        when {
-            currentMaxSize in 1.4f..1.6f -> rgFileSize.check(R.id.rbSize15Gb)
-            currentMaxSize in 2.9f..3.1f -> rgFileSize.check(R.id.rbSize3Gb)
-            currentMaxSize in 5.9f..6.1f -> rgFileSize.check(R.id.rbSize6Gb)
-            currentMaxSize in 11.9f..12.1f -> rgFileSize.check(R.id.rbSize12Gb)
-            else -> rgFileSize.check(R.id.rbSizeAll)
-        }
-
-        updateQualitySummary(rgQuality.checkedRadioButtonId)
-        updateLanguageSummary(rgLanguage.checkedRadioButtonId)
-        updateActionSummary(rgEpisodeAction.checkedRadioButtonId)
-        updateFileSizeSummary(rgFileSize.checkedRadioButtonId)
-
-        rgQuality.setOnCheckedChangeListener { _, id -> updateQualitySummary(id) }
-        rgLanguage.setOnCheckedChangeListener { _, id -> updateLanguageSummary(id) }
-        rgEpisodeAction.setOnCheckedChangeListener { _, id -> updateActionSummary(id) }
-        rgFileSize.setOnCheckedChangeListener { _, id -> updateFileSizeSummary(id) }
-
-        editTorrServer.setText(TorrentSettingsStore.getTorrServerUrl(this))
-        editJackett.setText(TorrentSettingsStore.getJackettUrl(this))
-        editJackettKey.setText(TorrentSettingsStore.getJackettApiKey(this))
-
-        val dialog = AlertDialog.Builder(this)
-            .setView(dialogView)
-            .create()
-
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-
-        btnCancel.setOnClickListener { dialog.dismiss() }
-        btnSave.setOnClickListener {
-            val qualityChoice = when (rgQuality.checkedRadioButtonId) {
-                R.id.rbQuality720p -> "720p"
-                R.id.rbQualityAll -> "all"
-                else -> "1080p"
-            }
-            TorrentSettingsStore.setQualityFilter(this, qualityChoice)
-            TorrentSettingsStore.setDisallow4k(this, !chkAllow4k.isChecked)
-
-            val langChoice = when (rgLanguage.checkedRadioButtonId) {
-                R.id.rbLangSpanish -> "spanish_only"
-                R.id.rbLangDual -> "dual_audio"
-                R.id.rbLangSub -> "sub_only"
-                else -> "all"
-            }
-            TorrentSettingsStore.setLanguageFilter(this, langChoice)
-
-            val actionChoice = when (rgEpisodeAction.checkedRadioButtonId) {
-                R.id.rbActionTorrent -> "torrent"
-                R.id.rbActionAsk -> "ask"
-                else -> "web"
-            }
-            TorrentSettingsStore.setEpisodeClickAction(this, actionChoice)
-
-            val sizeChoice = when (rgFileSize.checkedRadioButtonId) {
-                R.id.rbSize15Gb -> 1.5f
-                R.id.rbSize3Gb -> 3.0f
-                R.id.rbSize6Gb -> 6.0f
-                R.id.rbSize12Gb -> 12.0f
-                else -> 0.0f
-            }
-            TorrentSettingsStore.setMaxFileSizeGb(this, sizeChoice)
-
-            val tsUrl = editTorrServer.text.toString().trim()
-            val jUrl = editJackett.text.toString().trim()
-            val jKey = editJackettKey.text.toString().trim()
-
-            TorrentSettingsStore.setTorrServerUrl(this, tsUrl)
-            TorrentSettingsStore.setJackettUrl(this, jUrl)
-            TorrentSettingsStore.setJackettApiKey(this, jKey)
-
-            Toast.makeText(this, "Ajustes de Torrents guardados", Toast.LENGTH_SHORT).show()
-            dialog.dismiss()
-            onSaved?.invoke()
-        }
-
-        dialog.show()
-    }
 }
