@@ -35,7 +35,9 @@ data class TmdbMetadata(
     val runtimeMinutes: Int = 0,
     val genres: List<String> = emptyList(),
     val certification: String = ""
-)
+) {
+    val bestTitle: String get() = titleSpanish.ifEmpty { titleEnglish }.ifEmpty { titleOriginal }
+}
 
 private data class EnDetails(
     val englishTitle: String,

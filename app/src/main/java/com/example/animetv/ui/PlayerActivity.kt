@@ -58,6 +58,7 @@ class PlayerActivity : AppCompatActivity() {
         const val EXTRA_EPISODE_TITLE = "extra_episode_title"
         const val EXTRA_EPISODE_NUMBER = "extra_episode_number"
         const val EXTRA_START_OVER = "extra_start_over"
+        const val EXTRA_SYNOPSIS = "extra_synopsis"
 
         fun start(
             context: Context,
@@ -73,7 +74,8 @@ class PlayerActivity : AppCompatActivity() {
             episodeUrl: String = "",
             episodeTitle: String = "",
             episodeNumber: Int = 1,
-            startOver: Boolean = false
+            startOver: Boolean = false,
+            synopsis: String = ""
         ) {
             val intent = Intent(context, PlayerActivity::class.java).apply {
                 putExtra(EXTRA_VIDEO_URL, videoUrl)
@@ -89,6 +91,7 @@ class PlayerActivity : AppCompatActivity() {
                 putExtra(EXTRA_EPISODE_TITLE, episodeTitle)
                 putExtra(EXTRA_EPISODE_NUMBER, episodeNumber)
                 putExtra(EXTRA_START_OVER, startOver)
+                putExtra(EXTRA_SYNOPSIS, synopsis)
             }
             context.startActivity(intent)
         }
@@ -113,6 +116,7 @@ class PlayerActivity : AppCompatActivity() {
 
     private var animeDetailUrl: String = ""
     private var animeTitle: String = ""
+    private var synopsis: String = ""
     private var posterUrl: String = ""
     private var sourceName: String = ""
     private var episodeUrl: String = ""
@@ -202,7 +206,8 @@ class PlayerActivity : AppCompatActivity() {
                 episodeTitle = episodeTitle,
                 episodeNumber = episodeNumber,
                 positionMs = posMs,
-                durationMs = durMs
+                durationMs = durMs,
+                synopsis = synopsis
             )
         }
     }
@@ -251,6 +256,8 @@ class PlayerActivity : AppCompatActivity() {
         startOverFromBeginning = intent.getBooleanExtra(EXTRA_START_OVER, false)
 
         animeDetailUrl = intent.getStringExtra(EXTRA_ANIME_URL) ?: ""
+        animeTitle = intent.getStringExtra(EXTRA_ANIME_TITLE) ?: ""
+        synopsis = intent.getStringExtra(EXTRA_SYNOPSIS) ?: ""
         val rawPoster = intent.getStringExtra(EXTRA_POSTER_URL) ?: ""
         posterUrl = if (CoverUtils.isValidCover(rawPoster)) {
             rawPoster.trim()

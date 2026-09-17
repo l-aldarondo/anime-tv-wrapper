@@ -90,6 +90,7 @@
                                 android:background="@drawable/bg_netflix_btn_play"
                                 android:focusable="true"
                                 android:focusableInTouchMode="true"
+                                android:nextFocusDown="@id/recyclerSeasons"
                                 android:paddingHorizontal="18dp"
                                 android:text="▶"
                                 android:textColor="@color/color_netflix_btn_play"
@@ -104,6 +105,7 @@
                                 android:background="@drawable/bg_netflix_btn_secondary"
                                 android:focusable="true"
                                 android:focusableInTouchMode="true"
+                                android:nextFocusDown="@id/recyclerSeasons"
                                 android:paddingHorizontal="18dp"
                                 android:text="⚡"
                                 android:textColor="#00E5FF"
@@ -118,6 +120,7 @@
                                 android:background="@drawable/bg_netflix_btn_secondary"
                                 android:focusable="true"
                                 android:focusableInTouchMode="true"
+                                android:nextFocusDown="@id/recyclerSeasons"
                                 android:paddingHorizontal="16dp"
                                 android:text="↺"
                                 android:textColor="@color/primary_text"
@@ -133,6 +136,7 @@
                                 android:background="@drawable/bg_netflix_btn_secondary"
                                 android:focusable="true"
                                 android:focusableInTouchMode="true"
+                                android:nextFocusDown="@id/recyclerSeasons"
                                 android:paddingHorizontal="14dp"
                                 android:text=""
                                 android:textColor="@color/primary_text"
@@ -147,6 +151,7 @@
                                 android:background="@drawable/bg_netflix_btn_secondary"
                                 android:focusable="true"
                                 android:focusableInTouchMode="true"
+                                android:nextFocusDown="@id/recyclerSeasons"
                                 android:paddingHorizontal="16dp"
                                 android:text="+"
                                 android:textColor="@color/primary_text"
@@ -161,6 +166,7 @@
                                 android:background="@drawable/bg_netflix_btn_secondary"
                                 android:focusable="true"
                                 android:focusableInTouchMode="true"
+                                android:nextFocusDown="@id/recyclerSeasons"
                                 android:paddingHorizontal="14dp"
                                 android:text=""
                                 android:textColor="@color/primary_text"
@@ -234,7 +240,7 @@
                 android:paddingHorizontal="@dimen/safe_zone_margin"
                 android:paddingTop="20dp">
 
-            <!-- Episodes Section Header with Sort and Jump Controls -->
+            <!-- Episodes Section Header with First / Sort / Last Cluster -->
             <LinearLayout
                 android:id="@+id/layoutEpisodesHeaderRow"
                 android:layout_width="match_parent"
@@ -251,47 +257,60 @@
                     android:text="Episodios Disponibles"
                     style="@style/TextAppearance.SectionHeader" />
 
-                <!-- Sort Order Toggle (1 -> N or N -> 1) -->
-                <Button
-                    android:id="@+id/btnSortOrder"
+                <!-- Episode Navigation & Sort Controls: « (First), ⇅ (Sort), » (Last) -->
+                <LinearLayout
                     android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:background="@drawable/bg_topbar_item"
-                    android:focusable="true"
-                    android:focusableInTouchMode="true"
-                    android:paddingHorizontal="12dp"
-                    android:text="⇄ Orden: 1 ➔ N"
-                    android:textColor="@color/primary_text"
-                    android:textSize="12sp"
-                    android:textStyle="bold" />
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
 
-                <!-- Jump to First Episode -->
-                <Button
-                    android:id="@+id/btnJumpStart"
-                    android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:layout_marginStart="8dp"
-                    android:background="@drawable/bg_topbar_item"
-                    android:focusable="true"
-                    android:focusableInTouchMode="true"
-                    android:paddingHorizontal="10dp"
-                    android:text="⏮ Primero"
-                    android:textColor="@color/primary_text"
-                    android:textSize="12sp" />
+                    <!-- Jump to First Episode -->
+                    <Button
+                        android:id="@+id/btnJumpFirst"
+                        android:layout_width="42dp"
+                        android:layout_height="36dp"
+                        android:background="@drawable/bg_topbar_pill"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:text="«"
+                        android:textColor="@color/primary_text"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:gravity="center"
+                        android:padding="0dp" />
 
-                <!-- Jump to Last Episode -->
-                <Button
-                    android:id="@+id/btnJumpEnd"
-                    android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:layout_marginStart="8dp"
-                    android:background="@drawable/bg_topbar_item"
-                    android:focusable="true"
-                    android:focusableInTouchMode="true"
-                    android:paddingHorizontal="10dp"
-                    android:text="⏭ Último"
-                    android:textColor="@color/primary_text"
-                    android:textSize="12sp" />
+                    <!-- Bidirectional Sort Toggle: ⇅ 1 ➔ N / ⇅ N ➔ 1 -->
+                    <Button
+                        android:id="@+id/btnSortOrder"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/bg_topbar_pill"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:paddingHorizontal="14dp"
+                        android:text="⇅ 1 ➔ N"
+                        android:textColor="@color/primary_text"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <!-- Jump to Last Episode -->
+                    <Button
+                        android:id="@+id/btnJumpLast"
+                        android:layout_width="42dp"
+                        android:layout_height="36dp"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/bg_topbar_pill"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:text="»"
+                        android:textColor="@color/primary_text"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:gravity="center"
+                        android:padding="0dp" />
+
+                </LinearLayout>
 
             </LinearLayout>
 
@@ -306,10 +325,11 @@
                 android:clipToPadding="false"
                 android:paddingVertical="12dp"
                 android:overScrollMode="never"
+                android:nextFocusUp="@id/btnPlayFirst"
+                android:nextFocusDown="@id/recyclerEpisodes"
                 android:visibility="gone" />
 
-            <!-- clipChildren="false" + vertical padding so a focused episode card's 110%
-                 scale-up glow renders fully instead of being cut off against the row bounds. -->
+            <!-- Episodes list -->
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/recyclerEpisodes"
                 android:layout_width="match_parent"
@@ -318,7 +338,8 @@
                 android:clipChildren="false"
                 android:clipToPadding="false"
                 android:paddingVertical="16dp"
-                android:overScrollMode="never" />
+                android:overScrollMode="never"
+                android:nextFocusUp="@id/recyclerSeasons" />
 
             </LinearLayout>
 

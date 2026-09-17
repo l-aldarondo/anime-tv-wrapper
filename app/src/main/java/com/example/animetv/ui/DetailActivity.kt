@@ -76,9 +76,9 @@ class DetailActivity : AppCompatActivity() {
     private lateinit var actionWatched: IconDrawableRevealButton
     private lateinit var layoutEpisodesHeaderRow: View
     private lateinit var txtEpisodesHeader: TextView
+    private lateinit var btnJumpFirst: Button
     private lateinit var btnSortOrder: Button
-    private lateinit var btnJumpStart: Button
-    private lateinit var btnJumpEnd: Button
+    private lateinit var btnJumpLast: Button
     private lateinit var recyclerSeasons: RecyclerView
     private lateinit var recyclerEpisodes: RecyclerView
     private lateinit var progressBar: ProgressBar
@@ -130,13 +130,13 @@ class DetailActivity : AppCompatActivity() {
             showTorrentSelectorDialog(ep)
         }
         btnToggleWatched.setOnClickListener {
-            toggleWatchedForCurrentSeason()
+            toggleWatchedShow()
         }
         layoutEpisodesHeaderRow = findViewById(R.id.layoutEpisodesHeaderRow)
         txtEpisodesHeader = findViewById(R.id.txtEpisodesHeader)
+        btnJumpFirst = findViewById(R.id.btnJumpFirst)
         btnSortOrder = findViewById(R.id.btnSortOrder)
-        btnJumpStart = findViewById(R.id.btnJumpStart)
-        btnJumpEnd = findViewById(R.id.btnJumpEnd)
+        btnJumpLast = findViewById(R.id.btnJumpLast)
         recyclerSeasons = findViewById(R.id.recyclerSeasons)
         recyclerSeasons.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         recyclerEpisodes = findViewById(R.id.recyclerEpisodes)
@@ -145,23 +145,30 @@ class DetailActivity : AppCompatActivity() {
         recyclerEpisodes.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
 
         isAscendingOrder = com.example.animetv.core.history.UiPreferencesStore.isEpisodesAscending(this)
-        btnSortOrder.text = if (isAscendingOrder) "⇄ Orden: 1 ➔ N" else "⇄ Orden: N ➔ 1"
+        btnSortOrder.text = if (isAscendingOrder) "⇅ 1 ➔ N" else "⇅ N ➔ 1"
+
+        btnJumpFirst.setOnClickListener {
+            val count = episodeAdapter?.itemCount ?: 0
+            if (count > 0) {
+                recyclerEpisodes.smoothScrollToPosition(0)
+                recyclerEpisodes.postDelayed({
+                    recyclerEpisodes.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus()
+                }, 150)
+            }
+        }
 
         btnSortOrder.setOnClickListener {
             toggleSortOrder()
         }
 
-        btnJumpStart.setOnClickListener {
+        btnJumpLast.setOnClickListener {
             val count = episodeAdapter?.itemCount ?: 0
             if (count > 0) {
-                recyclerEpisodes.smoothScrollToPosition(0)
-            }
-        }
-
-        btnJumpEnd.setOnClickListener {
-            val count = episodeAdapter?.itemCount ?: 0
-            if (count > 0) {
-                recyclerEpisodes.smoothScrollToPosition(count - 1)
+                val lastPos = count - 1
+                recyclerEpisodes.smoothScrollToPosition(lastPos)
+                recyclerEpisodes.postDelayed({
+                    recyclerEpisodes.findViewHolderForAdapterPosition(lastPos)?.itemView?.requestFocus()
+                }, 150)
             }
         }
 
@@ -193,26 +200,28 @@ class DetailActivity : AppCompatActivity() {
         val canvas = androidx.core.content.ContextCompat.getColor(this, R.color.primary_canvas)
         fun withAlpha(color: Int, alpha: Int): Int = (color and 0x00FFFFFF) or (alpha shl 24)
 
+        // Soft, airy left-to-right gradient: preserves image brightness and vivid colors across
+        // the backdrop while keeping text legible via drop-shadows (matching Nuvio).
         viewDetailTextGradient.setGradient(
             com.example.animetv.ui.GradientOverlayView.Direction.LEFT_TO_RIGHT,
             intArrayOf(
-                withAlpha(canvas, 255),
-                withAlpha(canvas, 255),
-                withAlpha(canvas, 204),
+                withAlpha(canvas, 180),
+                withAlpha(canvas, 110),
+                withAlpha(canvas, 20),
                 withAlpha(canvas, 0)
             ),
-            floatArrayOf(0f, 0.35f, 0.55f, 1f)
+            floatArrayOf(0f, 0.25f, 0.42f, 0.58f)
         )
 
+        // Minimal bottom fade: only dissolves the very bottom edge into the canvas color before the episode list
         viewDetailBottomGradient.setGradient(
             com.example.animetv.ui.GradientOverlayView.Direction.BOTTOM_TO_TOP,
             intArrayOf(
                 withAlpha(canvas, 255),
-                withAlpha(canvas, 235),
-                withAlpha(canvas, 120),
+                withAlpha(canvas, 90),
                 withAlpha(canvas, 0)
             ),
-            floatArrayOf(0f, 0.22f, 0.5f, 1f)
+            floatArrayOf(0f, 0.08f, 0.22f)
         )
     }
 
@@ -308,17 +317,24 @@ class DetailActivity : AppCompatActivity() {
     }
 
     private fun displayEpisodesForSeason(season: Int) {
-        val seasonEpisodes = if (rawEpisodes.any { it.seasonNumber > 1 }) {
+        val hasMultiInRaw = rawEpisodes.any { it.seasonNumber > 1 }
+        val seasonEpisodes = if (hasMultiInRaw) {
             rawEpisodes.filter { (if (it.seasonNumber > 0) it.seasonNumber else 1) == season }
-        } else {
+        } else if (season == 1) {
             rawEpisodes
+        } else {
+            emptyList()
         }
+
+        if (seasonEpisodes.isEmpty() && currentTmdbMeta != null && currentCard != null) {
+            loadTmdbStubsForSeason(currentTmdbMeta!!, currentCard!!, season)
+            return
+        }
+
         val sortedList = getSortedEpisodes(seasonEpisodes, isAscendingOrder)
         val record = currentCard?.let { com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this, it.detailUrl) }
         episodeAdapter?.updateList(sortedList, record = record)
         if (sortedList.isNotEmpty()) {
-            // Prefer keeping the previously focused episode's position (e.g. after a sort
-            // toggle); otherwise land on the last-watched episode for this season, if any.
             val focused = currentlyFocusedEpisode
             val focusedIndex = focused?.let { f ->
                 sortedList.indexOfFirst { it.episodeUrl == f.episodeUrl || (it.seasonNumber == f.seasonNumber && it.episodeNumber == f.episodeNumber) }
@@ -329,17 +345,11 @@ class DetailActivity : AppCompatActivity() {
             val resumeIndex = focusedIndex ?: recordIndex ?: 0
             bindFocusedEpisode(sortedList[resumeIndex])
             recyclerEpisodes.scrollToPosition(resumeIndex)
-            // scrollToPosition only scrolls — it never moves D-pad focus off whatever still has
-            // it (e.g. the season capsule just pressed), so without this the remote keeps acting
-            // on stale focus from the previous season instead of the new episode list.
-            recyclerEpisodes.post {
-                val holder = recyclerEpisodes.findViewHolderForAdapterPosition(resumeIndex) as? EpisodeAdapter.ViewHolder
-                holder?.btnWeb?.requestFocus()
-            }
+            // Leave focus on whichever view already holds it (e.g. season capsule)
         } else {
             recyclerEpisodes.scrollToPosition(0)
         }
-        txtEpisodesHeader.text = if (rawEpisodes.any { it.seasonNumber > 1 }) {
+        txtEpisodesHeader.text = if (hasMultiInRaw || (seasonAdapter?.itemCount ?: 0) > 1) {
             "Temporada $season (${sortedList.size} Episodios)"
         } else {
             "Episodios Disponibles (${sortedList.size})"
@@ -350,63 +360,37 @@ class DetailActivity : AppCompatActivity() {
     private fun toggleSortOrder() {
         isAscendingOrder = !isAscendingOrder
         com.example.animetv.core.history.UiPreferencesStore.setEpisodesAscending(this, isAscendingOrder)
-        btnSortOrder.text = if (isAscendingOrder) "⇄ Orden: 1 ➔ N" else "⇄ Orden: N ➔ 1"
+        btnSortOrder.text = if (isAscendingOrder) "⇅ 1 ➔ N" else "⇅ N ➔ 1"
         displayEpisodesForSeason(selectedSeason)
     }
 
-    /** Episodes belonging to [selectedSeason] (or all raw episodes for single-season shows). */
-    private fun currentSeasonEpisodes(): List<AnimeEpisode> {
-        return if (rawEpisodes.any { it.seasonNumber > 1 }) {
-            rawEpisodes.filter { (if (it.seasonNumber > 0) it.seasonNumber else 1) == selectedSeason }
-        } else {
-            rawEpisodes
-        }
-    }
-
     /**
-     * Updates the 👁 watched-toggle button's label to reflect whether the relevant scope (the
-     * whole movie, or every episode of [selectedSeason] for a show) is already fully watched.
+     * Updates the 👁 watched-toggle button's label to reflect whether the whole show is watched.
      */
     private fun refreshWatchedButtonState() {
         val card = currentCard ?: return
-        val episodes = if (isCurrentMovie) rawEpisodes else currentSeasonEpisodes()
-        if (episodes.isEmpty()) return
-        val watchedCount = com.example.animetv.core.history.WatchedEpisodeStore.getWatchedCount(this, card.detailUrl, episodes)
-        val allWatched = watchedCount >= episodes.size
-        actionWatched.label = when {
-            isCurrentMovie && allWatched -> "Vista ✓"
-            isCurrentMovie -> "Marcar Vista"
-            allWatched -> "Temporada Vista ✓"
-            else -> "Marcar Vista"
-        }
+        val isFully = com.example.animetv.core.history.WatchedEpisodeStore.isAnimeFullyWatched(this, card.detailUrl)
+        actionWatched.label = if (isFully) "Vista ✓" else "Marcar Vista"
     }
 
     /**
-     * Toggles watched status for the whole movie, or for every episode of the currently selected
-     * season (so a 20-season show can be marked watched one season at a time while newer,
-     * still-unwatched seasons are tracked episode-by-episode as usual via the episode cards).
+     * Toggles watched status for the entire show (all seasons and episodes), matching Stremio/Nuvio.
      */
-    private fun toggleWatchedForCurrentSeason() {
+    private fun toggleWatchedShow() {
         val card = currentCard ?: return
-        val episodes = if (isCurrentMovie) rawEpisodes else currentSeasonEpisodes()
-        if (episodes.isEmpty()) return
-        val watchedCount = com.example.animetv.core.history.WatchedEpisodeStore.getWatchedCount(this, card.detailUrl, episodes)
-        val markAsWatched = watchedCount < episodes.size
-        com.example.animetv.core.history.WatchedEpisodeStore.markSeasonWatched(this, card.detailUrl, episodes, markAsWatched)
+        val isFullyWatched = com.example.animetv.core.history.WatchedEpisodeStore.isAnimeFullyWatched(this, card.detailUrl)
+        val target = !isFullyWatched
+        com.example.animetv.core.history.WatchedEpisodeStore.setAnimeFullyWatched(this, card.detailUrl, rawEpisodes, target)
 
-        val msg = when {
-            markAsWatched && isCurrentMovie -> "✓ Marcada como vista"
-            markAsWatched -> "✓ Temporada marcada como vista"
-            isCurrentMovie -> "↩ Marcada como no vista"
-            else -> "↩ Temporada marcada como no vista"
+        val msg = if (target) {
+            if (isCurrentMovie) "✓ Película marcada como vista" else "✓ Serie completa marcada como vista"
+        } else {
+            if (isCurrentMovie) "↩ Película marcada como no vista" else "↩ Serie marcada como no vista"
         }
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 
-        if (isCurrentMovie) {
-            refreshWatchedButtonState()
-        } else {
-            displayEpisodesForSeason(selectedSeason)
-        }
+        refreshWatchedButtonState()
+        episodeAdapter?.notifyDataSetChanged()
     }
 
     private fun bindInitialCard(card: AnimeCard) {
@@ -537,39 +521,47 @@ class DetailActivity : AppCompatActivity() {
                         txtMovieCredits.visibility = View.VISIBLE
                     }
 
-                    enrichEpisodesWithTmdb(tmdb)
-                    if (tmdb.trailerUrl.isNotEmpty()) {
-                        setupTrailerButton(tmdb.trailerUrl, currentDetail?.title ?: card.title)
-                    }
-                    // Apply TMDB-derived season capsules universally
-                    applyTmdbSeasonCapsules(tmdb, card)
+                val bestTitle = tmdb.bestTitle.takeIf { it.isNotBlank() && !it.equals("Anime", ignoreCase = true) }
+                if (!bestTitle.isNullOrBlank() && (txtTitle.text.toString().equals("Anime", ignoreCase = true) || txtTitle.text.toString().isBlank())) {
+                    txtTitle.text = bestTitle
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
+                enrichEpisodesWithTmdb(tmdb)
+                if (tmdb.trailerUrl.isNotEmpty()) {
+                    setupTrailerButton(tmdb.trailerUrl, bestTitle ?: currentDetail?.title ?: card.title)
+                }
+                // Apply TMDB-derived season capsules universally
+                applyTmdbSeasonCapsules(tmdb, card)
             }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
+    }
 
-        lifecycleScope.launch {
-            try {
-                val detail = detailDeferred.await() ?: run {
-                    progressBar.visibility = View.GONE
-                    return@launch
-                }
-                currentDetail = detail
-                rawEpisodes = detail.episodes
-                isCurrentMovie = card.detailUrl.contains("/pelicula/")
+    lifecycleScope.launch {
+        try {
+            val detail = detailDeferred.await() ?: run {
                 progressBar.visibility = View.GONE
+                return@launch
+            }
+            currentDetail = detail
+            rawEpisodes = detail.episodes
+            isCurrentMovie = card.detailUrl.contains("/pelicula/")
+            progressBar.visibility = View.GONE
 
-                val bestPoster = CoverUtils.pickBestCover(currentTmdbMeta?.posterUrl ?: detail.posterUrl, card.posterUrl)
-                if (bestPoster.isNotEmpty() && (currentTmdbMeta == null || currentTmdbMeta?.posterUrl.isNullOrEmpty())) {
-                    Glide.with(this@DetailActivity)
-                        .load(bestPoster)
-                        .centerCrop()
-                        .diskCacheStrategy(DiskCacheStrategy.ALL)
-                        .into(imgBackdrop)
-                }
+            val bestPoster = CoverUtils.pickBestCover(currentTmdbMeta?.posterUrl ?: detail.posterUrl, card.posterUrl)
+            if (bestPoster.isNotEmpty() && (currentTmdbMeta == null || currentTmdbMeta?.posterUrl.isNullOrEmpty())) {
+                Glide.with(this@DetailActivity)
+                    .load(bestPoster)
+                    .centerCrop()
+                    .diskCacheStrategy(DiskCacheStrategy.ALL)
+                    .into(imgBackdrop)
+            }
 
-                txtTitle.text = detail.title
+            val resolvedTitle = detail.title.takeIf { it.isNotBlank() && !it.equals("Anime", ignoreCase = true) }
+                ?: currentTmdbMeta?.bestTitle?.takeIf { it.isNotBlank() && !it.equals("Anime", ignoreCase = true) }
+                ?: card.title.takeIf { it.isNotBlank() && !it.equals("Anime", ignoreCase = true) }
+                ?: detail.title
+            txtTitle.text = resolvedTitle
                 // TMDB's genre/year/rating line (built in the parallel TMDB lookup above) is more
                 // complete than what the scraper alone provides — only fall back to the scraper's
                 // own genres here if that lookup hasn't resolved yet or came up empty.
@@ -636,6 +628,9 @@ class DetailActivity : AppCompatActivity() {
                         },
                         onEpisodeTorrentClick = { ep ->
                             showTorrentSelectorDialog(ep)
+                        },
+                        onWatchedChanged = {
+                            refreshWatchedButtonState()
                         }
                     )
                     episodeAdapter = adapter
@@ -852,6 +847,9 @@ class DetailActivity : AppCompatActivity() {
                         },
                         onEpisodeTorrentClick = { ep ->
                             showTorrentSelectorDialog(ep)
+                        },
+                        onWatchedChanged = {
+                            refreshWatchedButtonState()
                         }
                     )
                     episodeAdapter = adapter
@@ -892,7 +890,8 @@ class DetailActivity : AppCompatActivity() {
                         episodeUrl = episode.episodeUrl,
                         episodeTitle = episode.title,
                         episodeNumber = episode.episodeNumber,
-                        startOver = startOver
+                        startOver = startOver,
+                        synopsis = detail.synopsis
                     )
                 } else {
                     // Fallback to clean embedded player, NEVER raw HTML in ExoPlayer
@@ -910,7 +909,8 @@ class DetailActivity : AppCompatActivity() {
                         episodeUrl = episode.episodeUrl,
                         episodeTitle = episode.title,
                         episodeNumber = episode.episodeNumber,
-                        startOver = startOver
+                        startOver = startOver,
+                        synopsis = detail.synopsis
                     )
                 }
             } catch (e: Exception) {
@@ -936,6 +936,13 @@ class DetailActivity : AppCompatActivity() {
         progressBar.visibility = View.VISIBLE
         lifecycleScope.launch {
             val bestPoster = CoverUtils.pickBestCover(currentDetail?.posterUrl, currentCard?.posterUrl)
+            val resolvedShowTitle = when {
+                currentDetail?.title?.isNotEmpty() == true && currentDetail!!.title != "Película Completa" -> currentDetail!!.title
+                currentCard?.title?.isNotEmpty() == true && currentCard!!.title != "Película Completa" -> currentCard!!.title
+                title.isNotEmpty() && title != "Película Completa" -> title
+                else -> "Película"
+            }
+            val resolvedSynopsis = currentDetail?.synopsis?.ifEmpty { currentCard?.synopsis ?: "" } ?: ""
             try {
                 val sourceName = currentCard?.source ?: currentDetail?.source ?: ""
                 val stream = if (sourceName.isNotEmpty()) {
@@ -946,17 +953,18 @@ class DetailActivity : AppCompatActivity() {
                     PlayerActivity.start(
                         this@DetailActivity,
                         videoUrl = stream.videoUrl,
-                        title = title,
+                        title = resolvedShowTitle,
                         isHls = stream.isHls,
                         isEmbed = stream.isEmbed,
                         referer = stream.headers["Referer"] ?: "",
                         animeDetailUrl = currentCard?.detailUrl ?: url,
-                        animeTitle = currentCard?.title ?: title,
+                        animeTitle = resolvedShowTitle,
                         posterUrl = bestPoster,
                         source = sourceName,
                         episodeUrl = url,
-                        episodeTitle = title,
-                        episodeNumber = 1
+                        episodeTitle = "Película",
+                        episodeNumber = 1,
+                        synopsis = resolvedSynopsis
                     )
                     return@launch
                 }
@@ -967,17 +975,18 @@ class DetailActivity : AppCompatActivity() {
             PlayerActivity.start(
                 this@DetailActivity,
                 videoUrl = url,
-                title = title,
+                title = resolvedShowTitle,
                 isHls = false,
                 isEmbed = true,
                 referer = "",
                 animeDetailUrl = currentCard?.detailUrl ?: url,
-                animeTitle = currentCard?.title ?: title,
+                animeTitle = resolvedShowTitle,
                 posterUrl = bestPoster,
                 source = currentCard?.source ?: "",
                 episodeUrl = url,
-                episodeTitle = title,
-                episodeNumber = 1
+                episodeTitle = "Película",
+                episodeNumber = 1,
+                synopsis = resolvedSynopsis
             )
         }
     }

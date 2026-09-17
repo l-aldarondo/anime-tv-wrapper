@@ -14,3 +14,5 @@ build/
 *.apk
 *.aab
 /scratch/
+*.png
+remote.ps1

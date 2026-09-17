@@ -9,6 +9,192 @@
     <!-- Scrollable Main View: large reactive hero on top, all catalog rows scroll continuously
          beneath it — matching the real Nuvio/Stremio home layout (verified against actual
          reference screenshots), not the earlier one-row-at-a-time "board" experiment. -->
+    <!-- Fixed Hero: ~42% screen height (270dp) pinned at the top.
+         Art sits to the right, protected by left and bottom gradients.
+         Reflects whichever card currently has D-pad focus in the rows below.
+         Stays fixed at all times while catalog rows scroll beneath it. -->
+    <FrameLayout
+        android:id="@+id/layoutHeroBanner"
+        android:layout_width="match_parent"
+        android:layout_height="270dp"
+        android:background="@color/surface_layer">
+
+        <ImageView
+            android:id="@+id/imgHeroBackdrop"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:contentDescription="@null" />
+
+        <!-- Left-to-right gradient: ensures title, metadata, and synopsis are crisp
+             over any backdrop while letting the artwork shine on the right -->
+        <com.example.animetv.ui.GradientOverlayView
+            android:id="@+id/viewHeroLeftGradient"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <!-- Bottom gradient: dissolves hero smoothly into canvas color -->
+        <com.example.animetv.ui.GradientOverlayView
+            android:id="@+id/viewHeroBottomGradient"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <!-- Floating pill nav bar, overlaid on the hero image -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="@dimen/safe_zone_margin"
+            android:paddingTop="14dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="NuVibe TV"
+                android:textColor="@color/primary_text"
+                android:textSize="17sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.06"
+                android:shadowColor="#000000"
+                android:shadowRadius="8" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <Button
+                android:id="@+id/btnNavCatalog"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:background="@drawable/bg_topbar_pill"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:paddingHorizontal="12dp"
+                android:text=""
+                android:textColor="@color/primary_text"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <Button
+                android:id="@+id/btnNavMyList"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_topbar_pill"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:paddingHorizontal="12dp"
+                android:text=""
+                android:textColor="@color/primary_text"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <Button
+                android:id="@+id/btnNavSearch"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_topbar_pill"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:paddingHorizontal="12dp"
+                android:text=""
+                android:textColor="@color/primary_text"
+                android:textSize="12sp"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <Button
+                android:id="@+id/btnNavRefresh"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_topbar_pill"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:paddingHorizontal="12dp"
+                android:text="↻"
+                android:textColor="@color/primary_text"
+                android:textSize="14sp"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <Button
+                android:id="@+id/btnNavSettings"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_topbar_pill"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:paddingHorizontal="12dp"
+                android:text="⚙"
+                android:textColor="@color/primary_text"
+                android:textSize="14sp"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+        </LinearLayout>
+
+        <!-- Hero Info Container (Title, Metadata, Synopsis) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:orientation="vertical"
+            android:paddingHorizontal="@dimen/safe_zone_margin"
+            android:paddingBottom="12dp">
+
+            <TextView
+                android:id="@+id/txtHeroTitle"
+                android:layout_width="600dp"
+                android:layout_height="wrap_content"
+                android:textColor="@color/primary_text"
+                android:textSize="24sp"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:shadowColor="#000000"
+                android:shadowRadius="10" />
+
+            <!-- Quick-scan metadata line: year • rating • genres/seasons -->
+            <TextView
+                android:id="@+id/txtHeroMeta"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textColor="#FFD54F"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:shadowColor="#000000"
+                android:shadowRadius="6"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/txtHeroSynopsis"
+                android:layout_width="560dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:maxLines="2"
+                android:ellipsize="end"
+                android:textColor="#C5C8D4"
+                android:textSize="11sp"
+                android:lineSpacingExtra="2dp"
+                android:shadowColor="#000000"
+                android:shadowRadius="6" />
+
+        </LinearLayout>
+
+    </FrameLayout>
+
+    <!-- Scrollable Catalog Rows: occupies remaining screen height below fixed hero -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -22,234 +208,13 @@
             android:fillViewport="true">
 
             <LinearLayout
+                android:id="@+id/layoutCatalogRows"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:clipChildren="false"
-                android:paddingBottom="40dp">
-
-                <!-- Hero: full-bleed backdrop with only a bottom gradient (no separate dark
-                     side-panel) — title/metadata/synopsis sit directly over the image, and the
-                     nav bar floats over the top of it as pill buttons instead of a solid bar
-                     above it. Reflects whichever card currently has D-pad focus in the rows
-                     below; a large size (620dp) matches Nuvio's roughly 55-60%-of-screen hero. -->
-                <FrameLayout
-                    android:id="@+id/layoutHeroBanner"
-                    android:layout_width="match_parent"
-                    android:layout_height="620dp"
-                    android:background="@color/surface_layer">
-
-                    <ImageView
-                        android:id="@+id/imgHeroBackdrop"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:scaleType="centerCrop"
-                        android:contentDescription="@null" />
-
-                    <!-- Bottom gradient only: dissolves the artwork into the canvas color at the
-                         very bottom so the title block and the row title beneath the hero don't
-                         clash with the art, without dimming the rest of the image. -->
-                    <com.example.animetv.ui.GradientOverlayView
-                        android:id="@+id/viewHeroBottomGradient"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent" />
-
-                    <!-- Floating pill nav bar, overlaid on the hero image (transparent, no solid
-                         background bar) — logo on the left, action pills on the right. -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="top"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:paddingHorizontal="@dimen/safe_zone_margin"
-                        android:paddingTop="20dp">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="NuVibe TV"
-                            android:textColor="@color/primary_text"
-                            android:textSize="18sp"
-                            android:textStyle="bold"
-                            android:letterSpacing="0.06"
-                            android:shadowColor="#000000"
-                            android:shadowRadius="8" />
-
-                        <View
-                            android:layout_width="0dp"
-                            android:layout_height="1dp"
-                            android:layout_weight="1" />
-
-                        <Button
-                            android:id="@+id/btnNavCatalog"
-                            android:layout_width="wrap_content"
-                            android:layout_height="40dp"
-                            android:background="@drawable/bg_topbar_pill"
-                            android:focusable="true"
-                            android:focusableInTouchMode="true"
-                            android:paddingHorizontal="12dp"
-                            android:text=""
-                            android:textColor="@color/primary_text"
-                            android:textSize="13sp"
-                            android:textStyle="bold"
-                            android:maxLines="1"
-                            android:ellipsize="end" />
-
-                        <Button
-                            android:id="@+id/btnNavSearch"
-                            android:layout_width="wrap_content"
-                            android:layout_height="40dp"
-                            android:layout_marginStart="8dp"
-                            android:background="@drawable/bg_topbar_pill"
-                            android:focusable="true"
-                            android:focusableInTouchMode="true"
-                            android:paddingHorizontal="12dp"
-                            android:text=""
-                            android:textColor="@color/primary_text"
-                            android:textSize="13sp"
-                            android:maxLines="1"
-                            android:ellipsize="end" />
-
-                        <Button
-                            android:id="@+id/btnNavRefresh"
-                            android:layout_width="wrap_content"
-                            android:layout_height="40dp"
-                            android:layout_marginStart="8dp"
-                            android:background="@drawable/bg_topbar_pill"
-                            android:focusable="true"
-                            android:focusableInTouchMode="true"
-                            android:paddingHorizontal="14dp"
-                            android:text="↻"
-                            android:textColor="@color/primary_text"
-                            android:textSize="15sp"
-                            android:maxLines="1"
-                            android:ellipsize="end" />
-
-                        <Button
-                            android:id="@+id/btnNavSettings"
-                            android:layout_width="wrap_content"
-                            android:layout_height="40dp"
-                            android:layout_marginStart="8dp"
-                            android:background="@drawable/bg_topbar_pill"
-                            android:focusable="true"
-                            android:focusableInTouchMode="true"
-                            android:paddingHorizontal="14dp"
-                            android:text="⚙"
-                            android:textColor="@color/primary_text"
-                            android:textSize="15sp"
-                            android:maxLines="1"
-                            android:ellipsize="end" />
-
-                    </LinearLayout>
-
-                    <!-- Hero Info Container -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="bottom"
-                        android:orientation="vertical"
-                        android:paddingHorizontal="@dimen/safe_zone_margin"
-                        android:paddingBottom="28dp">
-
-                        <TextView
-                            android:id="@+id/txtHeroBadge"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:background="@drawable/bg_netflix_badge"
-                            android:paddingHorizontal="8dp"
-                            android:paddingVertical="2dp"
-                            android:text="★ DESTACADO DE LA SEMANA"
-                            android:textColor="@color/primary_text"
-                            android:textSize="10sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:id="@+id/txtHeroTitle"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="10dp"
-                            style="@style/TextAppearance.HeroTitle"
-                            android:shadowColor="#000000"
-                            android:shadowRadius="10" />
-
-                        <!-- Quick-scan metadata line: year • rating • runtime/seasons — filled in
-                             lazily once TMDB data resolves for whichever title is focused, and
-                             hidden entirely if that lookup comes back empty rather than showing
-                             wrong or partial data. -->
-                        <TextView
-                            android:id="@+id/txtHeroMeta"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="6dp"
-                            style="@style/TextAppearance.MetadataLabel"
-                            android:shadowColor="#000000"
-                            android:shadowRadius="6"
-                            android:visibility="gone" />
-
-                        <TextView
-                            android:id="@+id/txtHeroSynopsis"
-                            android:layout_width="720dp"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:maxLines="3"
-                            android:ellipsize="end"
-                            style="@style/TextAppearance.BodyText"
-                            android:lineSpacingExtra="3dp"
-                            android:shadowColor="#000000"
-                            android:shadowRadius="6" />
-
-                        <LinearLayout
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="16dp"
-                            android:orientation="horizontal">
-
-                            <Button
-                                android:id="@+id/btnHeroPlay"
-                                android:layout_width="wrap_content"
-                                android:layout_height="44dp"
-                                android:background="@drawable/bg_netflix_btn_play"
-                                android:focusable="true"
-                                android:focusableInTouchMode="true"
-                                android:paddingHorizontal="20dp"
-                                android:text="▶  Ver Ahora"
-                                android:textColor="@color/color_netflix_btn_play"
-                                android:textSize="13sp"
-                                android:textStyle="bold" />
-
-                            <Button
-                                android:id="@+id/btnHeroFavorite"
-                                android:layout_width="wrap_content"
-                                android:layout_height="44dp"
-                                android:layout_marginStart="12dp"
-                                android:background="@drawable/bg_netflix_btn_secondary"
-                                android:focusable="true"
-                                android:focusableInTouchMode="true"
-                                android:paddingHorizontal="16dp"
-                                android:text="⭐  Mi Lista"
-                                android:textColor="@color/primary_text"
-                                android:textSize="13sp"
-                                android:textStyle="bold" />
-
-                        </LinearLayout>
-
-                    </LinearLayout>
-
-                </FrameLayout>
-
-                <!-- Catalog rows: populated in code with one child per row (title + horizontal
-                     RecyclerView), scrolling continuously with the rest of the page instead of
-                     being paged one at a time. -->
-                <LinearLayout
-                    android:id="@+id/layoutCatalogRows"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:clipChildren="false"
-                    android:layout_marginTop="20dp" />
-
-            </LinearLayout>
+                android:paddingTop="10dp"
+                android:paddingBottom="40dp" />
 
         </androidx.core.widget.NestedScrollView>
 

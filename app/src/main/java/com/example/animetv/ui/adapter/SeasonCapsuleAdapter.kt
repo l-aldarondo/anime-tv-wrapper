@@ -25,8 +25,11 @@ class SeasonCapsuleAdapter(
 
     fun setSelected(season: Int) {
         if (selectedSeason != season) {
+            val oldPos = seasons.indexOf(selectedSeason)
             selectedSeason = season
-            notifyDataSetChanged()
+            val newPos = seasons.indexOf(selectedSeason)
+            if (oldPos >= 0) notifyItemChanged(oldPos)
+            if (newPos >= 0) notifyItemChanged(newPos)
         }
     }
 
@@ -43,15 +46,24 @@ class SeasonCapsuleAdapter(
         val isCurrentSelected = (s == selectedSeason)
         if (isCurrentSelected) {
             holder.txtSeasonName.setBackgroundResource(R.drawable.bg_season_capsule_selected)
-            holder.txtSeasonName.setTextColor(0xFFFFFFFF.toInt())
+            holder.txtSeasonName.setTextColor(0xFF101216.toInt()) // Crisp dark text on white pill
         } else {
             holder.txtSeasonName.setBackgroundResource(R.drawable.bg_season_capsule_unselected)
-            holder.txtSeasonName.setTextColor(0xFFB0B3C0.toInt())
+            holder.txtSeasonName.setTextColor(0xFFB0B5C5.toInt())
         }
 
+        // Auto-select on focus (Stremio style: browse seasons smoothly without needing to click)
         holder.itemView.setOnFocusChangeListener { view, hasFocus ->
             if (hasFocus) {
                 view.animate().scaleX(1.08f).scaleY(1.08f).translationZ(6f).setDuration(150).start()
+                if (selectedSeason != s) {
+                    val oldPos = seasons.indexOf(selectedSeason)
+                    selectedSeason = s
+                    if (oldPos >= 0) notifyItemChanged(oldPos)
+                    holder.txtSeasonName.setBackgroundResource(R.drawable.bg_season_capsule_selected)
+                    holder.txtSeasonName.setTextColor(0xFF101216.toInt())
+                    onSeasonSelected(s)
+                }
             } else {
                 view.animate().scaleX(1.0f).scaleY(1.0f).translationZ(0f).setDuration(150).start()
             }
@@ -59,8 +71,10 @@ class SeasonCapsuleAdapter(
 
         holder.itemView.setOnClickListener {
             if (selectedSeason != s) {
+                val oldPos = seasons.indexOf(selectedSeason)
                 selectedSeason = s
-                notifyDataSetChanged()
+                if (oldPos >= 0) notifyItemChanged(oldPos)
+                notifyItemChanged(position)
                 onSeasonSelected(s)
             }
         }

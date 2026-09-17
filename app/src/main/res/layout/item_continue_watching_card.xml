@@ -1,68 +1,112 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="230dp"
-    android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:padding="6dp"
+<!-- Nuvio / Stremio unified Continue Watching card: full-bleed 16:9 still image with gradient overlay
+     and all info (badge, title, subtitle, progress) overlaid directly within the image.
+     CardView with 12dp radius strictly clips both the screenshot still and the gradient. -->
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="220dp"
+    android:layout_height="124dp"
     android:layout_marginEnd="14dp"
     android:focusable="true"
     android:focusableInTouchMode="true"
     android:clickable="true"
-    android:background="@drawable/bg_favorite_card">
+    app:cardCornerRadius="12dp"
+    app:cardElevation="0dp"
+    app:cardPreventCornerOverlap="false"
+    app:cardBackgroundColor="#1A1C24">
 
-    <!-- Landscape Still (16:9) with embedded progress bar -->
     <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="130dp">
+        android:layout_height="match_parent">
 
+        <!-- Full-bleed Still / Screenshot (16:9) -->
         <ImageView
             android:id="@+id/imgPoster"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:scaleType="centerCrop"
-            android:background="@color/surface_layer"
+            android:background="#151720"
             android:contentDescription="@null" />
 
+        <!-- Dark Gradient Overlay for Crisp Text Contrast -->
         <View
             android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:layout_gravity="bottom"
-            android:background="@drawable/bg_bottom_fader" />
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_gradient_episode_card" />
 
-        <!-- Progress Bar, pinned along the bottom edge of the thumbnail -->
+        <!-- Top Right: Time Left / Episode Pill Badge (e.g. "Película • 35%", "Ep 1 • 45%", "Ep 1") -->
+        <TextView
+            android:id="@+id/txtBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|end"
+            android:layout_margin="8dp"
+            android:background="@drawable/bg_badge_pill"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="3dp"
+            android:textColor="#FFFFFF"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.02" />
+
+        <!-- Bottom Content Overlay: Show Title & Subtitle overlaid inside the image -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:orientation="vertical"
+            android:paddingHorizontal="10dp"
+            android:paddingBottom="10dp">
+
+            <!-- Show / Movie Title -->
+            <TextView
+                android:id="@+id/txtTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:shadowColor="#000000"
+                android:shadowRadius="6" />
+
+            <!-- Episode Subtitle (if available) -->
+            <TextView
+                android:id="@+id/txtSubtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textColor="#B0B3C0"
+                android:textSize="10sp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:shadowColor="#000000"
+                android:shadowRadius="4"
+                android:visibility="gone" />
+
+        </LinearLayout>
+
+        <!-- Progress Bar along bottom edge -->
         <ProgressBar
             android:id="@+id/progressWatched"
             style="?android:attr/progressBarStyleHorizontal"
             android:layout_width="match_parent"
-            android:layout_height="4dp"
+            android:layout_height="3dp"
             android:layout_gravity="bottom"
             android:max="100"
             android:progress="0"
-            android:minHeight="4dp"
-            android:maxHeight="4dp"
+            android:minHeight="3dp"
+            android:maxHeight="3dp"
             android:progressTint="@color/active_accent"
-            android:progressBackgroundTint="#66FFFFFF" />
+            android:progressBackgroundTint="#33FFFFFF" />
+
+        <!-- Focus border overlay: perfectly matches the 12dp CardView contour -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_card_focus_border" />
 
     </FrameLayout>
 
-    <!-- Title -->
-    <TextView
-        android:id="@+id/txtTitle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:maxLines="1"
-        android:ellipsize="end"
-        style="@style/TextAppearance.CardTitle" />
-
-    <!-- Episode / Progress Metadata -->
-    <TextView
-        android:id="@+id/txtBadge"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="2dp"
-        android:maxLines="1"
-        android:ellipsize="end"
-        style="@style/TextAppearance.MetadataLabel" />
-
-</LinearLayout>
+</androidx.cardview.widget.CardView>

@@ -121,7 +121,13 @@ class GogoAnimeSource : AnimeSource {
             val html = fetchHtml(detailUrl)
             val doc = Jsoup.parse(html, detailUrl)
 
-            val title = doc.selectFirst("h1, .entry-title, .title")?.text()?.trim() ?: "Anime"
+            var title = doc.selectFirst("h1, .entry-title")?.text()?.trim() ?: ""
+            if (title.isBlank() || title.equals("Anime", ignoreCase = true)) {
+                title = doc.selectFirst("meta[property=og:title]")?.attr("content")?.trim() ?: ""
+            }
+            if (title.isBlank() || title.equals("Anime", ignoreCase = true)) {
+                title = detailUrl.trimEnd('/').substringAfterLast('/').replace('-', ' ').replace('_', ' ')
+            }
             val rawSynopsis = doc.selectFirst(".content-txt, .description, .anime_info_body_bg p")?.text()?.trim()
                 ?.ifEmpty { null }
                 ?: doc.selectFirst("meta[property=og:description], meta[name=description]")?.attr("content")?.trim()

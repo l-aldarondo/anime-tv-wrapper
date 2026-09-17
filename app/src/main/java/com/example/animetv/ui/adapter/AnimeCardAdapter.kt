@@ -22,7 +22,7 @@ class AnimeCardAdapter(
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val poster: ImageView = view.findViewById(R.id.imgPoster)
-        val title: TextView = view.findViewById(R.id.txtTitle)
+        val title: TextView? = view.findViewById(R.id.txtTitle)
         val source: TextView = view.findViewById(R.id.txtSource)
         val badge: TextView = view.findViewById(R.id.txtBadge)
     }
@@ -35,7 +35,7 @@ class AnimeCardAdapter(
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val item = items[position]
-        holder.title.text = item.title
+        holder.title?.text = item.title
         holder.source.text = item.source
 
         if (item.episodeBadge.isNotEmpty()) {

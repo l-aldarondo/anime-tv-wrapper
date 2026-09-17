@@ -144,7 +144,16 @@ class SoloLatinoSource : AnimeSource {
             val html = fetchHtml(detailUrl)
             val doc = Jsoup.parse(html, detailUrl)
 
-            val title = doc.selectFirst("h1, .entry-title, .title")?.text()?.trim() ?: "Anime"
+            var title = doc.selectFirst("h1, .entry-title")?.text()?.trim() ?: ""
+            if (title.isBlank() || title.equals("Anime", ignoreCase = true) || title.equals("Pelicula", ignoreCase = true) || title.equals("Serie", ignoreCase = true)) {
+                title = doc.selectFirst("meta[property=og:title]")?.attr("content")?.trim() ?: ""
+            }
+            if (title.isBlank() || title.equals("Anime", ignoreCase = true)) {
+                title = doc.title().replace(Regex("""(?i)(sololatino|ver online|pelicula|serie|-|\|).*"""), "").trim()
+            }
+            if (title.isBlank() || title.equals("Anime", ignoreCase = true)) {
+                title = detailUrl.trimEnd('/').substringAfterLast('/').replace('-', ' ').replace('_', ' ')
+            }
             val rawSynopsis = doc.selectFirst(".overview, .sinopsis, .entry-content p, .film-description, .description")?.text()?.trim()
                 ?.ifEmpty { null }
                 ?: doc.selectFirst("meta[property=og:description], meta[name=description]")?.attr("content")?.trim()
@@ -355,16 +364,16 @@ class SoloLatinoSource : AnimeSource {
             .trim()
 
         return when {
-            t.contains("Películas", ignoreCase = true) || t.contains("Pelicula", ignoreCase = true) -> "🎬 Películas Recientes"
-            t.contains("Series", ignoreCase = true) -> "📺 Series Recientes"
-            t.contains("Añadidos", ignoreCase = true) || t.contains("Recien", ignoreCase = true) -> "✨ Recién Añadidos"
-            t.equals("Netflix", ignoreCase = true) || t.contains("Netflix", ignoreCase = true) -> "🔴 Netflix"
-            t.contains("Prime", ignoreCase = true) -> "📦 Amazon Prime Video"
-            t.contains("Disney", ignoreCase = true) -> "🏰 Disney+"
-            t.contains("Apple", ignoreCase = true) -> "🍏 Apple TV+"
-            t.contains("Tokyo Mx", ignoreCase = true) -> "🗼 Tokyo MX"
-            t.contains("Tv Tokyo", ignoreCase = true) -> "🗼 TV Tokyo"
-            t.contains("Tokyo", ignoreCase = true) -> "🗼 $t"
+            t.contains("Películas", ignoreCase = true) || t.contains("Pelicula", ignoreCase = true) -> "Películas Recientes"
+            t.contains("Series", ignoreCase = true) -> "Series Recientes"
+            t.contains("Añadidos", ignoreCase = true) || t.contains("Recien", ignoreCase = true) -> "Recién Añadidos"
+            t.equals("Netflix", ignoreCase = true) || t.contains("Netflix", ignoreCase = true) -> "Netflix"
+            t.contains("Prime", ignoreCase = true) -> "Amazon Prime Video"
+            t.contains("Disney", ignoreCase = true) -> "Disney+"
+            t.contains("Apple", ignoreCase = true) -> "Apple TV+"
+            t.contains("Tokyo Mx", ignoreCase = true) -> "Tokyo MX"
+            t.contains("Tv Tokyo", ignoreCase = true) -> "TV Tokyo"
+            t.contains("Tokyo", ignoreCase = true) -> t.replace("🗼", "").trim()
             else -> t
         }
     }

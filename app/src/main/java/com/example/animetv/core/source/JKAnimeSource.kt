@@ -141,8 +141,19 @@ class JKAnimeSource : AnimeSource {
 
             val html = fetchHtml(seriesUrl)
             val doc = Jsoup.parse(html, seriesUrl)
-
-            val title = doc.selectFirst(".anime__details__title h3, h1, .title")?.text()?.trim() ?: "Anime"
+            var title = doc.selectFirst(".anime__details__title h3, h1:not(.logo), .entry-title")?.text()?.trim()
+                ?: doc.selectFirst("meta[property=og:title]")?.attr("content")?.trim()
+                ?: ""
+            if (title.isBlank() || title.equals("Anime", ignoreCase = true)) {
+                val candidate = doc.selectFirst(".title")?.text()?.trim() ?: ""
+                title = if (!candidate.equals("Anime", ignoreCase = true) && candidate.isNotBlank()) candidate else ""
+            }
+            if (title.isBlank() || title.equals("Anime", ignoreCase = true)) {
+                title = doc.title().replace(Regex("""(?i)(ver anime online|jkanime|online|sub español|hd|-|\|).*"""), "").trim()
+            }
+            if (title.isBlank() || title.equals("Anime", ignoreCase = true)) {
+                title = seriesUrl.trimEnd('/').substringAfterLast('/').replace('-', ' ').replace('_', ' ')
+            }
             val rawSynopsis = doc.selectFirst(".anime__details__text p, .sinopsis, .description")?.text()?.trim()
                 ?.ifEmpty { null }
                 ?: doc.selectFirst("meta[property=og:description], meta[name=description]")?.attr("content")?.trim()

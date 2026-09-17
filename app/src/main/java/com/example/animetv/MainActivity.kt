@@ -58,25 +58,25 @@ class MainActivity : AppCompatActivity() {
 
     // Info Panel Views
     private lateinit var imgHeroBackdrop: ImageView
+    private lateinit var viewHeroLeftGradient: com.example.animetv.ui.GradientOverlayView
     private lateinit var viewHeroBottomGradient: com.example.animetv.ui.GradientOverlayView
-    private lateinit var txtHeroBadge: TextView
     private lateinit var txtHeroTitle: TextView
     private lateinit var txtHeroMeta: TextView
     private lateinit var txtHeroSynopsis: TextView
-    private lateinit var btnHeroPlay: Button
-    private lateinit var btnHeroFavorite: Button
 
     // Top Header Navigation Buttons
     private lateinit var btnNavCatalog: Button
+    private lateinit var btnNavMyList: Button
     private lateinit var btnNavSearch: Button
     private lateinit var btnNavRefresh: Button
     private lateinit var btnNavSettings: Button
 
     // Icon-only/focus-reveal-label wrappers around the buttons above (same order as the bar)
     private lateinit var navCatalog: com.example.animetv.ui.IconDrawableRevealButton
+    private lateinit var navMyList: com.example.animetv.ui.IconDrawableRevealButton
     private lateinit var navSearch: com.example.animetv.ui.IconDrawableRevealButton
-    private lateinit var navRefresh: com.example.animetv.ui.IconRevealButton
-    private lateinit var navSettings: com.example.animetv.ui.IconRevealButton
+    private lateinit var navRefresh: com.example.animetv.ui.IconDrawableRevealButton
+    private lateinit var navSettings: com.example.animetv.ui.IconDrawableRevealButton
 
     private var lastLoadedCatalog: HomeCatalogData? = null
 
@@ -104,7 +104,6 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         // Refresh Continuar Viendo & Mi Lista rows dynamically
         refreshRowsWithFavorites()
-        currentFocusedCard?.let { updateHeroFavoriteButton(it) }
     }
 
     private fun initViews() {
@@ -113,44 +112,55 @@ class MainActivity : AppCompatActivity() {
         progressBarHome = findViewById(R.id.progressBarHome)
 
         imgHeroBackdrop = findViewById(R.id.imgHeroBackdrop)
+        viewHeroLeftGradient = findViewById(R.id.viewHeroLeftGradient)
         viewHeroBottomGradient = findViewById(R.id.viewHeroBottomGradient)
         setupHeroGradients()
-        txtHeroBadge = findViewById(R.id.txtHeroBadge)
         txtHeroTitle = findViewById(R.id.txtHeroTitle)
         txtHeroMeta = findViewById(R.id.txtHeroMeta)
         txtHeroSynopsis = findViewById(R.id.txtHeroSynopsis)
-        btnHeroPlay = findViewById(R.id.btnHeroPlay)
-        btnHeroFavorite = findViewById(R.id.btnHeroFavorite)
 
         btnNavCatalog = findViewById(R.id.btnNavCatalog)
+        btnNavMyList = findViewById(R.id.btnNavMyList)
         btnNavSearch = findViewById(R.id.btnNavSearch)
         btnNavRefresh = findViewById(R.id.btnNavRefresh)
         btnNavSettings = findViewById(R.id.btnNavSettings)
 
         navCatalog = com.example.animetv.ui.IconDrawableRevealButton(btnNavCatalog, R.drawable.ic_home, "Home")
+        navMyList = com.example.animetv.ui.IconDrawableRevealButton(btnNavMyList, R.drawable.ic_star, "Mi Lista")
         navSearch = com.example.animetv.ui.IconDrawableRevealButton(btnNavSearch, R.drawable.ic_search, "Buscar")
-        navRefresh = com.example.animetv.ui.IconRevealButton(btnNavRefresh, "↻", "Actualizar")
-        navSettings = com.example.animetv.ui.IconRevealButton(btnNavSettings, "⚙", "Ajustes")
+        navRefresh = com.example.animetv.ui.IconDrawableRevealButton(btnNavRefresh, R.drawable.ic_refresh, "Actualizar")
+        navSettings = com.example.animetv.ui.IconDrawableRevealButton(btnNavSettings, R.drawable.ic_settings, "Ajustes")
     }
 
     /**
-     * Configures the hero's single gradient overlay: a bottom-only fade into the canvas color so
-     * the title block (and the row list beneath the hero) never clash with the artwork, without
-     * dimming the rest of the image the way a flat scrim would.
+     * Configures the hero's two gradient overlays:
+     * 1. Left-to-right fade so title, metadata, and synopsis are crisp over the backdrop art,
+     *    fading out quickly before the right side so artwork is 100% bright and vibrant (Nuvio style).
+     * 2. Low bottom fade that cleanly transitions into the rows without darkening the artwork above.
      */
     private fun setupHeroGradients() {
         val canvas = androidx.core.content.ContextCompat.getColor(this, R.color.primary_canvas)
         fun withAlpha(color: Int, alpha: Int): Int = (color and 0x00FFFFFF) or (alpha shl 24)
 
+        viewHeroLeftGradient.setGradient(
+            com.example.animetv.ui.GradientOverlayView.Direction.LEFT_TO_RIGHT,
+            intArrayOf(
+                withAlpha(canvas, 225),
+                withAlpha(canvas, 150),
+                withAlpha(canvas, 30),
+                withAlpha(canvas, 0)
+            ),
+            floatArrayOf(0f, 0.22f, 0.40f, 0.55f)
+        )
+
         viewHeroBottomGradient.setGradient(
             com.example.animetv.ui.GradientOverlayView.Direction.BOTTOM_TO_TOP,
             intArrayOf(
                 withAlpha(canvas, 255),
-                withAlpha(canvas, 235),
-                withAlpha(canvas, 120),
+                withAlpha(canvas, 90),
                 withAlpha(canvas, 0)
             ),
-            floatArrayOf(0f, 0.22f, 0.5f, 1f)
+            floatArrayOf(0f, 0.08f, 0.20f)
         )
     }
 
@@ -167,8 +177,26 @@ class MainActivity : AppCompatActivity() {
         } else {
             { card -> toggleCardFavorite(card) }
         }
-        val onCardFocus: (AnimeCard) -> Unit = { card -> updateInfoPanel(card) }
-        val onCardClick: (AnimeCard) -> Unit = { card -> DetailActivity.start(this, card) }
+        val onCardFocus: (AnimeCard) -> Unit = { card ->
+            updateInfoPanel(card)
+            rowView.post {
+                val rowTop = rowView.top
+                val rowBottom = rowView.bottom
+                val scrollY = scrollMain.scrollY
+                val vHeight = scrollMain.height
+                if (vHeight > 0 && (rowBottom > scrollY + vHeight || rowTop < scrollY)) {
+                    val targetY = (rowTop - 20).coerceAtLeast(0)
+                    scrollMain.smoothScrollTo(0, targetY)
+                }
+            }
+        }
+        val onCardClick: (AnimeCard) -> Unit = { card ->
+            if (card.detailUrl.isNotEmpty()) {
+                DetailActivity.start(this, card)
+            } else {
+                Toast.makeText(this, "Mantén presionado cualquier póster para añadirlo a Mi Lista", Toast.LENGTH_SHORT).show()
+            }
+        }
 
         recycler.adapter = if (row.type == CatalogRowType.CONTINUE_WATCHING) {
             ContinueWatchingCardAdapter(row.cards.toMutableList(), onCardClick, onCardLongClick, onCardFocus)
@@ -183,9 +211,9 @@ class MainActivity : AppCompatActivity() {
             .setTitle("Quitar de Continuar Viendo")
             .setMessage("¿Deseas quitar \"${card.title}\" del historial de visualización?")
             .setPositiveButton("Quitar") { _, _ ->
-                PlaybackHistoryStore.removeRecord(this, card.detailUrl)
+                com.example.animetv.core.history.PlaybackHistoryStore.removeRecord(this, card.detailUrl)
                 refreshRowsWithFavorites()
-                Toast.makeText(this, "\"${card.title}\" eliminado del historial", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Eliminado de Continuar Viendo", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Cancelar", null)
             .show()
@@ -200,6 +228,10 @@ class MainActivity : AppCompatActivity() {
             focusFirstCard()
         }
 
+        btnNavMyList.setOnClickListener {
+            scrollToMyListRow()
+        }
+
         btnNavSearch.setOnClickListener {
             showSearchDialog()
         }
@@ -211,6 +243,22 @@ class MainActivity : AppCompatActivity() {
         btnNavSettings.setOnClickListener {
             com.example.animetv.ui.TorrentSettingsDialog.show(this)
         }
+    }
+
+    private fun scrollToMyListRow() {
+        for (i in 0 until layoutCatalogRows.childCount) {
+            val rowView = layoutCatalogRows.getChildAt(i)
+            val title = rowView.findViewById<TextView>(R.id.txtRowTitle)?.text?.toString() ?: ""
+            if (title.contains("Mi Lista", ignoreCase = true)) {
+                val recycler = rowView.findViewById<RecyclerView>(R.id.recyclerRowCards)
+                scrollMain.smoothScrollTo(0, rowView.top)
+                recycler?.post {
+                    recycler.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus()
+                }
+                return
+            }
+        }
+        Toast.makeText(this, "Mantén presionado cualquier póster para guardarlo en Mi Lista", Toast.LENGTH_SHORT).show()
     }
 
     /** Moves D-pad focus to the first card of the first non-empty row, if any is on screen. */
@@ -309,8 +357,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateInfoPanel(card: AnimeCard) {
         currentFocusedCard = card
         txtHeroTitle.text = card.title
-        txtHeroSynopsis.text = card.synopsis.ifEmpty { "Contenido disponible en SoloLatino en alta definición y audio latino." }
-        txtHeroBadge.text = "★ DESTACADO DE LA SEMANA"
+        txtHeroSynopsis.text = if (card.synopsis.isNotEmpty()) card.synopsis else "Cargando información..."
         loadHeroMeta(card)
 
         val imageToLoad = card.backdropUrl.ifEmpty { card.posterUrl }
@@ -322,16 +369,6 @@ class MainActivity : AppCompatActivity() {
                 .listener(heroFocalCropListener)
                 .transition(DrawableTransitionOptions.withCrossFade(250))
                 .into(imgHeroBackdrop)
-        }
-
-        btnHeroPlay.setOnClickListener {
-            DetailActivity.start(this, card)
-        }
-
-        updateHeroFavoriteButton(card)
-        btnHeroFavorite.setOnClickListener {
-            toggleCardFavorite(card)
-            updateHeroFavoriteButton(card)
         }
     }
 
@@ -350,52 +387,52 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 null
             }
-            if (meta == null || currentFocusedCard?.detailUrl != card.detailUrl) return@launch
+            if (currentFocusedCard?.detailUrl != card.detailUrl) return@launch
 
-            val parts = mutableListOf<String>()
-            if (meta.releaseYear.isNotEmpty()) parts.add(meta.releaseYear)
-            if (meta.certification.isNotEmpty()) parts.add(meta.certification)
-            if (meta.mediaType == "movie" && meta.runtimeMinutes > 0) {
-                val h = meta.runtimeMinutes / 60
-                val m = meta.runtimeMinutes % 60
-                parts.add(if (h > 0) "${h}h ${m}min" else "${m}min")
-            } else if (meta.mediaType == "tv" && meta.numberOfSeasons > 0) {
-                parts.add(if (meta.numberOfSeasons == 1) "1 Temporada" else "${meta.numberOfSeasons} Temporadas")
-            }
+            if (meta != null) {
+                val parts = mutableListOf<String>()
+                if (meta.releaseYear.isNotEmpty()) parts.add(meta.releaseYear)
+                if (meta.certification.isNotEmpty()) parts.add(meta.certification)
+                if (meta.mediaType == "movie" && meta.runtimeMinutes > 0) {
+                    val h = meta.runtimeMinutes / 60
+                    val m = meta.runtimeMinutes % 60
+                    parts.add(if (h > 0) "${h}h ${m}min" else "${m}min")
+                } else if (meta.mediaType == "tv" && meta.numberOfSeasons > 0) {
+                    parts.add(if (meta.numberOfSeasons == 1) "1 Temporada" else "${meta.numberOfSeasons} Temporadas")
+                }
 
-            if (parts.isNotEmpty()) {
-                txtHeroMeta.text = parts.joinToString("   •   ")
-                txtHeroMeta.visibility = View.VISIBLE
+                if (parts.isNotEmpty()) {
+                    txtHeroMeta.text = parts.joinToString("   •   ")
+                    txtHeroMeta.visibility = View.VISIBLE
+                }
+                if (meta.overview.isNotEmpty()) {
+                    txtHeroSynopsis.text = meta.overview
+                }
+                val hdBackdrop = meta.backdropUrl.ifEmpty { meta.posterUrl }
+                if (hdBackdrop.isNotEmpty()) {
+                    Glide.with(this@MainActivity)
+                        .load(hdBackdrop)
+                        .diskCacheStrategy(DiskCacheStrategy.ALL)
+                        .override(Target.SIZE_ORIGINAL)
+                        .listener(heroFocalCropListener)
+                        .transition(DrawableTransitionOptions.withCrossFade(400))
+                        .into(imgHeroBackdrop)
+                }
+            } else {
+                // If TMDB didn't match and card synopsis is empty, try fetching Scraper detail
+                if (card.synopsis.isEmpty()) {
+                    try {
+                        val detail = CatalogRepository.getAnimeDetail(card)
+                        if (detail.synopsis.isNotEmpty() && currentFocusedCard?.detailUrl == card.detailUrl) {
+                            txtHeroSynopsis.text = detail.synopsis
+                        }
+                    } catch (e: Exception) {
+                        if (currentFocusedCard?.detailUrl == card.detailUrl && txtHeroSynopsis.text == "Cargando información...") {
+                            txtHeroSynopsis.text = "Disfruta de ${card.title} en alta definición con audio latino."
+                        }
+                    }
+                }
             }
-            // The scraper's own listing cards never carry a synopsis (only the detail page
-            // does), so the panel always fell back to a generic placeholder line. TMDB's real
-            // overview is now available here from the same lookup — use it once it resolves.
-            if (meta.overview.isNotEmpty()) {
-                txtHeroSynopsis.text = meta.overview
-            }
-            // The scraper's listing cards only carry a tiny w185 poster thumbnail (~185px wide,
-            // meant for small grid tiles) — stretched across the full-width panel it looks soft.
-            // Swap in TMDB's real w1280 backdrop once it resolves, cross-fading over the
-            // low-res placeholder that's already on screen.
-            val hdBackdrop = meta.backdropUrl.ifEmpty { meta.posterUrl }
-            if (hdBackdrop.isNotEmpty()) {
-                Glide.with(this@MainActivity)
-                    .load(hdBackdrop)
-                    .diskCacheStrategy(DiskCacheStrategy.ALL)
-                    .override(Target.SIZE_ORIGINAL)
-                    .listener(heroFocalCropListener)
-                    .transition(DrawableTransitionOptions.withCrossFade(400))
-                    .into(imgHeroBackdrop)
-            }
-        }
-    }
-
-    private fun updateHeroFavoriteButton(card: AnimeCard) {
-        val isFav = FavoritesStore.isFavorite(this, card.detailUrl)
-        if (isFav) {
-            btnHeroFavorite.text = "✓  En Mi Lista"
-        } else {
-            btnHeroFavorite.text = "+  Mi Lista"
         }
     }
 
@@ -409,23 +446,6 @@ class MainActivity : AppCompatActivity() {
             val missingCovers = mutableListOf<PlaybackRecord>()
             val continueCards = historyRecords.map { rec ->
                 val progressPct = if (rec.durationMs > 0) ((rec.positionMs * 100) / rec.durationMs).toInt() else 0
-                val badge = when {
-                    rec.episodeNumber > 0 && progressPct > 0 -> "Ep ${rec.episodeNumber} • $progressPct%"
-                    rec.episodeNumber > 0 -> "Ep ${rec.episodeNumber}"
-                    progressPct > 0 -> "$progressPct%"
-                    else -> "Viendo"
-                }
-
-                var resolvedPoster = if (CoverUtils.isValidCover(rec.posterUrl)) rec.posterUrl.trim() else ""
-                if (resolvedPoster.isEmpty()) {
-                    val catalogPoster = findCoverInCatalog(data, rec.animeDetailUrl, rec.animeTitle)
-                    if (catalogPoster.isNotEmpty()) {
-                        resolvedPoster = catalogPoster
-                        PlaybackHistoryStore.updatePoster(this, rec.animeDetailUrl, rec.episodeUrl, catalogPoster)
-                    } else {
-                        missingCovers.add(rec)
-                    }
-                }
 
                 val cleanDetailUrl = when {
                     rec.animeDetailUrl.isNotEmpty() && !rec.animeDetailUrl.contains("/temporada-") -> rec.animeDetailUrl
@@ -434,13 +454,75 @@ class MainActivity : AppCompatActivity() {
                     else -> rec.animeDetailUrl.ifEmpty { rec.episodeUrl }
                 }
 
+                // Look up matching card in current catalog to recover proper show title, synopsis, and posters
+                val catalogCard = findCardInCatalog(data, cleanDetailUrl, rec.animeTitle)
+
+                var resolvedTitle = when {
+                    rec.animeTitle.isNotEmpty() && rec.animeTitle != "Película Completa" && !rec.animeTitle.matches(Regex("""^\d+\.\s.*""")) -> rec.animeTitle
+                    catalogCard != null && catalogCard.title.isNotEmpty() -> catalogCard.title
+                    rec.episodeTitle.isNotEmpty() && rec.episodeTitle != "Película Completa" && !rec.episodeTitle.matches(Regex("""^\d+\.\s.*""")) -> rec.episodeTitle
+                    else -> ""
+                }
+
+                // Fallback: extract clean title from URL slug if still generic or blank
+                if (resolvedTitle.isEmpty() || resolvedTitle == "Película Completa") {
+                    val slug = cleanDetailUrl.trimEnd('/').substringAfterLast('/')
+                    if (slug.isNotEmpty()) {
+                        resolvedTitle = slug.replace("-", " ").split(" ")
+                            .filter { it.isNotEmpty() }
+                            .joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+                    }
+                }
+                if (resolvedTitle.isEmpty()) {
+                    resolvedTitle = rec.animeTitle.ifEmpty { rec.episodeTitle }
+                }
+
+                val isMovie = cleanDetailUrl.contains("/pelicula/") || rec.episodeTitle.contains("Película", ignoreCase = true)
+                val badge = when {
+                    isMovie && progressPct > 0 -> "Película • $progressPct%"
+                    isMovie -> "Película"
+                    rec.episodeNumber > 0 && progressPct > 0 -> "Ep ${rec.episodeNumber} • $progressPct%"
+                    rec.episodeNumber > 0 -> "Ep ${rec.episodeNumber}"
+                    progressPct > 0 -> "$progressPct%"
+                    else -> "Viendo"
+                }
+
+                var resolvedPoster = if (CoverUtils.isValidCover(rec.posterUrl)) rec.posterUrl.trim() else ""
+                if (resolvedPoster.isEmpty()) {
+                    val catalogPoster = catalogCard?.posterUrl?.takeIf { CoverUtils.isValidCover(it) }
+                        ?: findCoverInCatalog(data, cleanDetailUrl, resolvedTitle)
+                    if (catalogPoster.isNotEmpty()) {
+                        resolvedPoster = catalogPoster
+                        PlaybackHistoryStore.updatePoster(this, rec.animeDetailUrl, rec.episodeUrl, catalogPoster)
+                    } else {
+                        missingCovers.add(rec)
+                    }
+                }
+
+                val resolvedSynopsis = rec.synopsis.ifEmpty { catalogCard?.synopsis ?: "" }
+
+                // Auto-repair stored record if it was saved with blank or corrupted title/synopsis
+                if ((rec.animeTitle.isEmpty() || rec.animeTitle == "Película Completa" || rec.animeTitle.matches(Regex("""^\d+\.\s.*""")) || rec.synopsis.isEmpty()) &&
+                    (resolvedTitle.isNotEmpty() && resolvedTitle != "Película Completa")) {
+                    PlaybackHistoryStore.updateRecordMetadata(
+                        this,
+                        animeDetailUrl = rec.animeDetailUrl,
+                        episodeUrl = rec.episodeUrl,
+                        newTitle = resolvedTitle,
+                        newSynopsis = resolvedSynopsis,
+                        newPosterUrl = resolvedPoster
+                    )
+                }
+
                 AnimeCard(
                     id = cleanDetailUrl,
-                    title = rec.animeTitle.ifEmpty { rec.episodeTitle },
+                    title = resolvedTitle,
                     posterUrl = resolvedPoster,
                     detailUrl = cleanDetailUrl,
                     source = rec.source.ifEmpty { "Continuar" },
                     episodeBadge = badge,
+                    synopsis = resolvedSynopsis,
+                    backdropUrl = catalogCard?.backdropUrl ?: "",
                     progressPercent = progressPct
                 )
             }.distinctBy { it.detailUrl }
@@ -448,7 +530,7 @@ class MainActivity : AppCompatActivity() {
             if (continueCards.isNotEmpty()) {
                 allRows.add(
                     CatalogRow(
-                        title = "▶ Continuar Viendo",
+                        title = "Continuar Viendo",
                         cards = continueCards,
                         type = CatalogRowType.CONTINUE_WATCHING
                     )
@@ -462,8 +544,8 @@ class MainActivity : AppCompatActivity() {
 
         // 2. "Mi Lista" Row (Always Second)
         val storedFavorites = FavoritesStore.getFavorites(this)
-        if (storedFavorites.isNotEmpty()) {
-            val favCards = storedFavorites.map { fav ->
+        val favCards = if (storedFavorites.isNotEmpty()) {
+            storedFavorites.map { fav ->
                 AnimeCard(
                     id = fav.url,
                     title = fav.title,
@@ -473,8 +555,20 @@ class MainActivity : AppCompatActivity() {
                     episodeBadge = "Guardado"
                 )
             }
-            allRows.add(CatalogRow(title = "⭐ Mi Lista", cards = favCards))
+        } else {
+            listOf(
+                AnimeCard(
+                    id = "empty_favorites_guide",
+                    title = "Tu lista está vacía",
+                    posterUrl = "",
+                    detailUrl = "",
+                    source = "Mi Lista",
+                    episodeBadge = "+ Añadir",
+                    synopsis = "Añade tus series o películas favoritas manteniendo presionado el botón central del control remoto en cualquier póster, o con el botón '+' en la pantalla de Detalles."
+                )
+            )
         }
+        allRows.add(CatalogRow(title = "Mi Lista", cards = favCards))
 
         // 3. SoloLatino Categorías principales (Películas, Series, Recién Añadidos, Netflix, Prime, Disney+, Apple TV+)
         val tokyoSections = mutableListOf<CatalogRow>()
@@ -488,7 +582,7 @@ class MainActivity : AppCompatActivity() {
 
         // 4. SoloAnime (Audio Latino) - colocado justo antes de Tokyo MX
         if (data.latinoTrending.isNotEmpty()) {
-            allRows.add(CatalogRow(title = "🔥 SoloAnime (Audio Latino)", cards = data.latinoTrending))
+            allRows.add(CatalogRow(title = "SoloAnime (Audio Latino)", cards = data.latinoTrending))
         }
 
         // 5. Tokyo MX y TV Tokyo (después de Disney+ y SoloAnime)
@@ -498,24 +592,24 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 6. 9Anime HD (Renombrado según solicitud #5)
+        // 6. 9Anime HD
         if (data.nineAnimeTrending.isNotEmpty()) {
-            allRows.add(CatalogRow(title = "● 9Anime HD", cards = data.nineAnimeTrending))
+            allRows.add(CatalogRow(title = "9Anime HD", cards = data.nineAnimeTrending))
         }
 
-        // 7. JKAnime (Renombrado según solicitud #6)
+        // 7. JKAnime
         if (data.recentEpisodes.isNotEmpty()) {
-            allRows.add(CatalogRow(title = "⚡ JKAnime", cards = data.recentEpisodes))
+            allRows.add(CatalogRow(title = "JKAnime", cards = data.recentEpisodes))
         }
 
-        // 8. GogoAnime (Renombrado según solicitud #7)
+        // 8. GogoAnime
         if (data.gogoTrending.isNotEmpty()) {
-            allRows.add(CatalogRow(title = "🌐 GogoAnime", cards = data.gogoTrending))
+            allRows.add(CatalogRow(title = "GogoAnime", cards = data.gogoTrending))
         }
 
         // 9. Populares / Recomendados
         if (data.latinoTrending.size > 6) {
-            allRows.add(CatalogRow(title = "🌟 Series Populares Recomendadas", cards = data.latinoTrending.reversed()))
+            allRows.add(CatalogRow(title = "Series Populares", cards = data.latinoTrending.reversed()))
         }
 
         layoutCatalogRows.removeAllViews()
@@ -620,8 +714,8 @@ class MainActivity : AppCompatActivity() {
         editInput.requestFocus()
     }
 
-    private fun findCoverInCatalog(data: HomeCatalogData, detailUrl: String, title: String): String {
-        val cleanDetail = detailUrl.substringBefore("/temporada-").trim()
+    private fun findCardInCatalog(data: HomeCatalogData, detailUrl: String, title: String): AnimeCard? {
+        val cleanDetail = detailUrl.substringBefore("/temporada-").trim().trimEnd('/')
         val allCards = sequence {
             yieldAll(data.latinoTrending)
             yieldAll(data.soloLatinoSections.flatMap { it.cards })
@@ -631,10 +725,15 @@ class MainActivity : AppCompatActivity() {
             yieldAll(data.animeYtTrending)
             yieldAll(data.gogoTrending)
         }
-        val match = allCards.firstOrNull { card ->
-            (cleanDetail.isNotEmpty() && (card.detailUrl.equals(cleanDetail, ignoreCase = true) || card.id.equals(cleanDetail, ignoreCase = true))) ||
-            (title.isNotEmpty() && card.title.equals(title, ignoreCase = true))
+        return allCards.firstOrNull { card ->
+            val cardClean = card.detailUrl.substringBefore("/temporada-").trim().trimEnd('/')
+            (cleanDetail.isNotEmpty() && (cardClean.equals(cleanDetail, ignoreCase = true) || card.id.equals(cleanDetail, ignoreCase = true))) ||
+            (title.isNotEmpty() && title != "Película Completa" && !title.matches(Regex("""^\d+\.\s.*""")) && card.title.equals(title, ignoreCase = true))
         }
+    }
+
+    private fun findCoverInCatalog(data: HomeCatalogData, detailUrl: String, title: String): String {
+        val match = findCardInCatalog(data, detailUrl, title)
         return if (match != null && CoverUtils.isValidCover(match.posterUrl)) match.posterUrl.trim() else ""
     }
 
@@ -661,8 +760,18 @@ class MainActivity : AppCompatActivity() {
                             source = rec.source
                         )
                         val detail = CatalogRepository.getAnimeDetail(dummyCard)
-                        if (CoverUtils.isValidCover(detail.posterUrl)) {
-                            PlaybackHistoryStore.updatePoster(this@MainActivity, rec.animeDetailUrl, rec.episodeUrl, detail.posterUrl)
+                        val newPoster = if (CoverUtils.isValidCover(detail.posterUrl)) detail.posterUrl.trim() else ""
+                        val newTitle = if (detail.title.isNotEmpty() && detail.title != "Película Completa") detail.title else ""
+                        val newSynopsis = detail.synopsis
+                        if (newPoster.isNotEmpty() || newTitle.isNotEmpty() || newSynopsis.isNotEmpty()) {
+                            PlaybackHistoryStore.updateRecordMetadata(
+                                this@MainActivity,
+                                animeDetailUrl = rec.animeDetailUrl,
+                                episodeUrl = rec.episodeUrl,
+                                newTitle = newTitle,
+                                newSynopsis = newSynopsis,
+                                newPosterUrl = newPoster
+                            )
                             anyUpdated = true
                         }
                     } catch (e: Exception) {

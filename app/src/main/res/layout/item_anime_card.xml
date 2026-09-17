@@ -1,19 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="132dp"
-    android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:padding="6dp"
+<!-- Nuvio-style poster card: pure poster artwork without title text underneath.
+     CardView with 10dp radius strictly clips the poster image so sharp corners never spill out. -->
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="110dp"
+    android:layout_height="165dp"
     android:layout_marginEnd="10dp"
     android:focusable="true"
     android:focusableInTouchMode="true"
     android:clickable="true"
-    android:background="@drawable/bg_favorite_card">
+    app:cardCornerRadius="10dp"
+    app:cardElevation="0dp"
+    app:cardPreventCornerOverlap="false"
+    app:cardBackgroundColor="@color/surface_layer">
 
-    <!-- Poster with Badges Container (true 2:3 poster ratio at 132dp width) -->
     <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="198dp">
+        android:layout_height="match_parent">
 
         <ImageView
             android:id="@+id/imgPoster"
@@ -23,6 +26,20 @@
             android:background="@color/surface_layer"
             android:contentDescription="@null" />
 
+        <!-- Source Badge (e.g. SoloLatino / JKAnime) -->
+        <TextView
+            android:id="@+id/txtSource"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|start"
+            android:layout_margin="6dp"
+            android:background="#CC0A0B10"
+            android:paddingHorizontal="5dp"
+            android:paddingVertical="1dp"
+            android:textColor="#FFD54F"
+            android:textSize="9sp"
+            android:textStyle="bold" />
+
         <!-- Episode / Rating Badge Overlay -->
         <TextView
             android:id="@+id/txtBadge"
@@ -31,40 +48,26 @@
             android:layout_gravity="top|end"
             android:layout_margin="6dp"
             android:background="@drawable/bg_netflix_badge"
-            android:paddingHorizontal="6dp"
-            android:paddingVertical="2dp"
+            android:paddingHorizontal="5dp"
+            android:paddingVertical="1dp"
             android:textColor="@color/primary_text"
-            android:textSize="11sp"
+            android:textSize="10sp"
             android:textStyle="bold"
             android:visibility="gone" />
 
-        <!-- Source Badge (e.g. Latino / JKAnime) -->
+        <!-- Hidden Title (retained for binding compatibility, 0dp height) -->
         <TextView
-            android:id="@+id/txtSource"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="bottom|start"
-            android:layout_margin="6dp"
-            android:background="#CC0A0B10"
-            android:paddingHorizontal="6dp"
-            android:paddingVertical="2dp"
-            android:textColor="#FFD54F"
-            android:textSize="10sp"
-            android:textStyle="bold" />
+            android:id="@+id/txtTitle"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone" />
+
+        <!-- Focus stroke overlay: perfectly matches the 10dp CardView contour -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_card_focus_border" />
 
     </FrameLayout>
 
-    <!-- Anime Title. minLines locks this to always reserve 2 lines' worth of height, even for
-         a short 1-line title, so every card in a row ends up the same total height regardless
-         of title length. -->
-    <TextView
-        android:id="@+id/txtTitle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:minLines="2"
-        android:maxLines="2"
-        android:ellipsize="end"
-        style="@style/TextAppearance.CardTitle" />
-
-</LinearLayout>
+</androidx.cardview.widget.CardView>

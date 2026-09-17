@@ -15,6 +15,7 @@ data class PlaybackRecord(
     val episodeNumber: Int,
     val positionMs: Long,
     val durationMs: Long,
+    val synopsis: String = "",
     val timestamp: Long = System.currentTimeMillis()
 ) {
     fun toJson(): JSONObject {
@@ -28,6 +29,7 @@ data class PlaybackRecord(
             put("episodeNumber", episodeNumber)
             put("positionMs", positionMs)
             put("durationMs", durationMs)
+            put("synopsis", synopsis)
             put("timestamp", timestamp)
         }
     }
@@ -47,6 +49,7 @@ data class PlaybackRecord(
                 episodeNumber = obj.optInt("episodeNumber", 1),
                 positionMs = obj.optLong("positionMs", 0L),
                 durationMs = obj.optLong("durationMs", 0L),
+                synopsis = obj.optString("synopsis", ""),
                 timestamp = obj.optLong("timestamp", System.currentTimeMillis())
             )
         }
@@ -68,26 +71,35 @@ object PlaybackHistoryStore {
         episodeTitle: String,
         episodeNumber: Int,
         positionMs: Long,
-        durationMs: Long
+        durationMs: Long,
+        synopsis: String = ""
     ) {
         if (episodeUrl.isEmpty()) return
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val all = loadAllRaw(context).toMutableList()
 
-        // Find if we already had a record with a valid cover poster
+        // Find if we already had a record with a valid cover poster or title/synopsis
         val existing = all.firstOrNull { it.animeDetailUrl == animeDetailUrl || it.episodeUrl == episodeUrl }
         val finalPoster = when {
             CoverUtils.isValidCover(posterUrl) -> posterUrl.trim()
             existing != null && CoverUtils.isValidCover(existing.posterUrl) -> existing.posterUrl.trim()
             else -> ""
         }
+        val finalTitle = when {
+            animeTitle.isNotEmpty() && animeTitle != "Película Completa" && !animeTitle.matches(Regex("""^\d+\.\s.*""")) -> animeTitle
+            existing != null && existing.animeTitle.isNotEmpty() && existing.animeTitle != "Película Completa" && !existing.animeTitle.matches(Regex("""^\d+\.\s.*""")) -> existing.animeTitle
+            animeTitle.isNotEmpty() -> animeTitle
+            existing != null -> existing.animeTitle
+            else -> ""
+        }
+        val finalSynopsis = synopsis.ifEmpty { existing?.synopsis ?: "" }
 
         // Remove previous entry for this anime or episode
         all.removeAll { it.animeDetailUrl == animeDetailUrl || it.episodeUrl == episodeUrl }
 
         all.add(0, PlaybackRecord(
             animeDetailUrl = animeDetailUrl,
-            animeTitle = animeTitle,
+            animeTitle = finalTitle,
             posterUrl = finalPoster,
             source = source,
             episodeUrl = episodeUrl,
@@ -95,10 +107,41 @@ object PlaybackHistoryStore {
             episodeNumber = episodeNumber,
             positionMs = positionMs,
             durationMs = durationMs,
+            synopsis = finalSynopsis,
             timestamp = System.currentTimeMillis()
         ))
 
         saveAll(prefs, all)
+    }
+
+    fun updateRecordMetadata(
+        context: Context,
+        animeDetailUrl: String,
+        episodeUrl: String,
+        newTitle: String = "",
+        newSynopsis: String = "",
+        newPosterUrl: String = ""
+    ) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val all = loadAllRaw(context).toMutableList()
+        var updated = false
+
+        for (i in 0 until all.size) {
+            val r = all[i]
+            if ((animeDetailUrl.isNotEmpty() && r.animeDetailUrl == animeDetailUrl) ||
+                (episodeUrl.isNotEmpty() && r.episodeUrl == episodeUrl)) {
+                all[i] = r.copy(
+                    animeTitle = if (newTitle.isNotEmpty()) newTitle else r.animeTitle,
+                    synopsis = if (newSynopsis.isNotEmpty()) newSynopsis else r.synopsis,
+                    posterUrl = if (CoverUtils.isValidCover(newPosterUrl)) newPosterUrl.trim() else r.posterUrl
+                )
+                updated = true
+            }
+        }
+
+        if (updated) {
+            saveAll(prefs, all)
+        }
     }
 
     fun updatePoster(context: Context, animeDetailUrl: String, episodeUrl: String, newPosterUrl: String) {

@@ -1,17 +1,25 @@
 package com.example.animetv.ui.adapter
 
+import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import android.view.HapticFeedbackConstants
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.view.animation.AnimationUtils
-import android.widget.Button
 import android.widget.ImageView
+import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.example.animetv.R
 import com.example.animetv.core.history.PlaybackRecord
+import com.example.animetv.core.history.WatchedEpisodeStore
 import com.example.animetv.core.model.AnimeEpisode
 import java.util.Locale
 
@@ -22,19 +30,20 @@ class EpisodeAdapter(
     private var lastWatchedRecord: PlaybackRecord? = null,
     private val onEpisodeFocus: ((AnimeEpisode) -> Unit)? = null,
     private val onEpisodeClick: (AnimeEpisode) -> Unit,
-    private val onEpisodeTorrentClick: ((AnimeEpisode) -> Unit)? = null
+    private val onEpisodeTorrentClick: ((AnimeEpisode) -> Unit)? = null,
+    private val onWatchedChanged: (() -> Unit)? = null
 ) : RecyclerView.Adapter<EpisodeAdapter.ViewHolder>() {
 
-    class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+    class ViewHolder(val view: View) : RecyclerView.ViewHolder(view) {
         val still: ImageView = view.findViewById(R.id.imgEpisodeStill)
+        val watchedBadge: TextView = view.findViewById(R.id.txtEpisodeWatchedBadge)
         val badge: TextView = view.findViewById(R.id.txtEpisodeBadge)
         val title: TextView = view.findViewById(R.id.txtEpisodeTitle)
         val synopsis: TextView = view.findViewById(R.id.txtEpisodeSynopsis)
+        val duration: TextView = view.findViewById(R.id.txtEpisodeDuration)
+        val rating: TextView = view.findViewById(R.id.txtEpisodeRating)
         val releaseDate: TextView = view.findViewById(R.id.txtEpisodeReleaseDate)
-        val progress: TextView = view.findViewById(R.id.txtEpisodeProgress)
-        val watchedBadge: TextView = view.findViewById(R.id.txtEpisodeWatchedBadge)
-        val btnWeb: Button = view.findViewById(R.id.btnEpisodeWeb)
-        val btnTorrent: Button = view.findViewById(R.id.btnEpisodeTorrent)
+        val progressWatched: ProgressBar = view.findViewById(R.id.progressEpisodeWatched)
     }
 
     fun updateList(
@@ -66,9 +75,12 @@ class EpisodeAdapter(
         val ep = episodes[position]
         val sNum = if (ep.seasonNumber > 0) ep.seasonNumber else 1
         val eNum = ep.episodeNumber
-        holder.badge.text = String.format(Locale.US, "S%02dE%02d", sNum, eNum)
+
+        // Episode Badge (e.g. EPISODE 11)
+        holder.badge.text = "EPISODIO $eNum"
         holder.title.text = ep.title.ifEmpty { "Episodio $eNum" }
         holder.synopsis.text = ep.synopsis.ifEmpty { "Sin sinopsis disponible para este episodio." }
+
         if (ep.releaseDate.isNotEmpty()) {
             holder.releaseDate.text = ep.releaseDate
             holder.releaseDate.visibility = View.VISIBLE
@@ -76,8 +88,7 @@ class EpisodeAdapter(
             holder.releaseDate.visibility = View.GONE
         }
 
-        // Fall back to the show's own poster when this episode has no still, so the card never
-        // shows a blank image area (TMDB often lacks per-episode stills for anime).
+        // Full-bleed Still
         val imageUrl = ep.stillUrl.ifEmpty { showPosterUrl }
         if (imageUrl.isNotEmpty()) {
             holder.still.visibility = View.VISIBLE
@@ -94,7 +105,7 @@ class EpisodeAdapter(
         }
 
         val context = holder.itemView.context
-        val isExplicitWatched = com.example.animetv.core.history.WatchedEpisodeStore.isEpisodeWatched(
+        val isExplicitWatched = WatchedEpisodeStore.isEpisodeWatched(
             context,
             animeDetailUrl,
             sNum,
@@ -110,84 +121,104 @@ class EpisodeAdapter(
         val isWatched = isExplicitWatched || isHistoryWatched
         holder.watchedBadge.visibility = if (isWatched) View.VISIBLE else View.GONE
 
-        if (rec != null && (rec.episodeUrl == ep.episodeUrl || rec.episodeNumber == ep.episodeNumber)) {
-            holder.progress.visibility = View.VISIBLE
-            if (isWatched) {
-                holder.progress.text = "Completado"
-                holder.progress.setTextColor(0xFF81C784.toInt()) // Light green
-            } else if (rec.positionMs > 5000) {
-                holder.progress.text = "▶ ${formatTime(rec.positionMs)}"
-                holder.progress.setTextColor(0xFFFFD54F.toInt()) // Gold
+        // Playback progress indicator
+        if (rec != null && (rec.episodeUrl == ep.episodeUrl || rec.episodeNumber == ep.episodeNumber) && rec.durationMs > 0) {
+            val pct = ((rec.positionMs * 100) / rec.durationMs).toInt().coerceIn(0, 100)
+            holder.progressWatched.progress = pct
+            holder.progressWatched.visibility = View.VISIBLE
+
+            if (!isWatched && rec.positionMs > 5000) {
+                val remainingMs = rec.durationMs - rec.positionMs
+                val remMin = (remainingMs / 60000).toInt()
+                holder.duration.text = if (remMin > 0) "⏱ ${remMin}m restantes" else "⏱ ${formatTime(rec.positionMs)}"
+                holder.duration.setTextColor(0xFFFFD54F.toInt())
+                holder.duration.visibility = View.VISIBLE
             } else {
-                holder.progress.text = "▶ Viendo"
-                holder.progress.setTextColor(0xFFFFD54F.toInt())
+                holder.duration.visibility = View.GONE
             }
         } else {
-            holder.progress.visibility = View.GONE
+            holder.progressWatched.visibility = View.GONE
+            holder.duration.visibility = View.GONE
         }
 
-        // The card itself pops on focus, but WEB/TOR are the two focusable/actionable elements
-        // (D-pad up/down moves between them, left/right moves to the next episode card).
+        // Focus scale animation
         val focusInterpolator = AnimationUtils.loadInterpolator(holder.itemView.context, R.interpolator.premium_focus)
-        val onFocus = View.OnFocusChangeListener { _, hasFocus ->
+        holder.itemView.setOnFocusChangeListener { view, hasFocus ->
             if (hasFocus) {
-                holder.itemView.animate().scaleX(1.1f).scaleY(1.1f).translationZ(16f)
-                    .setInterpolator(focusInterpolator).setDuration(275).start()
+                view.animate().scaleX(1.06f).scaleY(1.06f).translationZ(12f)
+                    .setInterpolator(focusInterpolator).setDuration(200).start()
                 onEpisodeFocus?.invoke(ep)
-            } else if (!holder.btnWeb.isFocused && !holder.btnTorrent.isFocused) {
-                holder.itemView.animate().scaleX(1.0f).scaleY(1.0f).translationZ(0f)
-                    .setInterpolator(focusInterpolator).setDuration(275).start()
+            } else {
+                view.animate().scaleX(1.0f).scaleY(1.0f).translationZ(0f)
+                    .setInterpolator(focusInterpolator).setDuration(200).start()
             }
         }
-        holder.btnWeb.onFocusChangeListener = onFocus
-        holder.btnTorrent.onFocusChangeListener = onFocus
 
-        holder.btnWeb.setOnClickListener {
+        // Regular click to play
+        holder.itemView.setOnClickListener {
             onEpisodeClick(ep)
         }
-        holder.btnTorrent.setOnClickListener {
-            onEpisodeTorrentClick?.invoke(ep)
-        }
 
-        // Long-press toggles watched/unwatched status with immediate visual feedback
-        val toggleWatched = {
+        // Toggle Watched Logic
+        fun toggleWatchedStatus() {
             val ctx = holder.itemView.context
-            val nowWatched = com.example.animetv.core.history.WatchedEpisodeStore.toggleEpisodeWatched(
+            val nowWatched = WatchedEpisodeStore.toggleEpisodeWatched(
                 ctx, animeDetailUrl, sNum, ep.episodeNumber, ep.episodeUrl
             )
             holder.watchedBadge.visibility = if (nowWatched) View.VISIBLE else View.GONE
-            val msg = if (nowWatched) "✓ Marcado como visto" else "↩ Marcado como no visto"
-            android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_SHORT).show()
+            val msg = if (nowWatched) "✓ Episodio $eNum marcado como visto" else "↩ Episodio $eNum marcado como no visto"
+            Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
+            onWatchedChanged?.invoke()
         }
-        // Standard long-click covers BOTH touch and the TV remote D-pad: Android's View already
-        // has its own built-in long-press timer for a focused view — for touch it's the usual
-        // ~500ms hold, and for a focused Button it also fires from held DPAD_CENTER/ENTER
-        // (View.onKeyDown schedules the same check for those keys). A separate custom
-        // OnKeyListener used to duplicate this by independently timing DOWN→UP itself, which
-        // doesn't consume ACTION_DOWN — so both the built-in timer AND the custom one fired,
-        // toggling watched status twice per hold and netting no visible change (or, worse,
-        // silently reverting an episode a season-wide "mark watched" had just set). One listener
-        // is enough.
-        val onLongClick = View.OnLongClickListener { toggleWatched(); true }
-        holder.btnWeb.setOnLongClickListener(onLongClick)
-        holder.btnTorrent.setOnLongClickListener(onLongClick)
-        // The parent RecyclerView scrolls horizontally, so by default it intercepts the touch
-        // stream the moment it sees any movement while a finger is held down — including the
-        // pixel-level shift caused by this card's own focus-scale animation, which starts the
-        // instant the button is touched. That intercept cancels the pending long-press before it
-        // ever fires. Telling the parent to leave the gesture alone for the duration of the touch
-        // fixes long-press without touching the click/scroll behavior otherwise.
-        val holdDisallowIntercept = View.OnTouchListener { v, event ->
-            when (event.action) {
-                android.view.MotionEvent.ACTION_DOWN ->
-                    v.parent?.requestDisallowInterceptTouchEvent(true)
-                android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL ->
-                    v.parent?.requestDisallowInterceptTouchEvent(false)
+
+        // Touch/mouse long click
+        holder.itemView.isLongClickable = true
+        holder.itemView.setOnLongClickListener {
+            toggleWatchedStatus()
+            true
+        }
+
+        // Android TV remote handling:
+        // 1. Quick press DPAD_CENTER / ENTER -> Play episode
+        // 2. Hold DPAD_CENTER / ENTER (~500ms) -> Toggle watched status with haptic feedback
+        // 3. Press MENU / INFO -> Instantly toggle watched status
+        var isLongPressTriggered = false
+        val longPressTimeout = ViewConfiguration.getLongPressTimeout().toLong().coerceIn(400L, 600L)
+        val longPressRunnable = Runnable {
+            isLongPressTriggered = true
+            holder.itemView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            toggleWatchedStatus()
+        }
+
+        holder.itemView.setOnKeyListener { _, keyCode, event ->
+            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) {
+                when (event.action) {
+                    KeyEvent.ACTION_DOWN -> {
+                        if (event.repeatCount == 0) {
+                            isLongPressTriggered = false
+                            holder.itemView.handler?.postDelayed(longPressRunnable, longPressTimeout)
+                        }
+                        return@setOnKeyListener true
+                    }
+                    KeyEvent.ACTION_UP -> {
+                        holder.itemView.handler?.removeCallbacks(longPressRunnable)
+                        if (isLongPressTriggered) {
+                            isLongPressTriggered = false
+                            return@setOnKeyListener true
+                        } else {
+                            holder.itemView.performClick()
+                            return@setOnKeyListener true
+                        }
+                    }
+                }
+            } else if (keyCode == KeyEvent.KEYCODE_MENU || keyCode == KeyEvent.KEYCODE_INFO) {
+                if (event.action == KeyEvent.ACTION_UP) {
+                    toggleWatchedStatus()
+                    return@setOnKeyListener true
+                }
             }
             false
         }
-        holder.btnWeb.setOnTouchListener(holdDisallowIntercept)
-        holder.btnTorrent.setOnTouchListener(holdDisallowIntercept)
     }
 
     override fun getItemCount(): Int = episodes.size
