@@ -49,7 +49,11 @@ class NineAnimeSource : AnimeSource {
                 val href = a.absUrl("href")
                 val img = it.selectFirst("img")
                 val posterUrl = img?.attr("src")?.ifEmpty { img.attr("data-src") } ?: ""
-                val title = img?.attr("alt")?.trim()?.ifEmpty { a.attr("title").trim() } ?: ""
+                val rawTitle = img?.attr("alt")?.trim()?.ifEmpty { a.attr("title").trim() } ?: ""
+                val title = rawTitle
+                    .replace(Regex("""(?i)\s*(?:english\s+subbed|english\s+dubbed|subbed|dubbed|\(sub\)|\(dub\)|\[sub\]|\[dub\]).*"""), "")
+                    .replace(Regex("""\s*[-:]\s*\d+$"""), "")
+                    .trim()
 
                 if (title.isNotEmpty() && href.isNotEmpty() && !href.endsWith("/genre/") && !href.endsWith("/wp-admin/")) {
                     list.add(
@@ -89,7 +93,11 @@ class NineAnimeSource : AnimeSource {
                 val href = a.absUrl("href")
                 val img = it.selectFirst("img")
                 val posterUrl = img?.attr("src")?.ifEmpty { img.attr("data-src") } ?: ""
-                val title = img?.attr("alt")?.trim()?.ifEmpty { a.attr("title").trim() } ?: ""
+                val rawTitle = img?.attr("alt")?.trim()?.ifEmpty { a.attr("title").trim() } ?: ""
+                val title = rawTitle
+                    .replace(Regex("""(?i)\s*(?:english\s+subbed|english\s+dubbed|subbed|dubbed|\(sub\)|\(dub\)|\[sub\]|\[dub\]).*"""), "")
+                    .replace(Regex("""\s*[-:]\s*\d+$"""), "")
+                    .trim()
 
                 if (title.isNotEmpty() && href.isNotEmpty()) {
                     list.add(
@@ -121,6 +129,10 @@ class NineAnimeSource : AnimeSource {
             if (title.isBlank() || title.equals("Anime", ignoreCase = true)) {
                 title = detailUrl.trimEnd('/').substringAfterLast('/').replace('-', ' ').replace('_', ' ')
             }
+            title = title
+                .replace(Regex("""(?i)\s*(?:english\s+subbed|english\s+dubbed|subbed|dubbed|\(sub\)|\(dub\)|\[sub\]|\[dub\]).*"""), "")
+                .replace(Regex("""\s*[-:]\s*\d+$"""), "")
+                .trim()
             val rawSynopsis = doc.selectFirst(".description, .entry-content p, .synopsis, .film-description")?.text()?.trim()
                 ?.ifEmpty { null }
                 ?: doc.selectFirst("meta[property=og:description], meta[name=description]")?.attr("content")?.trim()

@@ -399,7 +399,7 @@ object TmdbMetadataRepository {
                     val candName = obj.optString("name", obj.optString("title", ""))
                     val origName = obj.optString("original_name", obj.optString("original_title", ""))
 
-                    val sim = maxOf(
+                    var sim = maxOf(
                         titleSimilarity(queryToSearch, candName),
                         titleSimilarity(queryToSearch, origName),
                         titleSimilarity(cleanQuery, candName),
@@ -416,6 +416,27 @@ object TmdbMetadataRepository {
                     val origLang = obj.optString("original_language", "").lowercase(Locale.ROOT)
                     val hasAnimGenre = genreIds.contains(16)
                     val isJapanese = origLang == "ja"
+
+                    // Cross-language recovery: Romaji (JKAnime) and English (9Anime/GoGo) searches
+                    // often have 0% lexical overlap with TMDB's Spanish localized name or Japanese Kanji original name.
+                    // If candidate was returned in the top results and similarity is low, check TMDB alternative titles.
+                    if (sim < 0.2 && i < 3 && (isJapanese || hasAnimGenre || mType == "tv")) {
+                        val candId = obj.optInt("id", 0)
+                        if (candId > 0) {
+                            val altTitles = fetchAlternativeTitles(apiKey, candId, mType)
+                            for (alt in altTitles) {
+                                val aSim = maxOf(
+                                    titleSimilarity(queryToSearch, alt),
+                                    titleSimilarity(cleanQuery, alt),
+                                    titleSimilarity(rawTitle, alt)
+                                )
+                                if (aSim > sim) {
+                                    sim = aSim
+                                }
+                                if (sim >= 0.8) break
+                            }
+                        }
+                    }
 
                     var score = 0
 
@@ -672,16 +693,42 @@ object TmdbMetadataRepository {
      */
     fun sanitizeTitle(title: String): String {
         return title
+            .replace(Regex("""(?i)\b(?:\d+(?:st|nd|rd|th)\s+season|part\s*\d+|cour\s*\d+|\d+(?:st|nd|rd|th)\s+cour)\b.*"""), "")
             .replace(Regex("""(?i)\b(temporada|season|temp|s)\s*\d+.*"""), "")
             .replace(Regex("""(?i)\b(episodio|episode|ep)\s*\d+.*"""), "")
-            .replace(Regex("""(?i)\b(audio\s+latino|latino|castellano|sub\s+español|subtitulado|subbed|dubbed|dual)\b.*"""), "")
+            .replace(Regex("""(?i)\s*[-:]\s*(?:episodio|episode|ep)?\s*\d{1,4}$"""), "")
+            .replace(Regex("""(?i)\b(audio\s+latino|latino|castellano|sub\s+español|subtitulado|english\s+subbed|english\s+dubbed|subbed|dubbed|dual)\b.*"""), "")
             .replace(Regex("""(?i)\b(1080p|720p|4k|hd|fhd|bluray|web-dl)\b.*"""), "")
-            .replace(Regex("""[\[\(].*?[\]\)]"""), "") // Remove [Br-Rip] or (2024)
+            .replace(Regex("""[\[\(].*?[\]\)]"""), "") // Remove [Br-Rip] or (2024) or (Sub)
             .replace(Regex("""\b(19\d{2}|20\d{2})\b"""), "") // Remove standalone 4-digit release years like 2010
+            .replace(Regex("""\s*[-:]\s*\d{1,4}$"""), "") // Catch trailing numbers after bracket removal
             .replace("-", " ")
             .replace("_", " ")
             .replace(Regex("""\s+"""), " ")
             .trim()
+    }
+
+    private fun fetchAlternativeTitles(apiKey: String, id: Int, mType: String): List<String> {
+        return try {
+            val url = "$BASE_URL/$mType/$id/alternative_titles?api_key=$apiKey"
+            val req = Request.Builder().url(url).header("User-Agent", "AnimeTV/2.8").build()
+            client.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val json = JSONObject(resp.body?.string() ?: "")
+                    val array = json.optJSONArray("results") ?: json.optJSONArray("titles")
+                    val list = mutableListOf<String>()
+                    if (array != null) {
+                        for (idx in 0 until array.length()) {
+                            val title = array.getJSONObject(idx).optString("title", "")
+                            if (title.isNotBlank()) list.add(title)
+                        }
+                    }
+                    list
+                } else emptyList()
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 
     /**

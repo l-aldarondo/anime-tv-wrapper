@@ -49,16 +49,19 @@ class JKAnimeSource : AnimeSource {
                 val a = c.selectFirst("a") ?: continue
                 val href = a.absUrl("href")
                 val img = c.selectFirst("img")
-                val imgUrl = img?.attr("data-animepic")?.ifEmpty { img.attr("src") } ?: ""
                 val titleEl = c.selectFirst("h5, .title, .card-title")
-                var rawTitle = img?.attr("alt")?.trim()?.ifEmpty { titleEl?.text()?.trim() ?: "" } ?: ""
+                val altText = img?.attr("alt")?.trim() ?: ""
+                var rawTitle = titleEl?.text()?.trim()?.ifEmpty { altText } ?: altText
+                // Strip trailing episode numbers like " - 12" from the title
+                rawTitle = rawTitle.replace(Regex("""\s*[-:]\s*\d+$"""), "").trim()
 
                 if (rawTitle.isEmpty()) continue
 
                 val epBadgeEl = c.selectFirst(".badge-primary, .badge, .card-text.ep")
                 var epBadge = epBadgeEl?.text()?.trim() ?: ""
                 if (epBadge.isEmpty()) {
-                    val epMatch = Regex("""Ep\s*(\d+)""", RegexOption.IGNORE_CASE).find(rawTitle)
+                    val epMatch = Regex("""Ep\s*(\d+)""", RegexOption.IGNORE_CASE).find(altText)
+                        ?: Regex("""-\s*(\d+)$""").find(altText)
                     if (epMatch != null) {
                         epBadge = "Ep ${epMatch.groupValues[1]}"
                     }
@@ -70,6 +73,14 @@ class JKAnimeSource : AnimeSource {
                 } else {
                     href
                 }
+
+                val slug = detailUrl.trimEnd('/').substringAfterLast('/')
+                val highResPoster = if (slug.isNotEmpty() && !slug.contains(".")) {
+                    "https://cdn.jkdesa.com/assets/images/animes/image/$slug.jpg"
+                } else ""
+                val imgUrl = img?.attr("data-animepic")?.takeIf { it.isNotBlank() }
+                    ?: highResPoster.takeIf { it.isNotBlank() }
+                    ?: img?.attr("src") ?: ""
 
                 if (rawTitle.isNotEmpty() && detailUrl.isNotEmpty()) {
                     list.add(
@@ -154,13 +165,21 @@ class JKAnimeSource : AnimeSource {
             if (title.isBlank() || title.equals("Anime", ignoreCase = true)) {
                 title = seriesUrl.trimEnd('/').substringAfterLast('/').replace('-', ' ').replace('_', ' ')
             }
+            title = title.replace(Regex("""\s*[-:]\s*\d+$"""), "").trim()
+
             val rawSynopsis = doc.selectFirst(".anime__details__text p, .sinopsis, .description")?.text()?.trim()
                 ?.ifEmpty { null }
                 ?: doc.selectFirst("meta[property=og:description], meta[name=description]")?.attr("content")?.trim()
                 ?: ""
             val synopsis = android.text.Html.fromHtml(rawSynopsis, android.text.Html.FROM_HTML_MODE_LEGACY).toString().trim()
             val img = doc.selectFirst(".anime__details__pic, img.poster, .card-img img")
-            val posterUrl = img?.attr("src")?.ifEmpty { img.attr("data-setbg") } ?: ""
+            val slug = seriesUrl.trimEnd('/').substringAfterLast('/')
+            val slugPoster = if (slug.isNotEmpty() && !slug.contains(".")) {
+                "https://cdn.jkdesa.com/assets/images/animes/image/$slug.jpg"
+            } else ""
+            val posterUrl = img?.attr("data-setbg")?.takeIf { it.isNotBlank() }
+                ?: img?.attr("src")?.takeIf { it.isNotBlank() }
+                ?: slugPoster
 
             val genres = doc.select(".anime__details__widget ul li a, .genres a").map { it.text().trim() }
 

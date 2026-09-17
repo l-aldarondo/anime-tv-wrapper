@@ -48,15 +48,21 @@ class GogoAnimeSource : AnimeSource {
                 val a = it.selectFirst("a") ?: continue
                 val href = a.absUrl("href")
                 val img = it.selectFirst("img")
-                val posterUrl = img?.attr("src")?.ifEmpty { img.attr("data-src") } ?: ""
-                val titleEl = it.selectFirst(".name, .title, a")
-                var rawTitle = titleEl?.text()?.trim() ?: ""
+                val rawPoster = img?.attr("src")?.ifEmpty { img.attr("data-src") } ?: ""
+                val posterUrl = rawPoster.replace(Regex("""\?resize=\d+,\d+.*"""), "").replace("i0.wp.com/", "").replace("i1.wp.com/", "").replace("i2.wp.com/", "").replace("i3.wp.com/", "")
+
+                val titleEl = it.selectFirst("h2, h3, .name, .title")
+                var rawTitle = titleEl?.text()?.trim() ?: (a.attr("title").ifEmpty { a.text().trim() })
+                rawTitle = rawTitle
+                    .replace(Regex("""(?i)\s*(?:episode|ep)\s*\d+.*"""), "")
+                    .replace(Regex("""(?i)\s*(?:english\s+subbed|english\s+dubbed|subbed|dubbed|sub|dub).*"""), "")
+                    .replace(Regex("""\s*[-:]\s*\d+$"""), "")
+                    .trim()
 
                 var epBadge = ""
                 val epMatch = Regex("""Ep\s*(\d+)""", RegexOption.IGNORE_CASE).find(it.text())
                 if (epMatch != null) {
                     epBadge = "Ep ${epMatch.groupValues[1]}"
-                    rawTitle = rawTitle.replace(Regex("""Episode\s*\d+\s*(English Subbed)?""", RegexOption.IGNORE_CASE), "").trim()
                 }
 
                 if (rawTitle.isNotEmpty() && href.isNotEmpty()) {
@@ -94,9 +100,16 @@ class GogoAnimeSource : AnimeSource {
                 val a = it.selectFirst("a") ?: continue
                 val href = a.absUrl("href")
                 val img = it.selectFirst("img")
-                val posterUrl = img?.attr("src")?.ifEmpty { img.attr("data-src") } ?: ""
-                val titleEl = it.selectFirst(".name, .title, a")
-                val title = titleEl?.text()?.trim() ?: ""
+                val rawPoster = img?.attr("src")?.ifEmpty { img.attr("data-src") } ?: ""
+                val posterUrl = rawPoster.replace(Regex("""\?resize=\d+,\d+.*"""), "").replace("i0.wp.com/", "").replace("i1.wp.com/", "").replace("i2.wp.com/", "").replace("i3.wp.com/", "")
+
+                val titleEl = it.selectFirst("h2, h3, .name, .title")
+                var title = titleEl?.text()?.trim() ?: (a.attr("title").ifEmpty { a.text().trim() })
+                title = title
+                    .replace(Regex("""(?i)\s*(?:episode|ep)\s*\d+.*"""), "")
+                    .replace(Regex("""(?i)\s*(?:english\s+subbed|english\s+dubbed|subbed|dubbed|sub|dub).*"""), "")
+                    .replace(Regex("""\s*[-:]\s*\d+$"""), "")
+                    .trim()
 
                 if (title.isNotEmpty() && href.isNotEmpty()) {
                     list.add(
@@ -128,13 +141,20 @@ class GogoAnimeSource : AnimeSource {
             if (title.isBlank() || title.equals("Anime", ignoreCase = true)) {
                 title = detailUrl.trimEnd('/').substringAfterLast('/').replace('-', ' ').replace('_', ' ')
             }
+            title = title
+                .replace(Regex("""(?i)\s*(?:episode|ep)\s*\d+.*"""), "")
+                .replace(Regex("""(?i)\s*(?:english\s+subbed|english\s+dubbed|subbed|dubbed|sub|dub).*"""), "")
+                .replace(Regex("""\s*[-:]\s*\d+$"""), "")
+                .trim()
+
             val rawSynopsis = doc.selectFirst(".content-txt, .description, .anime_info_body_bg p")?.text()?.trim()
                 ?.ifEmpty { null }
                 ?: doc.selectFirst("meta[property=og:description], meta[name=description]")?.attr("content")?.trim()
                 ?: ""
             val synopsis = android.text.Html.fromHtml(rawSynopsis, android.text.Html.FROM_HTML_MODE_LEGACY).toString().trim()
             val img = doc.selectFirst(".anime_info_body_bg img, img")
-            val posterUrl = img?.attr("src")?.ifEmpty { img.attr("data-src") } ?: ""
+            val rawPoster = img?.attr("src")?.ifEmpty { img.attr("data-src") } ?: ""
+            val posterUrl = rawPoster.replace(Regex("""\?resize=\d+,\d+.*"""), "").replace("i0.wp.com/", "").replace("i1.wp.com/", "").replace("i2.wp.com/", "").replace("i3.wp.com/", "")
 
             val genres = doc.select(".type a").map { it.text().trim() }
 
