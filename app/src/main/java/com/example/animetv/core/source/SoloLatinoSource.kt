@@ -75,7 +75,11 @@ class SoloLatinoSource : AnimeSource {
 
                 val img = it.selectFirst("img")
                 val posterUrl = img?.attr("src")?.ifEmpty { img.attr("data-src") } ?: ""
-                val title = img?.attr("alt")?.trim() ?: it.selectFirst(".title, h2, h3")?.text()?.trim() ?: ""
+                var title = img?.attr("alt")?.trim() ?: it.selectFirst(".title, h2, h3")?.text()?.trim() ?: ""
+                title = title.replace(Regex("""(?i)\b(ver|online|pel[íi]cula|serie|latino)\b"""), "")
+                             .replace(Regex("""(?i)(sololatino).*"""), "")
+                             .replace(Regex("""\s+"""), " ")
+                             .replace("-", "").replace("|", "").trim()
 
                 val ratingEl = it.selectFirst(".rating, .vote, .stars")
                 val rating = ratingEl?.text()?.trim() ?: ""
@@ -118,7 +122,11 @@ class SoloLatinoSource : AnimeSource {
                 val href = a.absUrl("href")
                 val img = it.selectFirst("img")
                 val posterUrl = img?.attr("src")?.ifEmpty { img.attr("data-src") } ?: ""
-                val title = img?.attr("alt")?.trim() ?: it.selectFirst(".title, h2, h3")?.text()?.trim() ?: ""
+                var title = img?.attr("alt")?.trim() ?: it.selectFirst(".title, h2, h3")?.text()?.trim() ?: ""
+                title = title.replace(Regex("""(?i)\b(ver|online|pel[íi]cula|serie|latino)\b"""), "")
+                             .replace(Regex("""(?i)(sololatino).*"""), "")
+                             .replace(Regex("""\s+"""), " ")
+                             .replace("-", "").replace("|", "").trim()
 
                 if (title.isNotEmpty() && href.isNotEmpty()) {
                     list.add(
@@ -154,6 +162,11 @@ class SoloLatinoSource : AnimeSource {
             if (title.isBlank() || title.equals("Anime", ignoreCase = true)) {
                 title = detailUrl.trimEnd('/').substringAfterLast('/').replace('-', ' ').replace('_', ' ')
             }
+            title = title.replace(Regex("""(?i)\b(ver|online|pel[íi]cula|serie|latino)\b"""), "")
+                         .replace(Regex("""(?i)(sololatino).*"""), "")
+                         .replace(Regex("""\s+"""), " ")
+                         .replace("-", "").replace("|", "").trim()
+
             val rawSynopsis = doc.selectFirst(".overview, .sinopsis, .entry-content p, .film-description, .description")?.text()?.trim()
                 ?.ifEmpty { null }
                 ?: doc.selectFirst("meta[property=og:description], meta[name=description]")?.attr("content")?.trim()

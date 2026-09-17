@@ -380,7 +380,7 @@ object TmdbMetadataRepository {
         try {
             val encodedQuery = URLEncoder.encode(queryToSearch, "UTF-8")
             // Use multi-search to capture both Movies and TV Shows/Anime in one call
-            val url = "$BASE_URL/search/multi?api_key=$apiKey&query=$encodedQuery&language=es-MX&include_adult=false"
+            val url = "$BASE_URL/search/multi?api_key=$apiKey&query=$encodedQuery&language=es-MX&include_adult=true"
 
             val request = Request.Builder()
                 .url(url)
@@ -450,36 +450,37 @@ object TmdbMetadataRepository {
 
                     var score = 0
 
-                    // Title similarity is highest priority: prevent unrelated anime hijacking
+                    // Title similarity is highest priority (0-200): exact matches must never lose to partial word overlaps
                     if (sim < 0.2) {
                         score -= 200
                     } else {
-                        score += (sim * 100).toInt()
+                        score += (sim * 200).toInt()
                     }
 
                     // Type preference
                     if (isMovie && mType == "movie") score += 50
                     if (!isMovie && mType == "tv") score += 50
-                    if (!isMovie && mType == "movie") score -= 60 // Anime show queries should penalize movies
+                    if (!isMovie && mType == "movie") score -= 50
+                    if (isMovie && mType == "tv") score -= 50
 
                     // Live Action vs Anime preference
                     if (detectedLiveAction) {
                         if (!hasAnimGenre) score += 50
                         if (!isJapanese) score += 20
                     } else {
-                        // Standard Anime: strong bonus for Animation genre and Japanese origin
-                        if (hasAnimGenre) score += 60
-                        if (isJapanese) score += 30
-                        // Heavy penalty if live action is returned for an anime
-                        if (!hasAnimGenre) score -= 120
-                        // Extra heavy penalty if live action English content is returned for an anime
-                        if (!hasAnimGenre && origLang == "en") score -= 150
+                        // Standard Anime: bonus for Animation genre and Japanese origin
+                        if (hasAnimGenre) score += 40
+                        if (isJapanese) score += 20
                     }
 
                     val p = obj.optString("poster_path", "")
                     val ov = obj.optString("overview", "")
                     if (p.isNotEmpty()) score += 10
                     if (ov.isNotEmpty()) score += 10
+                    
+                    val popularity = obj.optDouble("popularity", 0.0)
+                    // Popularity bonus maxes out at 50 to help break ties between exact title matches
+                    score += minOf(popularity * 0.5, 50.0).toInt()
 
                     if (score > bestScore) {
                         bestScore = score

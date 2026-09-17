@@ -12,6 +12,8 @@ import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.example.animetv.R
 import com.example.animetv.core.model.AnimeCard
 import com.example.animetv.core.util.CoverUtils
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class AnimeCardAdapter(
     private val items: MutableList<AnimeCard>,
@@ -25,6 +27,7 @@ class AnimeCardAdapter(
         val title: TextView? = view.findViewById(R.id.txtTitle)
         val source: TextView = view.findViewById(R.id.txtSource)
         val badge: TextView = view.findViewById(R.id.txtBadge)
+        var tmdbJob: kotlinx.coroutines.Job? = null
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -48,6 +51,7 @@ class AnimeCardAdapter(
             holder.badge.visibility = View.GONE
         }
 
+        // Load fallback (scraped) poster first
         val validPoster = if (CoverUtils.isValidCover(item.posterUrl)) item.posterUrl.trim() else ""
         if (validPoster.isNotEmpty()) {
             Glide.with(holder.poster.context)
@@ -59,6 +63,28 @@ class AnimeCardAdapter(
                 .into(holder.poster)
         } else {
             holder.poster.setImageResource(R.drawable.bg_card_poster_placeholder)
+        }
+
+        // Asynchronously fetch high-quality TMDB poster
+        holder.tmdbJob?.cancel()
+        holder.tmdbJob = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+            val isMovie = item.detailUrl.contains("/pelicula/") || item.episodeBadge.equals("Película", ignoreCase = true)
+            val isLiveAction = item.source.contains("SoloLatino", ignoreCase = true) && !item.detailUrl.contains("/animes")
+            val meta = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    com.example.animetv.core.tmdb.TmdbMetadataRepository.searchMetadata(
+                        holder.itemView.context, item.title, isMovie, isLiveAction
+                    )
+                } catch (e: Exception) { null }
+            }
+            if (meta != null && meta.posterUrl.isNotEmpty()) {
+                Glide.with(holder.poster.context)
+                    .load(meta.posterUrl)
+                    .centerCrop()
+                    .diskCacheStrategy(DiskCacheStrategy.ALL)
+                    .placeholder(holder.poster.drawable)
+                    .into(holder.poster)
+            }
         }
 
         // Native 10-foot TV smooth hardware scaling on remote focus — 110% scale, elevated
@@ -86,6 +112,11 @@ class AnimeCardAdapter(
     }
 
     override fun getItemCount(): Int = items.size
+
+    override fun onViewRecycled(holder: ViewHolder) {
+        super.onViewRecycled(holder)
+        holder.tmdbJob?.cancel()
+    }
 
     fun submitList(newItems: List<AnimeCard>) {
         items.clear()

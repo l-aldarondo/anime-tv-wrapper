@@ -382,8 +382,15 @@ class MainActivity : AppCompatActivity() {
         txtHeroMeta.visibility = View.GONE
         heroMetaJob?.cancel()
         heroMetaJob = lifecycleScope.launch {
+            val isMovie = card.detailUrl.contains("/pelicula/") || card.episodeBadge.equals("Película", ignoreCase = true)
+            val isLiveAction = card.source.contains("SoloLatino", ignoreCase = true) && !card.detailUrl.contains("/animes")
             val meta = try {
-                com.example.animetv.core.tmdb.TmdbMetadataRepository.searchMetadata(this@MainActivity, card.title)
+                com.example.animetv.core.tmdb.TmdbMetadataRepository.searchMetadata(
+                    this@MainActivity,
+                    card.title,
+                    isMovie = isMovie,
+                    isLiveAction = isLiveAction
+                )
             } catch (e: Exception) {
                 null
             }

@@ -468,12 +468,19 @@ class DetailActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val detail = detailDeferred.await()
+                val isMovie = card.detailUrl.contains("/pelicula/") || card.episodeBadge.equals("Película", ignoreCase = true)
+                val isLiveAction = card.source.contains("SoloLatino", ignoreCase = true) && !card.detailUrl.contains("/animes")
                 val tmdb = if (detail != null && detail.tmdbId > 0 && detail.tmdbMediaType.isNotEmpty()) {
                     TmdbMetadataRepository.getMetadataByTmdbId(this@DetailActivity, detail.tmdbId, detail.tmdbMediaType)
                 } else {
                     val rawTitleForTmdb = detail?.title?.takeIf { it.isNotBlank() && it != "Anime" } ?: card.title
                     val titleForTmdb = TmdbMetadataRepository.sanitizeTitle(rawTitleForTmdb)
-                    TmdbMetadataRepository.searchMetadata(this@DetailActivity, titleForTmdb)
+                    TmdbMetadataRepository.searchMetadata(
+                        this@DetailActivity,
+                        titleForTmdb,
+                        isMovie = isMovie,
+                        isLiveAction = isLiveAction
+                    )
                 }
                 if (tmdb != null) {
                     currentTmdbMeta = tmdb
