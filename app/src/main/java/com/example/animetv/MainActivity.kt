@@ -6,7 +6,6 @@ import android.graphics.Matrix
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.os.Bundle
-import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
@@ -14,10 +13,12 @@ import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.widget.NestedScrollView
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -44,22 +45,20 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * 100% Native Android TV application entry point (Nuvio/Stremio "board" architecture).
- * The upper info panel always reflects whichever card currently has D-pad focus, and only one
- * catalog row is on screen at a time — DOWN/UP page between rows instead of the whole page
- * scrolling. Features hardware D-Pad focus navigation, background HTML scrapers, and native
- * ExoPlayer streaming.
+ * 100% Native Android TV application entry point (Nuvio/Stremio-style Home). A large hero banner
+ * always reflects whichever card currently has D-pad focus, while every catalog row scrolls
+ * continuously beneath it in a single page — matching real Nuvio's layout, not the earlier
+ * one-row-at-a-time "board" experiment.
  */
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var recyclerCurrentRow: RecyclerView
-    private lateinit var txtCurrentRowTitle: TextView
+    private lateinit var scrollMain: NestedScrollView
+    private lateinit var layoutCatalogRows: LinearLayout
     private lateinit var progressBarHome: ProgressBar
 
     // Info Panel Views
     private lateinit var imgHeroBackdrop: ImageView
-    private lateinit var viewHeroTextGradient: com.example.animetv.ui.GradientOverlayView
-    private lateinit var viewHeroRowGradient: com.example.animetv.ui.GradientOverlayView
+    private lateinit var viewHeroBottomGradient: com.example.animetv.ui.GradientOverlayView
     private lateinit var txtHeroBadge: TextView
     private lateinit var txtHeroTitle: TextView
     private lateinit var txtHeroMeta: TextView
@@ -81,14 +80,15 @@ class MainActivity : AppCompatActivity() {
 
     private var lastLoadedCatalog: HomeCatalogData? = null
 
-    // The full ordered list of rows, and which one is currently the single visible row.
-    private var displayedRows: List<CatalogRow> = emptyList()
-    private var currentRowIndex = 0
-
-    // Whichever card currently has D-pad focus in the visible row — the info panel above always
-    // reflects this, replacing the old auto-rotating "featured suggestions" hero.
+    // Whichever card currently has D-pad focus in the row list — the hero above always reflects
+    // this, replacing the old auto-rotating "featured suggestions" hero.
     private var currentFocusedCard: AnimeCard? = null
     private var heroMetaJob: kotlinx.coroutines.Job? = null
+
+    // True once the hero/initial D-pad focus has been seeded from the first loaded row, so a
+    // later background refresh (silent revalidation, pull-to-refresh) never yanks focus or the
+    // hero away from whatever the user is actually looking at.
+    private var hasBoundInitialFocus = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -96,7 +96,6 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         initViews()
-        setupRecyclerView()
         setupListeners()
         loadInitialCatalog()
     }
@@ -109,13 +108,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun initViews() {
-        recyclerCurrentRow = findViewById(R.id.recyclerCurrentRow)
-        txtCurrentRowTitle = findViewById(R.id.txtCurrentRowTitle)
+        scrollMain = findViewById(R.id.scrollMain)
+        layoutCatalogRows = findViewById(R.id.layoutCatalogRows)
         progressBarHome = findViewById(R.id.progressBarHome)
 
         imgHeroBackdrop = findViewById(R.id.imgHeroBackdrop)
-        viewHeroTextGradient = findViewById(R.id.viewHeroTextGradient)
-        viewHeroRowGradient = findViewById(R.id.viewHeroRowGradient)
+        viewHeroBottomGradient = findViewById(R.id.viewHeroBottomGradient)
         setupHeroGradients()
         txtHeroBadge = findViewById(R.id.txtHeroBadge)
         txtHeroTitle = findViewById(R.id.txtHeroTitle)
@@ -136,79 +134,35 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Configures the info panel's two targeted gradient overlays. Instead of a flat dim over
-     * the whole backdrop (which looks muddy and hides artwork uniformly), this keeps the image
-     * at full brightness and only darkens: (1) a left-side pocket wide enough for the title/
-     * synopsis/buttons to stay legible, dissolving away by the right edge, and (2) a thin strip
-     * along the bottom so the artwork doesn't clash with the row title beneath it.
+     * Configures the hero's single gradient overlay: a bottom-only fade into the canvas color so
+     * the title block (and the row list beneath the hero) never clash with the artwork, without
+     * dimming the rest of the image the way a flat scrim would.
      */
     private fun setupHeroGradients() {
         val canvas = androidx.core.content.ContextCompat.getColor(this, R.color.primary_canvas)
         fun withAlpha(color: Int, alpha: Int): Int = (color and 0x00FFFFFF) or (alpha shl 24)
 
-        viewHeroTextGradient.setGradient(
-            com.example.animetv.ui.GradientOverlayView.Direction.LEFT_TO_RIGHT,
-            intArrayOf(
-                withAlpha(canvas, 255),
-                withAlpha(canvas, 255),
-                withAlpha(canvas, 204),
-                withAlpha(canvas, 0)
-            ),
-            floatArrayOf(0f, 0.35f, 0.55f, 1f)
-        )
-
-        viewHeroRowGradient.setGradient(
+        viewHeroBottomGradient.setGradient(
             com.example.animetv.ui.GradientOverlayView.Direction.BOTTOM_TO_TOP,
             intArrayOf(
                 withAlpha(canvas, 255),
-                withAlpha(canvas, 153),
+                withAlpha(canvas, 235),
+                withAlpha(canvas, 120),
                 withAlpha(canvas, 0)
             ),
-            floatArrayOf(0f, 0.25f, 0.6f)
+            floatArrayOf(0f, 0.22f, 0.5f, 1f)
         )
     }
 
-    private fun setupRecyclerView() {
-        recyclerCurrentRow.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
-    }
+    /** Inflates one row (title + horizontal card list) for [row], wiring focus back to the hero. */
+    private fun buildRowView(row: CatalogRow): View {
+        val rowView = layoutInflater.inflate(R.layout.item_home_row, layoutCatalogRows, false)
+        val txtTitle = rowView.findViewById<TextView>(R.id.txtRowTitle)
+        val recycler = rowView.findViewById<RecyclerView>(R.id.recyclerRowCards)
+        txtTitle.text = row.title
+        recycler.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
 
-    /**
-     * Only one row is ever inflated, so there's no sibling row for the platform's default
-     * focus-search to find below/above the visible one. Android calls an Activity's onKeyDown
-     * specifically when the whole view hierarchy left a key unconsumed (Activity.dispatchKeyEvent
-     * tries the focused view chain first via the window, and only falls back to this method if
-     * nothing handled it) — exactly the "DOWN/UP dead-ended, nothing to focus in that direction"
-     * case here, so this is where paging between rows belongs. UP from row 0 never reaches this:
-     * the info panel's buttons sit directly above in the layout, so default focus-search already
-     * finds them first.
-     */
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_DOWN -> {
-                if (currentRowIndex < displayedRows.size - 1) {
-                    showRow(currentRowIndex + 1)
-                    return true
-                }
-            }
-            KeyEvent.KEYCODE_DPAD_UP -> {
-                if (currentRowIndex > 0) {
-                    showRow(currentRowIndex - 1)
-                    return true
-                }
-            }
-        }
-        return super.onKeyDown(keyCode, event)
-    }
-
-    /** Binds row [index] as the single visible row, focusing card [focusIndex] within it. */
-    private fun showRow(index: Int, focusIndex: Int = 0) {
-        if (displayedRows.isEmpty()) return
-        val clampedIndex = index.coerceIn(0, displayedRows.size - 1)
-        currentRowIndex = clampedIndex
-        val row = displayedRows[clampedIndex]
-        txtCurrentRowTitle.text = row.title
-
-        val onCardLongClick: (AnimeCard) -> Unit = if (row.title.contains("Continuar Viendo", ignoreCase = true)) {
+        val onCardLongClick: (AnimeCard) -> Unit = if (row.type == CatalogRowType.CONTINUE_WATCHING) {
             { card -> showRemoveFromHistoryDialog(card) }
         } else {
             { card -> toggleCardFavorite(card) }
@@ -216,17 +170,12 @@ class MainActivity : AppCompatActivity() {
         val onCardFocus: (AnimeCard) -> Unit = { card -> updateInfoPanel(card) }
         val onCardClick: (AnimeCard) -> Unit = { card -> DetailActivity.start(this, card) }
 
-        recyclerCurrentRow.adapter = if (row.type == CatalogRowType.CONTINUE_WATCHING) {
+        recycler.adapter = if (row.type == CatalogRowType.CONTINUE_WATCHING) {
             ContinueWatchingCardAdapter(row.cards.toMutableList(), onCardClick, onCardLongClick, onCardFocus)
         } else {
             AnimeCardAdapter(row.cards.toMutableList(), onCardClick, onCardLongClick, onCardFocus)
         }
-
-        val clampedFocus = focusIndex.coerceIn(0, row.cards.size - 1)
-        recyclerCurrentRow.post {
-            val holder = recyclerCurrentRow.findViewHolderForAdapterPosition(clampedFocus)
-            holder?.itemView?.requestFocus()
-        }
+        return rowView
     }
 
     private fun showRemoveFromHistoryDialog(card: AnimeCard) {
@@ -247,8 +196,8 @@ class MainActivity : AppCompatActivity() {
         btnNavCatalog.requestFocus()
 
         btnNavCatalog.setOnClickListener {
-            showRow(0)
-            btnHeroPlay.requestFocus()
+            scrollMain.smoothScrollTo(0, 0)
+            focusFirstCard()
         }
 
         btnNavSearch.setOnClickListener {
@@ -261,6 +210,15 @@ class MainActivity : AppCompatActivity() {
 
         btnNavSettings.setOnClickListener {
             com.example.animetv.ui.TorrentSettingsDialog.show(this)
+        }
+    }
+
+    /** Moves D-pad focus to the first card of the first non-empty row, if any is on screen. */
+    private fun focusFirstCard() {
+        val firstRow = layoutCatalogRows.getChildAt(0) ?: return
+        val recycler = firstRow.findViewById<RecyclerView>(R.id.recyclerRowCards) ?: return
+        recycler.post {
+            recycler.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus()
         }
     }
 
@@ -318,13 +276,12 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * Android's centerCrop always anchors on the image's center — same gap as CSS
-     * `object-fit: cover` without `object-position`. Since the panel's text sits on the left
-     * (see the text-protection gradient), centering the crop chops off whatever character art
-     * sits on the right half of a wide backdrop. This replicates the CSS
+     * `object-fit: cover` without `object-position`. This replicates the CSS
      * `object-position: 75% 20%` formula by hand via an ImageView matrix: scale to cover the
      * view exactly like centerCrop, but bias the crop toward the upper-right instead of the
-     * middle. There's no per-title focal-point data available from TMDB/the scraper, so this is
-     * a fixed default rather than a per-movie value.
+     * middle, so character art positioned there doesn't get chopped off. There's no per-title
+     * focal-point data available from TMDB/the scraper, so this is a fixed default rather than a
+     * per-movie value.
      */
     private fun applyHeroFocalCrop(drawable: Drawable, focalX: Float = 0.75f, focalY: Float = 0.20f) {
         val vw = imgHeroBackdrop.width.toFloat()
@@ -345,9 +302,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Updates the info panel to reflect [card] — called whenever a card in the visible row gains
-     * D-pad focus. Replaces the old auto-rotating "featured suggestions" hero: the panel is now
-     * always a live reflection of user navigation, not a timer.
+     * Updates the hero to reflect [card] — called whenever a card in any row gains D-pad focus.
+     * Replaces the old auto-rotating "featured suggestions" hero: it's now always a live
+     * reflection of user navigation, not a timer.
      */
     private fun updateInfoPanel(card: AnimeCard) {
         currentFocusedCard = card
@@ -561,10 +518,22 @@ class MainActivity : AppCompatActivity() {
             allRows.add(CatalogRow(title = "🌟 Series Populares Recomendadas", cards = data.latinoTrending.reversed()))
         }
 
-        val isFirstLoad = displayedRows.isEmpty()
-        displayedRows = allRows
-        if (allRows.isNotEmpty()) {
-            showRow(if (isFirstLoad) 0 else currentRowIndex)
+        layoutCatalogRows.removeAllViews()
+        for (row in allRows) {
+            if (row.cards.isEmpty()) continue
+            layoutCatalogRows.addView(buildRowView(row))
+        }
+
+        // Seed the hero + initial D-pad focus from the very first card once, on first load only —
+        // a later silent/background refresh must never yank focus or the hero away from whatever
+        // the user is currently looking at.
+        if (!hasBoundInitialFocus) {
+            val firstCard = allRows.firstOrNull { it.cards.isNotEmpty() }?.cards?.firstOrNull()
+            if (firstCard != null) {
+                hasBoundInitialFocus = true
+                updateInfoPanel(firstCard)
+                focusFirstCard()
+            }
         }
     }
 

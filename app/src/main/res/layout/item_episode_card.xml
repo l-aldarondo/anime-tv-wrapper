@@ -1,19 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Compact Stremio-style layout: thumbnail and text sit side by side instead of stacked, which
-     is what actually saves the vertical space the old (image-on-top, text-below) card spent on
-     duplicating layout height for both. -->
+<!-- Nuvio-style episode card: a full-width landscape still (16:9) on top, with the episode's
+     S/E number, release date, title and a one-line synopsis stamped below it — matching a real
+     Nuvio episode card (a "horizontal widescreen block", i.e. a landscape-oriented still, not a
+     small side-by-side thumbnail+text strip). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="320dp"
     android:layout_height="wrap_content"
     android:layout_marginEnd="14dp"
-    android:orientation="horizontal"
+    android:orientation="vertical"
     android:padding="8dp"
     android:background="@drawable/bg_favorite_card">
 
-    <!-- Episode Screenshot Still Image (16:9) -->
+    <!-- Episode Screenshot Still Image (16:9, full card width) -->
     <FrameLayout
-        android:layout_width="128dp"
-        android:layout_height="72dp"
+        android:layout_width="match_parent"
+        android:layout_height="172dp"
         android:background="@color/surface_layer">
 
         <ImageView
@@ -30,7 +31,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="top|end"
-            android:layout_margin="4dp"
+            android:layout_margin="6dp"
             android:background="@drawable/bg_watched_badge"
             android:paddingHorizontal="4dp"
             android:paddingVertical="1dp"
@@ -42,45 +43,41 @@
 
     </FrameLayout>
 
-    <!-- Episode Details Content -->
+    <!-- Season & Episode Tag + Progress on the left, Release Date pinned to the right corner
+         of the same line. -->
     <LinearLayout
-        android:layout_width="0dp"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:layout_marginStart="10dp"
-        android:orientation="vertical">
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
 
-        <LinearLayout
-            android:layout_width="match_parent"
+        <TextView
+            android:id="@+id/txtEpisodeBadge"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
+            android:textColor="#FFD54F"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.02"
+            android:maxLines="1"
+            android:ellipsize="end" />
 
-            <!-- Season & Episode Tag (+ release date folded into the same line to save a row) -->
-            <TextView
-                android:id="@+id/txtEpisodeBadge"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:textColor="#FFD54F"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.02"
-                android:maxLines="1"
-                android:ellipsize="end" />
+        <!-- Watch State / Progress -->
+        <TextView
+            android:id="@+id/txtEpisodeProgress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:textColor="#81C784"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
 
-            <!-- Watch State / Progress -->
-            <TextView
-                android:id="@+id/txtEpisodeProgress"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
-                android:textColor="#81C784"
-                android:textSize="10sp"
-                android:textStyle="bold"
-                android:visibility="gone" />
-
-        </LinearLayout>
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
 
         <!-- Release Date -->
         <TextView
@@ -88,74 +85,74 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="@color/secondary_text"
-            android:textSize="9sp"
+            android:textSize="10sp"
             android:visibility="gone" />
 
-        <!-- Real Episode Name / Chapter Title -->
-        <TextView
-            android:id="@+id/txtEpisodeTitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:textColor="@color/primary_text"
-            android:textSize="13sp"
-            android:textStyle="bold"
-            android:maxLines="1"
-            android:ellipsize="end" />
+    </LinearLayout>
 
-        <!-- Episode Synopsis -->
-        <TextView
-            android:id="@+id/txtEpisodeSynopsis"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:lineSpacingExtra="1dp"
-            android:textColor="@color/secondary_text"
-            android:textSize="11sp"
-            android:maxLines="2"
-            android:ellipsize="end" />
+    <!-- Real Episode Name / Chapter Title -->
+    <TextView
+        android:id="@+id/txtEpisodeTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textColor="@color/primary_text"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:maxLines="1"
+        android:ellipsize="end" />
 
-        <!-- Direct actions for this specific episode -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:orientation="horizontal">
+    <!-- Episode Synopsis (one line — the full text isn't shown anywhere else on this page, but
+         the card stays compact and image-led like the real Nuvio reference) -->
+    <TextView
+        android:id="@+id/txtEpisodeSynopsis"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textColor="@color/secondary_text"
+        android:textSize="11sp"
+        android:maxLines="1"
+        android:ellipsize="end" />
 
-            <Button
-                android:id="@+id/btnEpisodeWeb"
-                android:layout_width="0dp"
-                android:layout_height="28dp"
-                android:layout_weight="1"
-                android:background="@drawable/bg_netflix_btn_play"
-                android:focusable="true"
-                android:focusableInTouchMode="true"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:paddingHorizontal="0dp"
-                android:text="▶ WEB"
-                android:textColor="@color/color_netflix_btn_play"
-                android:textSize="10sp"
-                android:textStyle="bold" />
+    <!-- Direct actions for this specific episode -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal">
 
-            <Button
-                android:id="@+id/btnEpisodeTorrent"
-                android:layout_width="0dp"
-                android:layout_height="28dp"
-                android:layout_weight="1"
-                android:layout_marginStart="6dp"
-                android:background="@drawable/bg_netflix_btn_secondary"
-                android:focusable="true"
-                android:focusableInTouchMode="true"
-                android:minWidth="0dp"
-                android:minHeight="0dp"
-                android:paddingHorizontal="0dp"
-                android:text="⚡ TOR"
-                android:textColor="#00E5FF"
-                android:textSize="10sp"
-                android:textStyle="bold" />
+        <Button
+            android:id="@+id/btnEpisodeWeb"
+            android:layout_width="0dp"
+            android:layout_height="30dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_netflix_btn_play"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingHorizontal="0dp"
+            android:text="▶ WEB"
+            android:textColor="@color/color_netflix_btn_play"
+            android:textSize="10sp"
+            android:textStyle="bold" />
 
-        </LinearLayout>
+        <Button
+            android:id="@+id/btnEpisodeTorrent"
+            android:layout_width="0dp"
+            android:layout_height="30dp"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/bg_netflix_btn_secondary"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingHorizontal="0dp"
+            android:text="⚡ TOR"
+            android:textColor="#00E5FF"
+            android:textSize="10sp"
+            android:textStyle="bold" />
 
     </LinearLayout>
 

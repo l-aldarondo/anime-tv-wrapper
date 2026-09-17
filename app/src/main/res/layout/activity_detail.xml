@@ -4,114 +4,68 @@
     android:layout_height="match_parent"
     android:background="@color/primary_canvas">
 
-    <!-- Backdrop Background Image with Dark Vignette -->
-    <ImageView
-        android:id="@+id/imgDetailBackdrop"
-        android:layout_width="match_parent"
-        android:layout_height="380dp"
-        android:scaleType="centerCrop"
-        android:alpha="0.25"
-        android:contentDescription="@null" />
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="380dp"
-        android:background="@drawable/bg_bottom_fader" />
-
     <!-- Main Scrollable Content -->
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:fillViewport="true"
-        android:clipChildren="false"
-        android:padding="@dimen/safe_zone_margin">
+        android:clipChildren="false">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:clipChildren="false"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:paddingBottom="40dp">
 
-            <!-- Top Row: Poster + Core Metadata -->
-            <LinearLayout
+            <!-- Nuvio-style hero: full-bleed backdrop with title/actions/synopsis overlaid on
+                 the lower-left, matching a real Nuvio detail-page reference screenshot (verified
+                 against a downloaded example) instead of the old small-poster + sidebar layout. -->
+            <FrameLayout
+                android:id="@+id/layoutDetailHero"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
+                android:layout_height="620dp"
+                android:background="@color/surface_layer"
+                android:clipChildren="false">
 
-                <!-- High-Res Cover Poster Card -->
-                <FrameLayout
-                    android:layout_width="200dp"
-                    android:layout_height="280dp">
+                <ImageView
+                    android:id="@+id/imgDetailBackdrop"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="centerCrop"
+                    android:contentDescription="@null" />
 
-                    <ImageView
-                        android:id="@+id/imgDetailPoster"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:scaleType="centerCrop"
-                        android:background="@color/surface_layer"
-                        android:contentDescription="@null" />
+                <!-- Left-to-right gradient keeps the text block on the left legible without
+                     flattening the artwork on the right, and a bottom gradient dissolves the
+                     hero into the canvas color before the episode list beneath it. -->
+                <com.example.animetv.ui.GradientOverlayView
+                    android:id="@+id/viewDetailTextGradient"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
 
-                </FrameLayout>
+                <com.example.animetv.ui.GradientOverlayView
+                    android:id="@+id/viewDetailBottomGradient"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
 
-                <!-- Information Section -->
                 <LinearLayout
-                    android:layout_width="0dp"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:layout_marginStart="24dp"
-                    android:orientation="vertical">
+                    android:layout_gravity="bottom"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="@dimen/safe_zone_margin"
+                    android:paddingBottom="28dp">
 
                     <!-- Title -->
                     <TextView
                         android:id="@+id/txtDetailTitle"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:textColor="@color/primary_text"
-                        android:textSize="30sp"
-                        android:textStyle="bold"
+                        style="@style/TextAppearance.HeroTitle"
                         android:maxLines="2"
-                        android:ellipsize="end" />
-
-                    <!-- Source + Rating Metadata -->
-                    <TextView
-                        android:id="@+id/txtDetailMeta"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:textColor="#FFD54F"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
-
-                    <!-- Runtime / Certification / TMDB Genres badges (movies & shows) -->
-                    <TextView
-                        android:id="@+id/txtMovieBadges"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:textColor="@color/secondary_text"
-                        android:textSize="12sp"
-                        android:visibility="gone" />
-
-                    <!-- Synopsis -->
-                    <TextView
-                        android:id="@+id/txtDetailSynopsis"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:lineSpacingExtra="4dp"
-                        android:maxLines="5"
                         android:ellipsize="end"
-                        style="@style/TextAppearance.BodyText" />
-
-                    <!-- Director / Cast (from TMDB credits) -->
-                    <TextView
-                        android:id="@+id/txtMovieCredits"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:lineSpacingExtra="4dp"
-                        style="@style/TextAppearance.MetadataLabel"
-                        android:visibility="gone" />
+                        android:shadowColor="#000000"
+                        android:shadowRadius="10" />
 
                     <!-- Symmetrical Action Buttons (Scrollable so never clipped) -->
                     <HorizontalScrollView
@@ -217,9 +171,68 @@
 
                     </HorizontalScrollView>
 
+                    <!-- Director / Cast (from TMDB credits) -->
+                    <TextView
+                        android:id="@+id/txtMovieCredits"
+                        android:layout_width="720dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:lineSpacingExtra="4dp"
+                        style="@style/TextAppearance.MetadataLabel"
+                        android:shadowColor="#000000"
+                        android:shadowRadius="6"
+                        android:visibility="gone" />
+
+                    <!-- Synopsis -->
+                    <TextView
+                        android:id="@+id/txtDetailSynopsis"
+                        android:layout_width="720dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:lineSpacingExtra="4dp"
+                        android:maxLines="4"
+                        android:ellipsize="end"
+                        style="@style/TextAppearance.BodyText"
+                        android:shadowColor="#000000"
+                        android:shadowRadius="6" />
+
+                    <!-- Genres • Year • Rating -->
+                    <TextView
+                        android:id="@+id/txtDetailMeta"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:textColor="#FFD54F"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:shadowColor="#000000"
+                        android:shadowRadius="6" />
+
+                    <!-- Certification • Runtime -->
+                    <TextView
+                        android:id="@+id/txtMovieBadges"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:textColor="@color/secondary_text"
+                        android:textSize="12sp"
+                        android:shadowColor="#000000"
+                        android:shadowRadius="6"
+                        android:visibility="gone" />
+
                 </LinearLayout>
 
-            </LinearLayout>
+            </FrameLayout>
+
+            <!-- Below-hero content keeps its own horizontal margin since the hero itself is
+                 full-bleed (no ScrollView-wide padding anymore). -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:clipChildren="false"
+                android:paddingHorizontal="@dimen/safe_zone_margin"
+                android:paddingTop="20dp">
 
             <!-- Episodes Section Header with Sort and Jump Controls -->
             <LinearLayout
@@ -306,6 +319,8 @@
                 android:clipToPadding="false"
                 android:paddingVertical="16dp"
                 android:overScrollMode="never" />
+
+            </LinearLayout>
 
         </LinearLayout>
 

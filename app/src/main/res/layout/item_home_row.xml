@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One catalog row: title + a horizontal RecyclerView of cards. Inflated once per row directly
+     into the Home screen's continuously-scrolling column (see MainActivity.addRowView) — rows
+     are not recycled via their own adapter since the catalog is a small, bounded list. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:clipChildren="false"
+    android:layout_marginBottom="8dp">
+
+    <TextView
+        android:id="@+id/txtRowTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/safe_zone_margin"
+        android:layout_marginBottom="8dp"
+        style="@style/TextAppearance.SectionHeader" />
+
+    <!-- clipChildren="false" so a focused card's 110% scale-up glow renders fully instead of
+         being cut off against the row's own bounds. -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerRowCards"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:paddingStart="@dimen/safe_zone_margin"
+        android:paddingEnd="@dimen/safe_zone_margin"
+        android:paddingVertical="16dp"
+        android:orientation="horizontal"
+        android:overScrollMode="never" />
+
+</LinearLayout>

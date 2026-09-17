@@ -6,292 +6,252 @@
     android:orientation="vertical"
     android:background="@color/primary_canvas">
 
-    <!-- Top Persistent Header Bar -->
-    <LinearLayout
-        android:id="@+id/topBarHeader"
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:background="@color/surface_layer"
-        android:paddingHorizontal="@dimen/safe_zone_margin">
-
-        <!-- App Logo / Title -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="NuVibe TV"
-            android:textColor="@color/active_accent"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            android:letterSpacing="0.08" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/bg_netflix_badge"
-            android:paddingHorizontal="6dp"
-            android:paddingVertical="2dp"
-            android:text="NATIVE"
-            android:textColor="@color/primary_text"
-            android:textSize="9sp"
-            android:textStyle="bold" />
-
-        <View
-            android:layout_width="0dp"
-            android:layout_height="1dp"
-            android:layout_weight="1" />
-
-        <!-- Navigation Tabs: icon-only at rest, label reveals on D-pad focus (IconRevealButton) -->
-        <Button
-            android:id="@+id/btnNavCatalog"
-            android:layout_width="wrap_content"
-            android:layout_height="38dp"
-            android:background="@drawable/bg_topbar_item"
-            android:focusable="true"
-            android:focusableInTouchMode="true"
-            android:paddingHorizontal="10dp"
-            android:text=""
-            android:textColor="@color/primary_text"
-            android:textSize="13sp"
-            android:textStyle="bold"
-            android:maxLines="1"
-            android:ellipsize="end" />
-
-        <Button
-            android:id="@+id/btnNavSearch"
-            android:layout_width="wrap_content"
-            android:layout_height="38dp"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/bg_topbar_item"
-            android:focusable="true"
-            android:focusableInTouchMode="true"
-            android:paddingHorizontal="10dp"
-            android:text=""
-            android:textColor="@color/primary_text"
-            android:textSize="13sp"
-            android:maxLines="1"
-            android:ellipsize="end" />
-
-        <Button
-            android:id="@+id/btnNavRefresh"
-            android:layout_width="wrap_content"
-            android:layout_height="38dp"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/bg_topbar_item"
-            android:focusable="true"
-            android:focusableInTouchMode="true"
-            android:paddingHorizontal="12dp"
-            android:text="↻"
-            android:textColor="@color/primary_text"
-            android:textSize="15sp"
-            android:maxLines="1"
-            android:ellipsize="end" />
-
-        <Button
-            android:id="@+id/btnNavSettings"
-            android:layout_width="wrap_content"
-            android:layout_height="38dp"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/bg_topbar_item"
-            android:focusable="true"
-            android:focusableInTouchMode="true"
-            android:paddingHorizontal="12dp"
-            android:text="⚙"
-            android:textColor="@color/primary_text"
-            android:textSize="15sp"
-            android:maxLines="1"
-            android:ellipsize="end" />
-
-    </LinearLayout>
-
-    <!-- Board layout (Nuvio/Stremio style): the upper panel always reflects whichever card
-         currently has D-pad focus, and only ONE catalog row is ever on screen at a time — DOWN
-         advances to the next row, UP goes back, instead of the whole page scrolling. -->
+    <!-- Scrollable Main View: large reactive hero on top, all catalog rows scroll continuously
+         beneath it — matching the real Nuvio/Stremio home layout (verified against actual
+         reference screenshots), not the earlier one-row-at-a-time "board" experiment. -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1">
 
-        <LinearLayout
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/scrollMain"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:orientation="vertical"
-            android:clipChildren="false">
+            android:clipChildren="false"
+            android:fillViewport="true">
 
-            <!-- Info Panel: backdrop + gradients + title/meta/synopsis/buttons for whichever
-                 card is currently focused below. Takes whatever space the row section (below,
-                 wrap_content) doesn't need — roughly the top half on a typical TV viewport. -->
-            <FrameLayout
-                android:id="@+id/layoutInfoPanel"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:background="@color/surface_layer">
-
-                <!-- Backdrop Image at full brightness — legibility comes from the two targeted
-                     gradients below, not a flat dim, so the artwork stays vivid wherever it
-                     isn't directly behind text. -->
-                <ImageView
-                    android:id="@+id/imgHeroBackdrop"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:scaleType="centerCrop"
-                    android:contentDescription="@null" />
-
-                <!-- Text-protection mask: solid canvas color on the left ~35%, dissolving to
-                     fully transparent by the right edge, so titles/buttons sit on a clean
-                     dark pocket while the rest of the artwork stays crisp. -->
-                <com.example.animetv.ui.GradientOverlayView
-                    android:id="@+id/viewHeroTextGradient"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent" />
-
-                <!-- Row-protection mask: darkens just the bottom edge so the artwork doesn't
-                     clash with the row title sitting directly beneath the panel. -->
-                <com.example.animetv.ui.GradientOverlayView
-                    android:id="@+id/viewHeroRowGradient"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent" />
-
-                <!-- Info Container. 48dp horizontal padding matches Android TV's standard
-                     overscan-safe margin so the title/buttons never sit too close to the
-                     screen edge on a real television. -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="bottom"
-                    android:orientation="vertical"
-                    android:paddingHorizontal="@dimen/safe_zone_margin"
-                    android:paddingBottom="20dp">
-
-                    <!-- Featured Tag -->
-                    <TextView
-                        android:id="@+id/txtHeroBadge"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:background="@drawable/bg_netflix_badge"
-                        android:paddingHorizontal="8dp"
-                        android:paddingVertical="2dp"
-                        android:text="★ DESTACADO DE LA SEMANA"
-                        android:textColor="@color/primary_text"
-                        android:textSize="10sp"
-                        android:textStyle="bold" />
-
-                    <!-- Title -->
-                    <TextView
-                        android:id="@+id/txtHeroTitle"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        style="@style/TextAppearance.HeroTitle"
-                        android:shadowColor="#000000"
-                        android:shadowRadius="10" />
-
-                    <!-- Quick-scan metadata line: year • rating • runtime/seasons — filled in
-                         lazily once TMDB data resolves for whichever title is focused, and
-                         hidden entirely if that lookup comes back empty rather than showing
-                         wrong or partial data. -->
-                    <TextView
-                        android:id="@+id/txtHeroMeta"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        style="@style/TextAppearance.MetadataLabel"
-                        android:shadowColor="#000000"
-                        android:shadowRadius="6"
-                        android:visibility="gone" />
-
-                    <!-- Synopsis. Narrower than the panel so it stays inside the dark
-                         text-protection pocket instead of running into the brighter artwork. -->
-                    <TextView
-                        android:id="@+id/txtHeroSynopsis"
-                        android:layout_width="620dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:maxLines="2"
-                        android:ellipsize="end"
-                        style="@style/TextAppearance.BodyText"
-                        android:lineSpacingExtra="3dp"
-                        android:shadowColor="#000000"
-                        android:shadowRadius="6" />
-
-                    <!-- Action Buttons -->
-                    <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        android:orientation="horizontal">
-
-                        <Button
-                            android:id="@+id/btnHeroPlay"
-                            android:layout_width="wrap_content"
-                            android:layout_height="42dp"
-                            android:background="@drawable/bg_netflix_btn_play"
-                            android:focusable="true"
-                            android:focusableInTouchMode="true"
-                            android:paddingHorizontal="20dp"
-                            android:text="▶  Ver Ahora"
-                            android:textColor="@color/color_netflix_btn_play"
-                            android:textSize="13sp"
-                            android:textStyle="bold" />
-
-                        <Button
-                            android:id="@+id/btnHeroFavorite"
-                            android:layout_width="wrap_content"
-                            android:layout_height="42dp"
-                            android:layout_marginStart="12dp"
-                            android:background="@drawable/bg_netflix_btn_secondary"
-                            android:focusable="true"
-                            android:focusableInTouchMode="true"
-                            android:paddingHorizontal="16dp"
-                            android:text="⭐  Mi Lista"
-                            android:textColor="@color/primary_text"
-                            android:textSize="13sp"
-                            android:textStyle="bold" />
-
-                    </LinearLayout>
-
-                </LinearLayout>
-
-            </FrameLayout>
-
-            <!-- Current Row: only one catalog row is ever inflated at a time. DOWN/UP (handled
-                 in code) swap which row's title+cards are bound here instead of scrolling a
-                 list of many rows. clipChildren="false" so a focused card's scale-up glow never
-                 gets clipped against this container's bounds. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:clipChildren="false"
-                android:paddingTop="14dp"
-                android:paddingBottom="14dp">
+                android:paddingBottom="40dp">
 
-                <TextView
-                    android:id="@+id/txtCurrentRowTitle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="@dimen/safe_zone_margin"
-                    android:layout_marginBottom="8dp"
-                    style="@style/TextAppearance.SectionHeader" />
+                <!-- Hero: full-bleed backdrop with only a bottom gradient (no separate dark
+                     side-panel) — title/metadata/synopsis sit directly over the image, and the
+                     nav bar floats over the top of it as pill buttons instead of a solid bar
+                     above it. Reflects whichever card currently has D-pad focus in the rows
+                     below; a large size (620dp) matches Nuvio's roughly 55-60%-of-screen hero. -->
+                <FrameLayout
+                    android:id="@+id/layoutHeroBanner"
+                    android:layout_width="match_parent"
+                    android:layout_height="620dp"
+                    android:background="@color/surface_layer">
 
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/recyclerCurrentRow"
+                    <ImageView
+                        android:id="@+id/imgHeroBackdrop"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="centerCrop"
+                        android:contentDescription="@null" />
+
+                    <!-- Bottom gradient only: dissolves the artwork into the canvas color at the
+                         very bottom so the title block and the row title beneath the hero don't
+                         clash with the art, without dimming the rest of the image. -->
+                    <com.example.animetv.ui.GradientOverlayView
+                        android:id="@+id/viewHeroBottomGradient"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent" />
+
+                    <!-- Floating pill nav bar, overlaid on the hero image (transparent, no solid
+                         background bar) — logo on the left, action pills on the right. -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="top"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingHorizontal="@dimen/safe_zone_margin"
+                        android:paddingTop="20dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="NuVibe TV"
+                            android:textColor="@color/primary_text"
+                            android:textSize="18sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.06"
+                            android:shadowColor="#000000"
+                            android:shadowRadius="8" />
+
+                        <View
+                            android:layout_width="0dp"
+                            android:layout_height="1dp"
+                            android:layout_weight="1" />
+
+                        <Button
+                            android:id="@+id/btnNavCatalog"
+                            android:layout_width="wrap_content"
+                            android:layout_height="40dp"
+                            android:background="@drawable/bg_topbar_pill"
+                            android:focusable="true"
+                            android:focusableInTouchMode="true"
+                            android:paddingHorizontal="12dp"
+                            android:text=""
+                            android:textColor="@color/primary_text"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:maxLines="1"
+                            android:ellipsize="end" />
+
+                        <Button
+                            android:id="@+id/btnNavSearch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="40dp"
+                            android:layout_marginStart="8dp"
+                            android:background="@drawable/bg_topbar_pill"
+                            android:focusable="true"
+                            android:focusableInTouchMode="true"
+                            android:paddingHorizontal="12dp"
+                            android:text=""
+                            android:textColor="@color/primary_text"
+                            android:textSize="13sp"
+                            android:maxLines="1"
+                            android:ellipsize="end" />
+
+                        <Button
+                            android:id="@+id/btnNavRefresh"
+                            android:layout_width="wrap_content"
+                            android:layout_height="40dp"
+                            android:layout_marginStart="8dp"
+                            android:background="@drawable/bg_topbar_pill"
+                            android:focusable="true"
+                            android:focusableInTouchMode="true"
+                            android:paddingHorizontal="14dp"
+                            android:text="↻"
+                            android:textColor="@color/primary_text"
+                            android:textSize="15sp"
+                            android:maxLines="1"
+                            android:ellipsize="end" />
+
+                        <Button
+                            android:id="@+id/btnNavSettings"
+                            android:layout_width="wrap_content"
+                            android:layout_height="40dp"
+                            android:layout_marginStart="8dp"
+                            android:background="@drawable/bg_topbar_pill"
+                            android:focusable="true"
+                            android:focusableInTouchMode="true"
+                            android:paddingHorizontal="14dp"
+                            android:text="⚙"
+                            android:textColor="@color/primary_text"
+                            android:textSize="15sp"
+                            android:maxLines="1"
+                            android:ellipsize="end" />
+
+                    </LinearLayout>
+
+                    <!-- Hero Info Container -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="bottom"
+                        android:orientation="vertical"
+                        android:paddingHorizontal="@dimen/safe_zone_margin"
+                        android:paddingBottom="28dp">
+
+                        <TextView
+                            android:id="@+id/txtHeroBadge"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_netflix_badge"
+                            android:paddingHorizontal="8dp"
+                            android:paddingVertical="2dp"
+                            android:text="★ DESTACADO DE LA SEMANA"
+                            android:textColor="@color/primary_text"
+                            android:textSize="10sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/txtHeroTitle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            style="@style/TextAppearance.HeroTitle"
+                            android:shadowColor="#000000"
+                            android:shadowRadius="10" />
+
+                        <!-- Quick-scan metadata line: year • rating • runtime/seasons — filled in
+                             lazily once TMDB data resolves for whichever title is focused, and
+                             hidden entirely if that lookup comes back empty rather than showing
+                             wrong or partial data. -->
+                        <TextView
+                            android:id="@+id/txtHeroMeta"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            style="@style/TextAppearance.MetadataLabel"
+                            android:shadowColor="#000000"
+                            android:shadowRadius="6"
+                            android:visibility="gone" />
+
+                        <TextView
+                            android:id="@+id/txtHeroSynopsis"
+                            android:layout_width="720dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:maxLines="3"
+                            android:ellipsize="end"
+                            style="@style/TextAppearance.BodyText"
+                            android:lineSpacingExtra="3dp"
+                            android:shadowColor="#000000"
+                            android:shadowRadius="6" />
+
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="16dp"
+                            android:orientation="horizontal">
+
+                            <Button
+                                android:id="@+id/btnHeroPlay"
+                                android:layout_width="wrap_content"
+                                android:layout_height="44dp"
+                                android:background="@drawable/bg_netflix_btn_play"
+                                android:focusable="true"
+                                android:focusableInTouchMode="true"
+                                android:paddingHorizontal="20dp"
+                                android:text="▶  Ver Ahora"
+                                android:textColor="@color/color_netflix_btn_play"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+
+                            <Button
+                                android:id="@+id/btnHeroFavorite"
+                                android:layout_width="wrap_content"
+                                android:layout_height="44dp"
+                                android:layout_marginStart="12dp"
+                                android:background="@drawable/bg_netflix_btn_secondary"
+                                android:focusable="true"
+                                android:focusableInTouchMode="true"
+                                android:paddingHorizontal="16dp"
+                                android:text="⭐  Mi Lista"
+                                android:textColor="@color/primary_text"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+
+                        </LinearLayout>
+
+                    </LinearLayout>
+
+                </FrameLayout>
+
+                <!-- Catalog rows: populated in code with one child per row (title + horizontal
+                     RecyclerView), scrolling continuously with the rest of the page instead of
+                     being paged one at a time. -->
+                <LinearLayout
+                    android:id="@+id/layoutCatalogRows"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:orientation="vertical"
                     android:clipChildren="false"
-                    android:clipToPadding="false"
-                    android:paddingStart="@dimen/safe_zone_margin"
-                    android:paddingEnd="@dimen/safe_zone_margin"
-                    android:paddingVertical="16dp"
-                    android:orientation="horizontal"
-                    android:overScrollMode="never" />
+                    android:layout_marginTop="20dp" />
 
             </LinearLayout>
 
-        </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
 
         <!-- Global Progress Bar -->
         <ProgressBar

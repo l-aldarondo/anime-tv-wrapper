@@ -54,7 +54,8 @@ class DetailActivity : AppCompatActivity() {
     }
 
     private lateinit var imgBackdrop: ImageView
-    private lateinit var imgPoster: ImageView
+    private lateinit var viewDetailTextGradient: com.example.animetv.ui.GradientOverlayView
+    private lateinit var viewDetailBottomGradient: com.example.animetv.ui.GradientOverlayView
     private lateinit var txtTitle: TextView
     private lateinit var txtMeta: TextView
     private lateinit var txtSynopsis: TextView
@@ -102,7 +103,9 @@ class DetailActivity : AppCompatActivity() {
         setContentView(R.layout.activity_detail)
 
         imgBackdrop = findViewById(R.id.imgDetailBackdrop)
-        imgPoster = findViewById(R.id.imgDetailPoster)
+        viewDetailTextGradient = findViewById(R.id.viewDetailTextGradient)
+        viewDetailBottomGradient = findViewById(R.id.viewDetailBottomGradient)
+        setupDetailHeroGradients()
         txtTitle = findViewById(R.id.txtDetailTitle)
         txtMeta = findViewById(R.id.txtDetailMeta)
         txtSynopsis = findViewById(R.id.txtDetailSynopsis)
@@ -179,6 +182,38 @@ class DetailActivity : AppCompatActivity() {
         super.onResume()
         // Refresh playback progress when returning from player
         refreshPlaybackState()
+    }
+
+    /**
+     * Configures the hero's two gradient overlays: a left-to-right fade so the title/actions/
+     * synopsis block on the left stays legible without flattening the backdrop art on the right,
+     * and a bottom fade that dissolves the hero into the canvas color before the episode list.
+     */
+    private fun setupDetailHeroGradients() {
+        val canvas = androidx.core.content.ContextCompat.getColor(this, R.color.primary_canvas)
+        fun withAlpha(color: Int, alpha: Int): Int = (color and 0x00FFFFFF) or (alpha shl 24)
+
+        viewDetailTextGradient.setGradient(
+            com.example.animetv.ui.GradientOverlayView.Direction.LEFT_TO_RIGHT,
+            intArrayOf(
+                withAlpha(canvas, 255),
+                withAlpha(canvas, 255),
+                withAlpha(canvas, 204),
+                withAlpha(canvas, 0)
+            ),
+            floatArrayOf(0f, 0.35f, 0.55f, 1f)
+        )
+
+        viewDetailBottomGradient.setGradient(
+            com.example.animetv.ui.GradientOverlayView.Direction.BOTTOM_TO_TOP,
+            intArrayOf(
+                withAlpha(canvas, 255),
+                withAlpha(canvas, 235),
+                withAlpha(canvas, 120),
+                withAlpha(canvas, 0)
+            ),
+            floatArrayOf(0f, 0.22f, 0.5f, 1f)
+        )
     }
 
     private fun refreshPlaybackState() {
@@ -384,17 +419,8 @@ class DetailActivity : AppCompatActivity() {
             Glide.with(this)
                 .load(initPoster)
                 .centerCrop()
-                .placeholder(R.drawable.bg_card_poster_placeholder)
-                .diskCacheStrategy(DiskCacheStrategy.ALL)
-                .into(imgPoster)
-
-            Glide.with(this)
-                .load(initPoster)
-                .centerCrop()
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
                 .into(imgBackdrop)
-        } else {
-            imgPoster.setImageResource(R.drawable.bg_card_poster_placeholder)
         }
 
         updateFavoriteButton(card)
@@ -474,24 +500,23 @@ class DetailActivity : AppCompatActivity() {
                             .diskCacheStrategy(DiskCacheStrategy.ALL)
                             .into(imgBackdrop)
                     }
-                    if (tmdb.posterUrl.isNotEmpty()) {
-                        Glide.with(this@DetailActivity)
-                            .load(tmdb.posterUrl)
-                            .centerCrop()
-                            .placeholder(R.drawable.bg_card_poster_placeholder)
-                            .diskCacheStrategy(DiskCacheStrategy.ALL)
-                            .into(imgPoster)
-                    }
                     // TMDB's overview is authoritative and always wins over the scraper's synopsis,
                     // which is frequently just an SEO description (e.g. "Ver X en español latino
                     // online...") rather than an actual plot summary.
                     if (tmdb.overview.isNotEmpty()) {
                         txtSynopsis.text = tmdb.overview
                     }
-                    if (tmdb.ratingText.isNotEmpty() && !txtMeta.text.contains("★")) {
-                        txtMeta.text = "${txtMeta.text}  •  ${tmdb.ratingText}"
+                    // Genre(s) • Year • ★Rating — mirrors the real Nuvio detail page's top badge
+                    // line; TMDB is the only source with all three together.
+                    val metaParts = mutableListOf<String>()
+                    if (tmdb.genres.isNotEmpty()) metaParts.add(tmdb.genres.take(3).joinToString(", "))
+                    if (tmdb.releaseYear.isNotEmpty()) metaParts.add(tmdb.releaseYear)
+                    if (tmdb.ratingText.isNotEmpty()) metaParts.add(tmdb.ratingText)
+                    if (metaParts.isNotEmpty()) {
+                        txtMeta.text = metaParts.joinToString("  •  ")
                     }
 
+                    // Certification • Runtime — the secondary line beneath it.
                     val badgeParts = mutableListOf<String>()
                     if (tmdb.certification.isNotEmpty()) badgeParts.add(tmdb.certification)
                     if (tmdb.runtimeMinutes > 0) {
@@ -499,7 +524,6 @@ class DetailActivity : AppCompatActivity() {
                         val m = tmdb.runtimeMinutes % 60
                         badgeParts.add(if (h > 0) "${h}h ${m}min" else "${m}min")
                     }
-                    if (tmdb.genres.isNotEmpty()) badgeParts.add(tmdb.genres.take(3).joinToString(", "))
                     if (badgeParts.isNotEmpty()) {
                         txtMovieBadges.text = badgeParts.joinToString("  •  ")
                         txtMovieBadges.visibility = View.VISIBLE
@@ -541,21 +565,18 @@ class DetailActivity : AppCompatActivity() {
                     Glide.with(this@DetailActivity)
                         .load(bestPoster)
                         .centerCrop()
-                        .placeholder(R.drawable.bg_card_poster_placeholder)
-                        .diskCacheStrategy(DiskCacheStrategy.ALL)
-                        .into(imgPoster)
-
-                    Glide.with(this@DetailActivity)
-                        .load(bestPoster)
-                        .centerCrop()
                         .diskCacheStrategy(DiskCacheStrategy.ALL)
                         .into(imgBackdrop)
                 }
 
                 txtTitle.text = detail.title
-                val genresStr = if (detail.genres.isNotEmpty()) detail.genres.take(3).joinToString(", ") else "Anime"
-                val ratingPart = if (currentTmdbMeta?.ratingText?.isNotEmpty() == true) "  •  ${currentTmdbMeta?.ratingText}" else ""
-                txtMeta.text = "${detail.source}  •  $genresStr$ratingPart"
+                // TMDB's genre/year/rating line (built in the parallel TMDB lookup above) is more
+                // complete than what the scraper alone provides — only fall back to the scraper's
+                // own genres here if that lookup hasn't resolved yet or came up empty.
+                if (currentTmdbMeta == null) {
+                    val genresStr = if (detail.genres.isNotEmpty()) detail.genres.take(3).joinToString(", ") else "Anime"
+                    txtMeta.text = genresStr
+                }
                 if (currentTmdbMeta == null || currentTmdbMeta?.overview.isNullOrEmpty()) {
                     txtSynopsis.text = detail.synopsis.ifEmpty { "Sin sinopsis disponible." }
                 }

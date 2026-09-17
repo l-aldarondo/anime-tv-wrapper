@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Floating pill button for the nav bar overlaid on the hero image (matching Nuvio's real
+     reference screenshots: translucent rounded capsules floating over the artwork, not a solid
+     bar above it). Fully rounded corners (20dp on a 40dp-tall button = pill shape). -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/active_accent" />
+            <stroke android:width="2dp" android:color="@color/primary_text" />
+            <corners android:radius="20dp" />
+        </shape>
+    </item>
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/active_accent_soft" />
+            <corners android:radius="20dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#66161B22" />
+            <corners android:radius="20dp" />
+        </shape>
+    </item>
+</selector>
