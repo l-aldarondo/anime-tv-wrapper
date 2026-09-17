@@ -21,7 +21,8 @@ import com.example.animetv.core.util.CoverUtils
 class ContinueWatchingCardAdapter(
     private val items: MutableList<AnimeCard>,
     private val onCardClick: (AnimeCard) -> Unit,
-    private val onCardLongClick: ((AnimeCard) -> Unit)? = null
+    private val onCardLongClick: ((AnimeCard) -> Unit)? = null,
+    private val onCardFocus: ((AnimeCard) -> Unit)? = null
 ) : RecyclerView.Adapter<ContinueWatchingCardAdapter.ViewHolder>() {
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -61,6 +62,7 @@ class ContinueWatchingCardAdapter(
             if (hasFocus) {
                 view.animate().scaleX(1.1f).scaleY(1.1f).translationZ(16f)
                     .setInterpolator(focusInterpolator).setDuration(275).start()
+                onCardFocus?.invoke(item)
             } else {
                 view.animate().scaleX(1.0f).scaleY(1.0f).translationZ(0f)
                     .setInterpolator(focusInterpolator).setDuration(275).start()

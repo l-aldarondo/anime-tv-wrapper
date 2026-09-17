@@ -1,6 +1,5 @@
 package com.example.animetv.ui.adapter
 
-import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -25,10 +24,6 @@ class EpisodeAdapter(
     private val onEpisodeClick: (AnimeEpisode) -> Unit,
     private val onEpisodeTorrentClick: ((AnimeEpisode) -> Unit)? = null
 ) : RecyclerView.Adapter<EpisodeAdapter.ViewHolder>() {
-
-    companion object {
-        private const val LONG_PRESS_MS = 500L
-    }
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val still: ImageView = view.findViewById(R.id.imgEpisodeStill)
@@ -164,7 +159,15 @@ class EpisodeAdapter(
             val msg = if (nowWatched) "✓ Marcado como visto" else "↩ Marcado como no visto"
             android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_SHORT).show()
         }
-        // Standard long-click covers touch input.
+        // Standard long-click covers BOTH touch and the TV remote D-pad: Android's View already
+        // has its own built-in long-press timer for a focused view — for touch it's the usual
+        // ~500ms hold, and for a focused Button it also fires from held DPAD_CENTER/ENTER
+        // (View.onKeyDown schedules the same check for those keys). A separate custom
+        // OnKeyListener used to duplicate this by independently timing DOWN→UP itself, which
+        // doesn't consume ACTION_DOWN — so both the built-in timer AND the custom one fired,
+        // toggling watched status twice per hold and netting no visible change (or, worse,
+        // silently reverting an episode a season-wide "mark watched" had just set). One listener
+        // is enough.
         val onLongClick = View.OnLongClickListener { toggleWatched(); true }
         holder.btnWeb.setOnLongClickListener(onLongClick)
         holder.btnTorrent.setOnLongClickListener(onLongClick)
@@ -185,51 +188,9 @@ class EpisodeAdapter(
         }
         holder.btnWeb.setOnTouchListener(holdDisallowIntercept)
         holder.btnTorrent.setOnTouchListener(holdDisallowIntercept)
-        // Explicit hold-to-toggle for the TV remote D-pad: measures actual key-down/up elapsed
-        // time instead of relying on the platform's default long-press timer via performLongClick,
-        // which isn't always reliable for a focused Button on D-pad-driven Android TV apps.
-        val holdToggle = createHoldToWatchedToggleKeyListener(toggleWatched)
-        holder.btnWeb.setOnKeyListener(holdToggle)
-        holder.btnTorrent.setOnKeyListener(holdToggle)
     }
 
     override fun getItemCount(): Int = episodes.size
-
-    /**
-     * Builds an [View.OnKeyListener] that fires [onHold] when DPAD_CENTER/ENTER has been held
-     * down for at least [LONG_PRESS_MS], and otherwise lets the key event fall through normally
-     * (so a quick press still triggers the view's own click listener via the default ACTION_UP
-     * handling). Consumes the ACTION_UP only when it followed a detected hold, so the click isn't
-     * also fired right after toggling watched status.
-     */
-    private fun createHoldToWatchedToggleKeyListener(onHold: () -> Unit): View.OnKeyListener {
-        var downAt = 0L
-        return View.OnKeyListener { _, keyCode, event ->
-            if (keyCode != KeyEvent.KEYCODE_DPAD_CENTER && keyCode != KeyEvent.KEYCODE_ENTER) {
-                return@OnKeyListener false
-            }
-            when (event.action) {
-                KeyEvent.ACTION_DOWN -> {
-                    // Some TV remotes/launchers never deliver repeated ACTION_DOWN events for a
-                    // held DPAD_CENTER/ENTER (unlike the D-pad direction keys), so the hold can't
-                    // be detected while the key is down — only measured once it's released.
-                    if (event.repeatCount == 0) downAt = System.currentTimeMillis()
-                    false
-                }
-                KeyEvent.ACTION_UP -> {
-                    val held = if (downAt > 0) System.currentTimeMillis() - downAt else 0L
-                    downAt = 0L
-                    if (held >= LONG_PRESS_MS) {
-                        onHold()
-                        true // consume so the normal click doesn't also fire right after
-                    } else {
-                        false // quick press: let the default click-on-release proceed
-                    }
-                }
-                else -> false
-            }
-        }
-    }
 
     private fun formatTime(ms: Long): String {
         val totalSec = ms / 1000

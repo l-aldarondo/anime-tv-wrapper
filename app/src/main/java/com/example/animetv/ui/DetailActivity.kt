@@ -294,6 +294,13 @@ class DetailActivity : AppCompatActivity() {
             val resumeIndex = focusedIndex ?: recordIndex ?: 0
             bindFocusedEpisode(sortedList[resumeIndex])
             recyclerEpisodes.scrollToPosition(resumeIndex)
+            // scrollToPosition only scrolls — it never moves D-pad focus off whatever still has
+            // it (e.g. the season capsule just pressed), so without this the remote keeps acting
+            // on stale focus from the previous season instead of the new episode list.
+            recyclerEpisodes.post {
+                val holder = recyclerEpisodes.findViewHolderForAdapterPosition(resumeIndex) as? EpisodeAdapter.ViewHolder
+                holder?.btnWeb?.requestFocus()
+            }
         } else {
             recyclerEpisodes.scrollToPosition(0)
         }

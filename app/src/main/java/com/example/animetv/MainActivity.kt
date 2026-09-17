@@ -17,10 +17,7 @@ import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
-import android.os.Handler
-import android.os.Looper
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.widget.NestedScrollView
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -37,25 +34,29 @@ import com.example.animetv.core.history.PlaybackHistoryStore
 import com.example.animetv.core.history.PlaybackRecord
 import com.example.animetv.core.model.AnimeCard
 import com.example.animetv.core.model.CatalogRow
+import com.example.animetv.core.model.CatalogRowType
 import com.example.animetv.core.util.CoverUtils
 import com.example.animetv.ui.DetailActivity
 import com.example.animetv.ui.adapter.AnimeCardAdapter
-import com.example.animetv.ui.adapter.CatalogRowAdapter
+import com.example.animetv.ui.adapter.ContinueWatchingCardAdapter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * 100% Native Android TV application entry point (Netflix / Stremio Architecture).
- * Features hardware D-Pad focus navigation, background HTML scrapers, and native ExoPlayer streaming.
+ * 100% Native Android TV application entry point (Nuvio/Stremio "board" architecture).
+ * The upper info panel always reflects whichever card currently has D-pad focus, and only one
+ * catalog row is on screen at a time — DOWN/UP page between rows instead of the whole page
+ * scrolling. Features hardware D-Pad focus navigation, background HTML scrapers, and native
+ * ExoPlayer streaming.
  */
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var scrollMain: NestedScrollView
-    private lateinit var recyclerCatalogRows: RecyclerView
+    private lateinit var recyclerCurrentRow: RecyclerView
+    private lateinit var txtCurrentRowTitle: TextView
     private lateinit var progressBarHome: ProgressBar
 
-    // Hero Billboard Views
+    // Info Panel Views
     private lateinit var imgHeroBackdrop: ImageView
     private lateinit var viewHeroTextGradient: com.example.animetv.ui.GradientOverlayView
     private lateinit var viewHeroRowGradient: com.example.animetv.ui.GradientOverlayView
@@ -78,24 +79,16 @@ class MainActivity : AppCompatActivity() {
     private lateinit var navRefresh: com.example.animetv.ui.IconRevealButton
     private lateinit var navSettings: com.example.animetv.ui.IconRevealButton
 
-    private lateinit var catalogRowAdapter: CatalogRowAdapter
-    private var featuredAnime: AnimeCard? = null
     private var lastLoadedCatalog: HomeCatalogData? = null
 
-    private val mainHandler = Handler(Looper.getMainLooper())
-    private var heroSuggestions = listOf<AnimeCard>()
-    private var heroIndex = 0
-    private var heroMetaJob: kotlinx.coroutines.Job? = null
+    // The full ordered list of rows, and which one is currently the single visible row.
+    private var displayedRows: List<CatalogRow> = emptyList()
+    private var currentRowIndex = 0
 
-    private val heroRotateRunnable = object : Runnable {
-        override fun run() {
-            if (heroSuggestions.isNotEmpty() && !isFinishing && !isDestroyed) {
-                heroIndex = (heroIndex + 1) % heroSuggestions.size
-                bindHero(heroSuggestions[heroIndex], animate = true)
-            }
-            mainHandler.postDelayed(this, 12000L)
-        }
-    }
+    // Whichever card currently has D-pad focus in the visible row — the info panel above always
+    // reflects this, replacing the old auto-rotating "featured suggestions" hero.
+    private var currentFocusedCard: AnimeCard? = null
+    private var heroMetaJob: kotlinx.coroutines.Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -112,34 +105,12 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         // Refresh Continuar Viendo & Mi Lista rows dynamically
         refreshRowsWithFavorites()
-        featuredAnime?.let { updateHeroFavoriteButton(it) }
-        startHeroRotation()
-    }
-
-    override fun onPause() {
-        super.onPause()
-        stopHeroRotation()
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        stopHeroRotation()
-    }
-
-    private fun startHeroRotation() {
-        mainHandler.removeCallbacks(heroRotateRunnable)
-        if (heroSuggestions.size > 1) {
-            mainHandler.postDelayed(heroRotateRunnable, 12000L)
-        }
-    }
-
-    private fun stopHeroRotation() {
-        mainHandler.removeCallbacks(heroRotateRunnable)
+        currentFocusedCard?.let { updateHeroFavoriteButton(it) }
     }
 
     private fun initViews() {
-        scrollMain = findViewById(R.id.scrollMain)
-        recyclerCatalogRows = findViewById(R.id.recyclerCatalogRows)
+        recyclerCurrentRow = findViewById(R.id.recyclerCurrentRow)
+        txtCurrentRowTitle = findViewById(R.id.txtCurrentRowTitle)
         progressBarHome = findViewById(R.id.progressBarHome)
 
         imgHeroBackdrop = findViewById(R.id.imgHeroBackdrop)
@@ -165,11 +136,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Configures the hero banner's two targeted gradient overlays. Instead of a flat dim over
+     * Configures the info panel's two targeted gradient overlays. Instead of a flat dim over
      * the whole backdrop (which looks muddy and hides artwork uniformly), this keeps the image
      * at full brightness and only darkens: (1) a left-side pocket wide enough for the title/
      * synopsis/buttons to stay legible, dissolving away by the right edge, and (2) a thin strip
-     * along the bottom so the artwork doesn't clash with the catalog row title beneath it.
+     * along the bottom so the artwork doesn't clash with the row title beneath it.
      */
     private fun setupHeroGradients() {
         val canvas = androidx.core.content.ContextCompat.getColor(this, R.color.primary_canvas)
@@ -198,25 +169,67 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupRecyclerView() {
-        recyclerCatalogRows.layoutManager = LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false)
-        catalogRowAdapter = CatalogRowAdapter(
-            rows = mutableListOf(),
-            onCardClick = { card ->
-                DetailActivity.start(this, card)
-            },
-            onCardLongClick = { card ->
-                toggleCardFavorite(card)
-            },
-            rowLongClickOverrides = mapOf(
-                "Continuar Viendo" to { card ->
-                    showRemoveFromHistoryDialog(card)
-                }
-            )
-        )
-        recyclerCatalogRows.adapter = catalogRowAdapter
+        recyclerCurrentRow.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
     }
 
-    private fun showRemoveFromHistoryDialog(card: com.example.animetv.core.model.AnimeCard) {
+    /**
+     * Only one row is ever inflated, so there's no sibling row for the platform's default
+     * focus-search to find below/above the visible one. Android calls an Activity's onKeyDown
+     * specifically when the whole view hierarchy left a key unconsumed (Activity.dispatchKeyEvent
+     * tries the focused view chain first via the window, and only falls back to this method if
+     * nothing handled it) — exactly the "DOWN/UP dead-ended, nothing to focus in that direction"
+     * case here, so this is where paging between rows belongs. UP from row 0 never reaches this:
+     * the info panel's buttons sit directly above in the layout, so default focus-search already
+     * finds them first.
+     */
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                if (currentRowIndex < displayedRows.size - 1) {
+                    showRow(currentRowIndex + 1)
+                    return true
+                }
+            }
+            KeyEvent.KEYCODE_DPAD_UP -> {
+                if (currentRowIndex > 0) {
+                    showRow(currentRowIndex - 1)
+                    return true
+                }
+            }
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    /** Binds row [index] as the single visible row, focusing card [focusIndex] within it. */
+    private fun showRow(index: Int, focusIndex: Int = 0) {
+        if (displayedRows.isEmpty()) return
+        val clampedIndex = index.coerceIn(0, displayedRows.size - 1)
+        currentRowIndex = clampedIndex
+        val row = displayedRows[clampedIndex]
+        txtCurrentRowTitle.text = row.title
+
+        val onCardLongClick: (AnimeCard) -> Unit = if (row.title.contains("Continuar Viendo", ignoreCase = true)) {
+            { card -> showRemoveFromHistoryDialog(card) }
+        } else {
+            { card -> toggleCardFavorite(card) }
+        }
+        val onCardFocus: (AnimeCard) -> Unit = { card -> updateInfoPanel(card) }
+        val onCardClick: (AnimeCard) -> Unit = { card -> DetailActivity.start(this, card) }
+
+        recyclerCurrentRow.adapter = if (row.type == CatalogRowType.CONTINUE_WATCHING) {
+            ContinueWatchingCardAdapter(row.cards.toMutableList(), onCardClick, onCardLongClick, onCardFocus)
+        } else {
+            AnimeCardAdapter(row.cards.toMutableList(), onCardClick, onCardLongClick, onCardFocus)
+        }
+
+        val clampedFocus = focusIndex.coerceIn(0, row.cards.size - 1)
+        recyclerCurrentRow.post {
+            val holder = recyclerCurrentRow.findViewHolderForAdapterPosition(clampedFocus)
+            holder?.itemView?.requestFocus()
+        }
+    }
+
+    private fun showRemoveFromHistoryDialog(card: AnimeCard) {
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("Quitar de Continuar Viendo")
             .setMessage("¿Deseas quitar \"${card.title}\" del historial de visualización?")
@@ -234,7 +247,7 @@ class MainActivity : AppCompatActivity() {
         btnNavCatalog.requestFocus()
 
         btnNavCatalog.setOnClickListener {
-            scrollMain.smoothScrollTo(0, 0)
+            showRow(0)
             btnHeroPlay.requestFocus()
         }
 
@@ -257,7 +270,6 @@ class MainActivity : AppCompatActivity() {
         if (cached != null && (cached.latinoTrending.isNotEmpty() || cached.recentEpisodes.isNotEmpty())) {
             lastLoadedCatalog = cached
             progressBarHome.visibility = View.GONE
-            updateHeroSuggestions(cached)
             refreshRowsWithFavorites()
             // 2. Silent background revalidation so new episodes update smoothly without blocking the UI
             fetchCatalog(forceRefresh = true, isSilent = true)
@@ -277,7 +289,6 @@ class MainActivity : AppCompatActivity() {
                 lastLoadedCatalog = data
                 progressBarHome.visibility = View.GONE
 
-                updateHeroSuggestions(data)
                 refreshRowsWithFavorites()
                 if (!isSilent && forceRefresh) {
                     Toast.makeText(this@MainActivity, "Catálogo actualizado", Toast.LENGTH_SHORT).show()
@@ -289,27 +300,6 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this@MainActivity, "Error al cargar catálogo: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
             }
-        }
-    }
-
-    private fun updateHeroSuggestions(data: HomeCatalogData) {
-        // Candidate pool from SoloLatino sections + Latino trending
-        val pool = mutableListOf<AnimeCard>()
-        for (sec in data.soloLatinoSections) {
-            pool.addAll(sec.cards)
-        }
-        pool.addAll(data.latinoTrending)
-
-        val distinct = pool.filter { it.title.isNotEmpty() && (it.backdropUrl.isNotEmpty() || it.posterUrl.isNotEmpty()) }
-            .distinctBy { it.detailUrl }
-
-        if (distinct.isNotEmpty()) {
-            heroSuggestions = distinct.shuffled().take(20)
-            if (featuredAnime == null) {
-                heroIndex = 0
-                bindHero(heroSuggestions[0], animate = false)
-            }
-            startHeroRotation()
         }
     }
 
@@ -328,7 +318,7 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * Android's centerCrop always anchors on the image's center — same gap as CSS
-     * `object-fit: cover` without `object-position`. Since the hero's text sits on the left
+     * `object-fit: cover` without `object-position`. Since the panel's text sits on the left
      * (see the text-protection gradient), centering the crop chops off whatever character art
      * sits on the right half of a wide backdrop. This replicates the CSS
      * `object-position: 75% 20%` formula by hand via an ImageView matrix: scale to cover the
@@ -354,58 +344,56 @@ class MainActivity : AppCompatActivity() {
         imgHeroBackdrop.imageMatrix = matrix
     }
 
-    private fun bindHero(anime: AnimeCard, animate: Boolean = false) {
-        featuredAnime = anime
-        txtHeroTitle.text = anime.title
-        txtHeroSynopsis.text = anime.synopsis.ifEmpty { "Contenido disponible en SoloLatino en alta definición y audio latino." }
+    /**
+     * Updates the info panel to reflect [card] — called whenever a card in the visible row gains
+     * D-pad focus. Replaces the old auto-rotating "featured suggestions" hero: the panel is now
+     * always a live reflection of user navigation, not a timer.
+     */
+    private fun updateInfoPanel(card: AnimeCard) {
+        currentFocusedCard = card
+        txtHeroTitle.text = card.title
+        txtHeroSynopsis.text = card.synopsis.ifEmpty { "Contenido disponible en SoloLatino en alta definición y audio latino." }
         txtHeroBadge.text = "★ DESTACADO DE LA SEMANA"
-        loadHeroMeta(anime)
+        loadHeroMeta(card)
 
-        val imageToLoad = anime.backdropUrl.ifEmpty { anime.posterUrl }
+        val imageToLoad = card.backdropUrl.ifEmpty { card.posterUrl }
         if (imageToLoad.isNotEmpty()) {
-            val req = Glide.with(this)
+            Glide.with(this)
                 .load(imageToLoad)
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
                 .override(Target.SIZE_ORIGINAL)
                 .listener(heroFocalCropListener)
-            if (animate) {
-                req.transition(DrawableTransitionOptions.withCrossFade(700))
-            }
-            req.into(imgHeroBackdrop)
+                .transition(DrawableTransitionOptions.withCrossFade(250))
+                .into(imgHeroBackdrop)
         }
 
         btnHeroPlay.setOnClickListener {
-            DetailActivity.start(this, anime)
+            DetailActivity.start(this, card)
         }
 
-        updateHeroFavoriteButton(anime)
+        updateHeroFavoriteButton(card)
         btnHeroFavorite.setOnClickListener {
-            toggleCardFavorite(anime)
-            updateHeroFavoriteButton(anime)
-        }
-
-        if (!animate) {
-            // Give initial TV remote focus to the Hero Play button on first load
-            btnHeroPlay.requestFocus()
+            toggleCardFavorite(card)
+            updateHeroFavoriteButton(card)
         }
     }
 
     /**
-     * Quick-scan metadata line (year • rating • runtime/seasons) for the currently featured
-     * hero card. Resolved lazily per-card rather than prefetched for the whole rotation pool,
-     * and the row stays hidden until a confident TMDB match comes back — silently doing nothing
-     * on failure is safer than showing a wrong or franchise-mismatched year/rating.
+     * Quick-scan metadata line (year • rating • runtime/seasons) for the currently focused card.
+     * Resolved lazily per-card as focus moves, and the row stays hidden until a confident TMDB
+     * match comes back — silently doing nothing on failure is safer than showing a wrong or
+     * franchise-mismatched year/rating.
      */
-    private fun loadHeroMeta(anime: AnimeCard) {
+    private fun loadHeroMeta(card: AnimeCard) {
         txtHeroMeta.visibility = View.GONE
         heroMetaJob?.cancel()
         heroMetaJob = lifecycleScope.launch {
             val meta = try {
-                com.example.animetv.core.tmdb.TmdbMetadataRepository.searchMetadata(this@MainActivity, anime.title)
+                com.example.animetv.core.tmdb.TmdbMetadataRepository.searchMetadata(this@MainActivity, card.title)
             } catch (e: Exception) {
                 null
             }
-            if (meta == null || featuredAnime?.detailUrl != anime.detailUrl) return@launch
+            if (meta == null || currentFocusedCard?.detailUrl != card.detailUrl) return@launch
 
             val parts = mutableListOf<String>()
             if (meta.releaseYear.isNotEmpty()) parts.add(meta.releaseYear)
@@ -423,13 +411,13 @@ class MainActivity : AppCompatActivity() {
                 txtHeroMeta.visibility = View.VISIBLE
             }
             // The scraper's own listing cards never carry a synopsis (only the detail page
-            // does), so the hero always fell back to a generic placeholder line. TMDB's real
+            // does), so the panel always fell back to a generic placeholder line. TMDB's real
             // overview is now available here from the same lookup — use it once it resolves.
             if (meta.overview.isNotEmpty()) {
                 txtHeroSynopsis.text = meta.overview
             }
             // The scraper's listing cards only carry a tiny w185 poster thumbnail (~185px wide,
-            // meant for small grid tiles) — stretched across the full-width hero it looks soft.
+            // meant for small grid tiles) — stretched across the full-width panel it looks soft.
             // Swap in TMDB's real w1280 backdrop once it resolves, cross-fading over the
             // low-res placeholder that's already on screen.
             val hdBackdrop = meta.backdropUrl.ifEmpty { meta.posterUrl }
@@ -445,8 +433,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateHeroFavoriteButton(anime: AnimeCard) {
-        val isFav = FavoritesStore.isFavorite(this, anime.detailUrl)
+    private fun updateHeroFavoriteButton(card: AnimeCard) {
+        val isFav = FavoritesStore.isFavorite(this, card.detailUrl)
         if (isFav) {
             btnHeroFavorite.text = "✓  En Mi Lista"
         } else {
@@ -505,7 +493,7 @@ class MainActivity : AppCompatActivity() {
                     CatalogRow(
                         title = "▶ Continuar Viendo",
                         cards = continueCards,
-                        type = com.example.animetv.core.model.CatalogRowType.CONTINUE_WATCHING
+                        type = CatalogRowType.CONTINUE_WATCHING
                     )
                 )
             }
@@ -573,7 +561,11 @@ class MainActivity : AppCompatActivity() {
             allRows.add(CatalogRow(title = "🌟 Series Populares Recomendadas", cards = data.latinoTrending.reversed()))
         }
 
-        catalogRowAdapter.submitRows(allRows)
+        val isFirstLoad = displayedRows.isEmpty()
+        displayedRows = allRows
+        if (allRows.isNotEmpty()) {
+            showRow(if (isFirstLoad) 0 else currentRowIndex)
+        }
     }
 
     private fun toggleCardFavorite(card: AnimeCard) {
@@ -662,7 +654,6 @@ class MainActivity : AppCompatActivity() {
     private fun findCoverInCatalog(data: HomeCatalogData, detailUrl: String, title: String): String {
         val cleanDetail = detailUrl.substringBefore("/temporada-").trim()
         val allCards = sequence {
-            yieldAll(heroSuggestions)
             yieldAll(data.latinoTrending)
             yieldAll(data.soloLatinoSections.flatMap { it.cards })
             yieldAll(data.recentEpisodes)

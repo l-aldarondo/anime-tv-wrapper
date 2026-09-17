@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="160dp"
+    android:layout_width="132dp"
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:padding="6dp"
-    android:layout_marginEnd="12dp"
+    android:layout_marginEnd="10dp"
     android:focusable="true"
     android:focusableInTouchMode="true"
     android:clickable="true"
     android:background="@drawable/bg_favorite_card">
 
-    <!-- Poster with Badges Container (true 2:3 poster ratio at 160dp width) -->
+    <!-- Poster with Badges Container (true 2:3 poster ratio at 132dp width) -->
     <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="240dp">
+        android:layout_height="198dp">
 
         <ImageView
             android:id="@+id/imgPoster"
