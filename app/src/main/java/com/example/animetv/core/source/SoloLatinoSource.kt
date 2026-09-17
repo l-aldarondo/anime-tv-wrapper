@@ -23,7 +23,12 @@ import java.util.concurrent.TimeUnit
 
 class SoloLatinoSource : AnimeSource {
     override val name: String = "SoloLatino (Audio Latino)"
-    override val baseUrl: String = "https://sololatino.net"
+    override var baseUrl: String = "https://sololatino.net"
+    override val mirrors: List<String> = listOf(
+        "https://sololatino.net",
+        "https://sololatino.co",
+        "https://sololatino.xyz"
+    )
 
     private val cookieStore = HashMap<String, MutableList<Cookie>>()
     private val cookieJar = object : CookieJar {
@@ -242,10 +247,6 @@ class SoloLatinoSource : AnimeSource {
             val trailerId = doc.selectFirst("[data-trailer]")?.attr("data-trailer")?.trim() ?: ""
             val trailerUrl = if (trailerId.isNotEmpty()) "https://www.youtube.com/embed/$trailerId?autoplay=1" else ""
 
-            // The page's own schema.org JSON-LD often links straight to the exact TMDB entry
-            // (e.g. "sameAs":["https://www.themoviedb.org/tv/111110"]). When present, this is a
-            // far more reliable signal than fuzzy title search — it's how a fresh scrape tells
-            // the One Piece anime apart from its live-action adaptation, or Dragon Ball from Z/GT.
             val tmdbMatch = doc.select("script[type=application/ld+json]")
                 .asSequence()
                 .mapNotNull { Regex("""themoviedb\.org/(tv|movie)/(\d+)""").find(it.data()) }

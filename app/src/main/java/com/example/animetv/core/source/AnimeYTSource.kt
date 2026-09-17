@@ -14,7 +14,12 @@ import java.util.concurrent.TimeUnit
 
 class AnimeYTSource : AnimeSource {
     override val name: String = "AnimeYT (Español)"
-    override val baseUrl: String = "https://animeyt.cc"
+    override var baseUrl: String = "https://animeyt.cc"
+    override val mirrors: List<String> = listOf(
+        "https://animeyt.cc",
+        "https://animeyt.es",
+        "https://animeyt.tv"
+    )
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -118,7 +123,6 @@ class AnimeYTSource : AnimeSource {
             var html = fetchHtml(pageUrl)
             var doc = Jsoup.parse(html, pageUrl)
 
-            // If detailUrl is an episode URL (e.g. /115068/anime/slug-capitulo-11/), navigate to the series page (/tv/slug/)
             if (pageUrl.contains("/anime/") || pageUrl.contains("-capitulo-")) {
                 val seriesLink = doc.select("a[href*=/tv/]").firstOrNull { 
                     val h = it.attr("href")
@@ -160,10 +164,8 @@ class AnimeYTSource : AnimeSource {
                     val href = link.absUrl("href")
                     val epNumMatch = Regex("""(?:episodio|capitulo)-?(\d+)""", RegexOption.IGNORE_CASE).find(href)
                     val epNum = epNumMatch?.groupValues?.get(1)?.toIntOrNull() ?: (episodes.size + 1)
-
                     val seasonNumMatch = Regex("""(?:temporada|season)-?(\d+)""", RegexOption.IGNORE_CASE).find(href)
                     val seasonNum = seasonNumMatch?.groupValues?.get(1)?.toIntOrNull() ?: 1
-
                     val badge = card.selectFirst(".aniyt-card-code")?.text()?.trim() ?: ""
                     val date = card.selectFirst("time")?.text()?.trim() ?: ""
                     val epTitle = if (badge.isNotEmpty()) badge else "Episodio $epNum"
@@ -187,7 +189,6 @@ class AnimeYTSource : AnimeSource {
                     if (!href.contains("-capitulo-") && !href.contains("-episodio-") && !href.contains("/anime/")) continue
                     val epNumMatch = Regex("""(?:episodio|capitulo)-?(\d+)""", RegexOption.IGNORE_CASE).find(href)
                     val epNum = epNumMatch?.groupValues?.get(1)?.toIntOrNull() ?: (episodes.size + 1)
-
                     val seasonNumMatch = Regex("""(?:temporada|season)-?(\d+)""", RegexOption.IGNORE_CASE).find(href)
                         ?: Regex("""(?:temporada|season)\s*(\d+)""", RegexOption.IGNORE_CASE).find(link.text())
                     val seasonNum = seasonNumMatch?.groupValues?.get(1)?.toIntOrNull() ?: 1
@@ -233,7 +234,6 @@ class AnimeYTSource : AnimeSource {
             val html = fetchHtml(episodeUrl)
             if (html.isEmpty()) return@withContext null
 
-            // 1. Direct m3u8 in page
             val m3u8 = Regex("""https?://[^\s"'<>]+\.m3u8[^\s"'<>]*""").find(html)
             if (m3u8 != null) {
                 return@withContext StreamResult(
@@ -243,14 +243,12 @@ class AnimeYTSource : AnimeSource {
                 )
             }
 
-            // 2. Look for iframe and unpack Mytsumi containers
             val iframes = Regex("""<iframe[^>]*src=["']([^"']+)["']""").findAll(html)
             for (ifr in iframes) {
                 val rawUrl = ifr.groupValues[1]
                 val ifrUrl = rawUrl.replace("&amp;", "&")
                 if (ifrUrl.isEmpty() || ifrUrl.contains("google") || ifrUrl.contains("facebook")) continue
 
-                // Check for Mytsumi multi-server container
                 val cidMatch = Regex("""(?:value=|id=)([a-zA-Z0-9_-]+)""").find(ifrUrl)
                 if (cidMatch != null && (ifrUrl.contains("mytsumi") || ifrUrl.contains("options.php") || ifrUrl.contains("container.php"))) {
                     val cid = cidMatch.groupValues[1]
@@ -263,7 +261,6 @@ class AnimeYTSource : AnimeSource {
                         try {
                             val contHtml = fetchHtml(contUrl, ifrUrl)
                             if (contHtml.isNotEmpty()) {
-                                // Check videoTabs JSON array
                                 val tabsMatch = Regex("""const\s+videoTabs\s*=\s*(\[.*?\]);""", RegexOption.DOT_MATCHES_ALL).find(contHtml)
                                 if (tabsMatch != null) {
                                     val jsonArray = org.json.JSONArray(tabsMatch.groupValues[1])
@@ -284,7 +281,6 @@ class AnimeYTSource : AnimeSource {
                                     }
                                 }
 
-                                // Check data-player-url attributes
                                 val dpUrl = Regex("""data-player-url=["']([^"']+)["']""").find(contHtml)?.groupValues?.get(1)
                                 if (!dpUrl.isNullOrEmpty() && dpUrl.startsWith("http")) {
                                     return@withContext StreamResult(
@@ -301,7 +297,6 @@ class AnimeYTSource : AnimeSource {
                         }
                     }
 
-                    // Fallback to container URL directly
                     return@withContext StreamResult(
                         videoUrl = "https://mytsumi.com/multiplayer/contenedor.php?id=$cid",
                         isHls = false,
@@ -311,7 +306,6 @@ class AnimeYTSource : AnimeSource {
                     )
                 }
 
-                // General iframe player fallback
                 if (ifrUrl.contains("stream") || ifrUrl.contains("player") || ifrUrl.contains("embed")) {
                     return@withContext StreamResult(
                         videoUrl = ifrUrl,

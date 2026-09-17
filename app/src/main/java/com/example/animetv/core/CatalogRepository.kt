@@ -1,6 +1,7 @@
 package com.example.animetv.core
 
 import android.content.Context
+import android.util.Log
 import com.example.animetv.core.extractor.HeadlessStreamExtractor
 import com.example.animetv.core.model.AnimeCard
 import com.example.animetv.core.model.AnimeDetail
@@ -14,6 +15,7 @@ import com.example.animetv.core.source.SoloLatinoSource
 import com.example.animetv.core.source.SoloStreamSource
 import com.example.animetv.core.util.CoverUtils
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 
 object CatalogRepository {
@@ -34,7 +36,24 @@ object CatalogRepository {
     private var cachedGogo: List<AnimeCard> = emptyList()
 
     suspend fun loadHomeContent(context: Context? = null, forceRefresh: Boolean = false): HomeCatalogData = coroutineScope {
+        // 1. Parallel mirror rotation (health check) - ultra fast HEAD requests
+        val rotationJob = async {
+            try {
+                listOf(
+                    async { runCatching { soloLatinoSource.rotateMirror() } },
+                    async { runCatching { soloStreamSource.rotateMirror() } },
+                    async { runCatching { nineAnimeSource.rotateMirror() } },
+                    async { runCatching { jkAnimeSource.rotateMirror() } },
+                    async { runCatching { animeYtSource.rotateMirror() } },
+                    async { runCatching { gogoAnimeSource.rotateMirror() } }
+                ).awaitAll()
+            } catch (e: Exception) {
+                Log.e("CatalogRepository", "Mirror rotation failed", e)
+            }
+        }
+
         if (!forceRefresh) {
+            // Priority 1: Memory cache (Instant)
             if (cachedLatinoTrending.isNotEmpty() && cachedJKRecent.isNotEmpty()) {
                 return@coroutineScope HomeCatalogData(
                     latinoTrending = cachedLatinoTrending,
@@ -46,6 +65,7 @@ object CatalogRepository {
                     soloLatinoSections = cachedSoloLatinoSections
                 )
             }
+            // Priority 2: Disk cache (Fast)
             if (context != null) {
                 val diskCached = HomeCatalogCache.load(context)
                 if (diskCached != null && (diskCached.latinoTrending.isNotEmpty() || diskCached.recentEpisodes.isNotEmpty())) {
@@ -61,12 +81,13 @@ object CatalogRepository {
             }
         }
 
+        // Priority 3: Fresh load (Wait for mirrors first)
+        rotationJob.await()
+
         val latinoDeferred = async { runCatching { soloLatinoSource.getTrending() }.getOrDefault(emptyList()) }
         val latinoSectionsDeferred = async { runCatching { soloLatinoSource.getHomeSections() }.getOrDefault(emptyList()) }
-        // SoloStream hidden from home catalog
         val nineDeferred = async { runCatching { nineAnimeSource.getTrending() }.getOrDefault(emptyList()) }
         val jkDeferred = async { runCatching { jkAnimeSource.getRecentEpisodes() }.getOrDefault(emptyList()) }
-        // AnimeYT disabled for now
         val gogoDeferred = async { runCatching { gogoAnimeSource.getTrending() }.getOrDefault(emptyList()) }
 
         val latino = latinoDeferred.await()

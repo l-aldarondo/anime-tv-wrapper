@@ -14,7 +14,13 @@ import java.util.concurrent.TimeUnit
 
 class GogoAnimeSource : AnimeSource {
     override val name: String = "GogoAnime (Global Sub)"
-    override val baseUrl: String = "https://gogoanime.by"
+    override var baseUrl: String = "https://gogoanime.by"
+    override val mirrors: List<String> = listOf(
+        "https://gogoanime.by",
+        "https://gogoanime.hu",
+        "https://gogoanime3.co",
+        "https://gogoanime.run"
+    )
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)

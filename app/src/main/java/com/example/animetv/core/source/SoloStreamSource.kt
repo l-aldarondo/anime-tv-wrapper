@@ -18,7 +18,12 @@ import java.util.concurrent.TimeUnit
 
 class SoloStreamSource : AnimeSource {
     override val name: String = "SoloStream (Películas y Series)"
-    override val baseUrl: String = "https://sololatino.net"
+    override var baseUrl: String = "https://sololatino.net"
+    override val mirrors: List<String> = listOf(
+        "https://sololatino.net",
+        "https://sololatino.co",
+        "https://sololatino.xyz"
+    )
 
     private val cookieStore = HashMap<String, MutableList<Cookie>>()
     private val cookieJar = object : CookieJar {
@@ -165,20 +170,17 @@ class SoloStreamSource : AnimeSource {
                 val seasonNumMatch = Regex("""temporada-(\d+)""").find(href)
                 val seasonNum = seasonNumMatch?.groupValues?.get(1)?.toIntOrNull() ?: 1
 
-                // Extract individual episode title (e.g. "Hora de empresarios")
                 val titleEl = link.selectFirst(".text-sm, .font-semibold, h4, h3, .ep-title")
                 val parsedTitle = titleEl?.text()?.trim()
                     ?.takeIf { it.isNotEmpty() && !it.startsWith("E", ignoreCase = true) }
                     ?: link.selectFirst("p:not(.ep-num):not(.line-clamp-2)")?.text()?.trim()
                 val epTitle = if (!parsedTitle.isNullOrEmpty() && parsedTitle.length < 90) parsedTitle else "Episodio $epNum"
 
-                // Extract individual episode synopsis
                 val synopsisEl = link.selectFirst(".line-clamp-2, .ep-desc, .overview, .synopsis")
                 val epSynopsis = synopsisEl?.text()?.trim()
                     ?: link.select("p.text-xs").firstOrNull { it.text().length > 20 }?.text()?.trim()
                     ?: ""
 
-                // Extract air date if present (e.g. 26/04/2010)
                 val dateEl = link.select("p.text-xs").lastOrNull()
                 val releaseDate = dateEl?.text()?.trim()?.takeIf { it.contains("/") } ?: ""
 
@@ -194,7 +196,6 @@ class SoloStreamSource : AnimeSource {
                 )
             }
 
-            // For movies (/pelicula/) or standalone titles without episodic links, treat the movie itself as the single playable episode
             if (episodes.isEmpty() || detailUrl.contains("/pelicula/")) {
                 episodes.add(
                     AnimeEpisode(

@@ -14,7 +14,12 @@ import java.util.regex.Pattern
 
 class JKAnimeSource : AnimeSource {
     override val name: String = "JKAnime"
-    override val baseUrl: String = "https://jkanime.net"
+    override var baseUrl: String = "https://jkanime.net"
+    override val mirrors: List<String> = listOf(
+        "https://jkanime.net",
+        "https://jkanime.biz",
+        "https://jkanime.video"
+    )
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -227,10 +232,10 @@ class JKAnimeSource : AnimeSource {
                 for (i in 1..totalEps) {
                     episodes.add(
                         AnimeEpisode(
-                            episodeNumber = i,
-                            seasonNumber = seasonNum,
-                            title = "Episodio $i",
-                            episodeUrl = "$cleanBase/$i/"
+                            i,
+                            seasonNum,
+                            "Episodio $i",
+                            "$cleanBase/$i/"
                         )
                     )
                 }
@@ -245,9 +250,10 @@ class JKAnimeSource : AnimeSource {
                     val num = numMatch?.groupValues?.get(1)?.toIntOrNull() ?: episodes.size + 1
                     episodes.add(
                         AnimeEpisode(
-                            episodeNumber = num,
-                            title = "Episodio $num",
-                            episodeUrl = epHref
+                            num,
+                            seasonNum,
+                            "Episodio $num",
+                            epHref
                         )
                     )
                 }

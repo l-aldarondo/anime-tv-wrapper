@@ -14,7 +14,14 @@ import java.util.concurrent.TimeUnit
 
 class NineAnimeSource : AnimeSource {
     override val name: String = "9Anime (Global HD)"
-    override val baseUrl: String = "https://9anime.or.at"
+    override var baseUrl: String = "https://9anime.or.at"
+    override val mirrors: List<String> = listOf(
+        "https://9anime.or.at",
+        "https://9animetv.to",
+        "https://aniwave.to",
+        "https://9anime.pl",
+        "https://9anime.id"
+    )
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
