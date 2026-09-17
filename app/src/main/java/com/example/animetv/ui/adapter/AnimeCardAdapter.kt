@@ -12,8 +12,7 @@ import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.example.animetv.R
 import com.example.animetv.core.model.AnimeCard
 import com.example.animetv.core.util.CoverUtils
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
 
 class AnimeCardAdapter(
     private val items: MutableList<AnimeCard>,
@@ -22,12 +21,14 @@ class AnimeCardAdapter(
     private val onCardFocus: ((AnimeCard) -> Unit)? = null
 ) : RecyclerView.Adapter<AnimeCardAdapter.ViewHolder>() {
 
+    private val adapterScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val poster: ImageView = view.findViewById(R.id.imgPoster)
         val title: TextView? = view.findViewById(R.id.txtTitle)
         val source: TextView = view.findViewById(R.id.txtSource)
         val badge: TextView = view.findViewById(R.id.txtBadge)
-        var tmdbJob: kotlinx.coroutines.Job? = null
+        var tmdbJob: Job? = null
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -41,44 +42,41 @@ class AnimeCardAdapter(
         holder.title?.text = item.title
         holder.source.text = item.source
 
-        if (item.episodeBadge.isNotEmpty()) {
+        // Badge logic simplification
+        val badgeText = item.episodeBadge.ifEmpty { item.rating }
+        if (badgeText.isNotEmpty()) {
             holder.badge.visibility = View.VISIBLE
-            holder.badge.text = item.episodeBadge
-        } else if (item.rating.isNotEmpty()) {
-            holder.badge.visibility = View.VISIBLE
-            holder.badge.text = item.rating
+            holder.badge.text = badgeText
         } else {
             holder.badge.visibility = View.GONE
         }
 
-        // Load fallback (scraped) poster first
+        // Load initial scraped poster
         val validPoster = if (CoverUtils.isValidCover(item.posterUrl)) item.posterUrl.trim() else ""
-        if (validPoster.isNotEmpty()) {
-            Glide.with(holder.poster.context)
-                .load(validPoster)
-                .centerCrop()
-                .diskCacheStrategy(DiskCacheStrategy.ALL)
-                .placeholder(R.drawable.bg_card_poster_placeholder)
-                .error(R.drawable.bg_card_poster_placeholder)
-                .into(holder.poster)
-        } else {
-            holder.poster.setImageResource(R.drawable.bg_card_poster_placeholder)
-        }
+        Glide.with(holder.itemView)
+            .load(validPoster.ifEmpty { R.drawable.bg_card_poster_placeholder })
+            .centerCrop()
+            .diskCacheStrategy(DiskCacheStrategy.ALL)
+            .placeholder(R.drawable.bg_card_poster_placeholder)
+            .error(R.drawable.bg_card_poster_placeholder)
+            .into(holder.poster)
 
-        // Asynchronously fetch high-quality TMDB poster
+        // Asynchronously fetch HQ metadata from TMDB
         holder.tmdbJob?.cancel()
-        holder.tmdbJob = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+        holder.tmdbJob = adapterScope.launch {
             val isMovie = item.detailUrl.contains("/pelicula/") || item.episodeBadge.equals("Película", ignoreCase = true)
             val isLiveAction = item.source.contains("SoloLatino", ignoreCase = true) && !item.detailUrl.contains("/animes")
-            val meta = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            
+            val meta = withContext(Dispatchers.IO) {
                 try {
                     com.example.animetv.core.tmdb.TmdbMetadataRepository.searchMetadata(
                         holder.itemView.context, item.title, isMovie, isLiveAction
                     )
-                } catch (e: Exception) { null }
+                } catch (_: Exception) { null }
             }
-            if (meta != null && meta.posterUrl.isNotEmpty()) {
-                Glide.with(holder.poster.context)
+
+            if (isActive && meta != null && meta.posterUrl.isNotEmpty()) {
+                Glide.with(holder.itemView)
                     .load(meta.posterUrl)
                     .centerCrop()
                     .diskCacheStrategy(DiskCacheStrategy.ALL)
@@ -87,27 +85,24 @@ class AnimeCardAdapter(
             }
         }
 
-        // Native 10-foot TV smooth hardware scaling on remote focus — 110% scale, elevated
-        // shadow, and the "premium split" cubic-bezier(0.25, 1, 0.5, 1) motion curve.
+        // TV Focus Animation
         val focusInterpolator = AnimationUtils.loadInterpolator(holder.itemView.context, R.interpolator.premium_focus)
-        holder.itemView.setOnFocusChangeListener { view, hasFocus ->
-            if (hasFocus) {
-                view.animate().scaleX(1.1f).scaleY(1.1f).translationZ(16f)
-                    .setInterpolator(focusInterpolator).setDuration(275).start()
-                onCardFocus?.invoke(item)
-            } else {
-                view.animate().scaleX(1.0f).scaleY(1.0f).translationZ(0f)
-                    .setInterpolator(focusInterpolator).setDuration(275).start()
+        holder.itemView.apply {
+            setOnFocusChangeListener { view, hasFocus ->
+                if (hasFocus) {
+                    view.animate().scaleX(1.1f).scaleY(1.1f).translationZ(16f)
+                        .setInterpolator(focusInterpolator).setDuration(275).start()
+                    onCardFocus?.invoke(item)
+                } else {
+                    view.animate().scaleX(1.0f).scaleY(1.0f).translationZ(0f)
+                        .setInterpolator(focusInterpolator).setDuration(275).start()
+                }
             }
-        }
-
-        holder.itemView.setOnClickListener {
-            onCardClick(item)
-        }
-
-        holder.itemView.setOnLongClickListener {
-            onCardLongClick?.invoke(item)
-            true
+            setOnClickListener { onCardClick(item) }
+            setOnLongClickListener {
+                onCardLongClick?.invoke(item)
+                true
+            }
         }
     }
 
@@ -116,6 +111,12 @@ class AnimeCardAdapter(
     override fun onViewRecycled(holder: ViewHolder) {
         super.onViewRecycled(holder)
         holder.tmdbJob?.cancel()
+        Glide.with(holder.itemView).clear(holder.poster)
+    }
+
+    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+        super.onDetachedFromRecyclerView(recyclerView)
+        adapterScope.cancel()
     }
 
     fun submitList(newItems: List<AnimeCard>) {
