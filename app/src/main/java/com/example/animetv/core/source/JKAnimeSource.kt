@@ -152,9 +152,13 @@ class JKAnimeSource : AnimeSource {
 
             val html = fetchHtml(seriesUrl)
             val doc = Jsoup.parse(html, seriesUrl)
-            var title = doc.selectFirst(".anime__details__title h3, h1:not(.logo), .entry-title")?.text()?.trim()
+            var title = doc.selectFirst(".anime_info h3, .anime__details__title h3, h1:not(.logo), .entry-title")?.text()?.trim()
                 ?: doc.selectFirst("meta[property=og:title]")?.attr("content")?.trim()
                 ?: ""
+            title = title
+                .replace(Regex("""(?i)\s*-\s*anime\s+.*"""), "")
+                .replace(Regex("""(?i)\s*(?:ver\s+anime\s+online|ver\s+anime|online\s+jkanime|jkanime|sub\s+español|hd).*"""), "")
+                .trim()
             if (title.isBlank() || title.equals("Anime", ignoreCase = true)) {
                 val candidate = doc.selectFirst(".title")?.text()?.trim() ?: ""
                 title = if (!candidate.equals("Anime", ignoreCase = true) && candidate.isNotBlank()) candidate else ""
@@ -165,14 +169,18 @@ class JKAnimeSource : AnimeSource {
             if (title.isBlank() || title.equals("Anime", ignoreCase = true)) {
                 title = seriesUrl.trimEnd('/').substringAfterLast('/').replace('-', ' ').replace('_', ' ')
             }
-            title = title.replace(Regex("""\s*[-:]\s*\d+$"""), "").trim()
+            title = title
+                .replace(Regex("""(?i)\s*-\s*anime\s+.*"""), "")
+                .replace(Regex("""(?i)\s*(?:ver\s+anime\s+online|ver\s+anime|online\s+jkanime|jkanime|sub\s+español|hd).*"""), "")
+                .replace(Regex("""\s*[-:]\s*\d+$"""), "")
+                .trim()
 
             val rawSynopsis = doc.selectFirst(".anime__details__text p, .sinopsis, .description")?.text()?.trim()
                 ?.ifEmpty { null }
                 ?: doc.selectFirst("meta[property=og:description], meta[name=description]")?.attr("content")?.trim()
                 ?: ""
             val synopsis = android.text.Html.fromHtml(rawSynopsis, android.text.Html.FROM_HTML_MODE_LEGACY).toString().trim()
-            val img = doc.selectFirst(".anime__details__pic, img.poster, .card-img img")
+            val img = doc.selectFirst(".anime__details__pic, .anime_info img, .movpic img, img.poster, .card-img img")
             val slug = seriesUrl.trimEnd('/').substringAfterLast('/')
             val slugPoster = if (slug.isNotEmpty() && !slug.contains(".")) {
                 "https://cdn.jkdesa.com/assets/images/animes/image/$slug.jpg"

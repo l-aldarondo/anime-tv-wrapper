@@ -471,7 +471,8 @@ class DetailActivity : AppCompatActivity() {
                 val tmdb = if (detail != null && detail.tmdbId > 0 && detail.tmdbMediaType.isNotEmpty()) {
                     TmdbMetadataRepository.getMetadataByTmdbId(this@DetailActivity, detail.tmdbId, detail.tmdbMediaType)
                 } else {
-                    val titleForTmdb = detail?.title?.takeIf { it.isNotBlank() && it != "Anime" } ?: card.title
+                    val rawTitleForTmdb = detail?.title?.takeIf { it.isNotBlank() && it != "Anime" } ?: card.title
+                    val titleForTmdb = TmdbMetadataRepository.sanitizeTitle(rawTitleForTmdb)
                     TmdbMetadataRepository.searchMetadata(this@DetailActivity, titleForTmdb)
                 }
                 if (tmdb != null) {
@@ -522,8 +523,15 @@ class DetailActivity : AppCompatActivity() {
                     }
 
                 val bestTitle = tmdb.bestTitle.takeIf { it.isNotBlank() && !it.equals("Anime", ignoreCase = true) }
-                if (!bestTitle.isNullOrBlank() && (txtTitle.text.toString().equals("Anime", ignoreCase = true) || txtTitle.text.toString().isBlank())) {
-                    txtTitle.text = bestTitle
+                if (!bestTitle.isNullOrBlank()) {
+                    val currentTxt = txtTitle.text.toString()
+                    if (currentTxt.equals("Anime", ignoreCase = true) ||
+                        currentTxt.isBlank() ||
+                        currentTxt.contains("online", ignoreCase = true) ||
+                        currentTxt.contains("jkanime", ignoreCase = true)
+                    ) {
+                        txtTitle.text = bestTitle
+                    }
                 }
                 enrichEpisodesWithTmdb(tmdb)
                 if (tmdb.trailerUrl.isNotEmpty()) {
@@ -557,10 +565,11 @@ class DetailActivity : AppCompatActivity() {
                     .into(imgBackdrop)
             }
 
-            val resolvedTitle = detail.title.takeIf { it.isNotBlank() && !it.equals("Anime", ignoreCase = true) }
+            val rawResolvedTitle = detail.title.takeIf { it.isNotBlank() && !it.equals("Anime", ignoreCase = true) }
                 ?: currentTmdbMeta?.bestTitle?.takeIf { it.isNotBlank() && !it.equals("Anime", ignoreCase = true) }
                 ?: card.title.takeIf { it.isNotBlank() && !it.equals("Anime", ignoreCase = true) }
                 ?: detail.title
+            val resolvedTitle = TmdbMetadataRepository.sanitizeTitle(rawResolvedTitle).ifEmpty { rawResolvedTitle }
             txtTitle.text = resolvedTitle
                 // TMDB's genre/year/rating line (built in the parallel TMDB lookup above) is more
                 // complete than what the scraper alone provides — only fall back to the scraper's

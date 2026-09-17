@@ -36,7 +36,15 @@ data class TmdbMetadata(
     val genres: List<String> = emptyList(),
     val certification: String = ""
 ) {
-    val bestTitle: String get() = titleSpanish.ifEmpty { titleEnglish }.ifEmpty { titleOriginal }
+    val bestTitle: String get() {
+        if (titleSpanish.isNotEmpty() && titleSpanish != titleOriginal) {
+            return titleSpanish
+        }
+        if (titleEnglish.isNotEmpty()) {
+            return titleEnglish
+        }
+        return titleSpanish.ifEmpty { titleOriginal }
+    }
 }
 
 private data class EnDetails(
@@ -419,11 +427,13 @@ object TmdbMetadataRepository {
 
                     // Cross-language recovery: Romaji (JKAnime) and English (9Anime/GoGo) searches
                     // often have 0% lexical overlap with TMDB's Spanish localized name or Japanese Kanji original name.
-                    // If candidate was returned in the top results and similarity is low, check TMDB alternative titles.
+                    // If candidate was returned in the top results and similarity is low, check TMDB alternative titles and English title.
                     if (sim < 0.2 && i < 3 && (isJapanese || hasAnimGenre || mType == "tv")) {
                         val candId = obj.optInt("id", 0)
                         if (candId > 0) {
-                            val altTitles = fetchAlternativeTitles(apiKey, candId, mType)
+                            val altTitles = fetchAlternativeTitles(apiKey, candId, mType).toMutableList()
+                            val enTitle = fetchEnglishTitle(apiKey, candId, mType)
+                            if (enTitle.isNotBlank()) altTitles.add(enTitle)
                             for (alt in altTitles) {
                                 val aSim = maxOf(
                                     titleSimilarity(queryToSearch, alt),
@@ -450,17 +460,20 @@ object TmdbMetadataRepository {
                     // Type preference
                     if (isMovie && mType == "movie") score += 50
                     if (!isMovie && mType == "tv") score += 50
+                    if (!isMovie && mType == "movie") score -= 60 // Anime show queries should penalize movies
 
                     // Live Action vs Anime preference
                     if (detectedLiveAction) {
                         if (!hasAnimGenre) score += 50
                         if (!isJapanese) score += 20
                     } else {
-                        // Standard Anime: bonus for Animation genre and Japanese origin
-                        if (hasAnimGenre) score += 40
-                        if (isJapanese) score += 20
-                        // Heavy penalty if live action English series is returned for an anime
-                        if (!hasAnimGenre && origLang == "en") score -= 80
+                        // Standard Anime: strong bonus for Animation genre and Japanese origin
+                        if (hasAnimGenre) score += 60
+                        if (isJapanese) score += 30
+                        // Heavy penalty if live action is returned for an anime
+                        if (!hasAnimGenre) score -= 120
+                        // Extra heavy penalty if live action English content is returned for an anime
+                        if (!hasAnimGenre && origLang == "en") score -= 150
                     }
 
                     val p = obj.optString("poster_path", "")
@@ -697,6 +710,9 @@ object TmdbMetadataRepository {
             .replace(Regex("""(?i)\b(temporada|season|temp|s)\s*\d+.*"""), "")
             .replace(Regex("""(?i)\b(episodio|episode|ep)\s*\d+.*"""), "")
             .replace(Regex("""(?i)\s*[-:]\s*(?:episodio|episode|ep)?\s*\d{1,4}$"""), "")
+            .replace(Regex("""(?i)\s*-\s*anime\s+.*"""), "")
+            .replace(Regex("""(?i)\s*online\s+jkanime.*"""), "")
+            .replace(Regex("""(?i)\s*(?:ver\s+anime\s+online|ver\s+anime|jkanime|gogoanime|9anime|animeflv|animefenix).*"""), "")
             .replace(Regex("""(?i)\b(audio\s+latino|latino|castellano|sub\s+español|subtitulado|english\s+subbed|english\s+dubbed|subbed|dubbed|dual)\b.*"""), "")
             .replace(Regex("""(?i)\b(1080p|720p|4k|hd|fhd|bluray|web-dl)\b.*"""), "")
             .replace(Regex("""[\[\(].*?[\]\)]"""), "") // Remove [Br-Rip] or (2024) or (Sub)
@@ -728,6 +744,21 @@ object TmdbMetadataRepository {
             }
         } catch (e: Exception) {
             emptyList()
+        }
+    }
+
+    private fun fetchEnglishTitle(apiKey: String, id: Int, mType: String): String {
+        return try {
+            val url = "$BASE_URL/$mType/$id?api_key=$apiKey&language=en-US"
+            val req = Request.Builder().url(url).header("User-Agent", "AnimeTV/2.8").build()
+            client.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val json = JSONObject(resp.body?.string() ?: "")
+                    json.optString("name", json.optString("title", "")).trim()
+                } else ""
+            }
+        } catch (e: Exception) {
+            ""
         }
     }
 
