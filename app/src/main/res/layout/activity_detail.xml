@@ -242,39 +242,23 @@
                         android:textSize="13sp"
                         android:textStyle="bold" />
 
-                </LinearLayout>
-
-            </HorizontalScrollView>
-
-            <!-- Episodes Section Controls (Original position) -->
-            <LinearLayout
-                android:id="@+id/layoutEpisodesControlsRow"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="12dp">
-
-                <!-- Filler to push controls to the right if needed, or left aligned -->
-                <View
-                    android:layout_width="0dp"
-                    android:layout_height="0dp"
-                    android:layout_weight="1" />
-
-                <!-- Episode Navigation & Sort Controls -->
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
+                    <!-- Episode Navigation & Sort Controls -->
+                    <View
+                        android:layout_width="1dp"
+                        android:layout_height="24dp"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginEnd="4dp"
+                        android:background="#44ffffff" />
 
                     <Button
                         android:id="@+id/btnJumpFirst"
-                        android:layout_width="42dp"
-                        android:layout_height="36dp"
-                        android:background="@drawable/bg_topbar_pill"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="12dp"
+                        android:background="@drawable/bg_netflix_btn_secondary"
                         android:focusable="true"
                         android:focusableInTouchMode="true"
+                        android:nextFocusDown="@id/recyclerSeasons"
                         android:text="«"
                         android:textColor="@color/primary_text"
                         android:textSize="18sp"
@@ -285,11 +269,12 @@
                     <Button
                         android:id="@+id/btnSortOrder"
                         android:layout_width="wrap_content"
-                        android:layout_height="36dp"
-                        android:layout_marginStart="8dp"
-                        android:background="@drawable/bg_topbar_pill"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="12dp"
+                        android:background="@drawable/bg_netflix_btn_secondary"
                         android:focusable="true"
                         android:focusableInTouchMode="true"
+                        android:nextFocusDown="@id/recyclerSeasons"
                         android:paddingHorizontal="14dp"
                         android:text="⇅ 1 ➔ N"
                         android:textColor="@color/primary_text"
@@ -298,20 +283,23 @@
 
                     <Button
                         android:id="@+id/btnJumpLast"
-                        android:layout_width="42dp"
-                        android:layout_height="36dp"
-                        android:layout_marginStart="8dp"
-                        android:background="@drawable/bg_topbar_pill"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:layout_marginStart="12dp"
+                        android:background="@drawable/bg_netflix_btn_secondary"
                         android:focusable="true"
                         android:focusableInTouchMode="true"
+                        android:nextFocusDown="@id/recyclerSeasons"
                         android:text="»"
                         android:textColor="@color/primary_text"
                         android:textSize="18sp"
                         android:textStyle="bold"
                         android:gravity="center"
                         android:padding="0dp" />
+
                 </LinearLayout>
-            </LinearLayout>
+
+            </HorizontalScrollView>
 
             <!-- Season Selection Capsules (Stremio / Nuvio style) -->
             <androidx.recyclerview.widget.RecyclerView

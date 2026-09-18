@@ -75,7 +75,6 @@ class DetailActivity : AppCompatActivity() {
     private lateinit var actionTrailer: IconDrawableRevealButton
     private lateinit var actionFavorite: IconRevealButton
     private lateinit var actionWatched: IconDrawableRevealButton
-    private lateinit var layoutEpisodesControlsRow: View
 
     private lateinit var btnJumpFirst: Button
     private lateinit var btnSortOrder: Button
@@ -133,7 +132,6 @@ class DetailActivity : AppCompatActivity() {
         btnToggleWatched.setOnClickListener {
             toggleWatchedShow()
         }
-        layoutEpisodesControlsRow = findViewById(R.id.layoutEpisodesControlsRow)
 
         btnJumpFirst = findViewById(R.id.btnJumpFirst)
         btnSortOrder = findViewById(R.id.btnSortOrder)
@@ -608,14 +606,17 @@ class DetailActivity : AppCompatActivity() {
                 // single "episode" stub for the movie itself — the WEB/TOR buttons still play it
                 // correctly via the existing episode-based wiring below, only the episode chrome
                 // (header, grid, spotlight panel) is hidden.
-                layoutEpisodesControlsRow.visibility = if (isCurrentMovie) View.GONE else View.VISIBLE
+                btnJumpFirst.visibility = if (isCurrentMovie) View.GONE else View.VISIBLE
+                btnSortOrder.visibility = if (isCurrentMovie) View.GONE else View.VISIBLE
+                btnJumpLast.visibility = if (isCurrentMovie) View.GONE else View.VISIBLE
+                
                 recyclerEpisodes.visibility = if (isCurrentMovie) View.GONE else View.VISIBLE
 
                 if (detail.episodes.isNotEmpty()) {
                     val uniqueSeasons = detail.episodes.map { if (it.seasonNumber > 0) it.seasonNumber else 1 }.distinct().sorted()
                     val record = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this@DetailActivity, card.detailUrl)
 
-                    if (uniqueSeasons.size > 1) {
+                    if (uniqueSeasons.isNotEmpty()) {
                         val lastWatchedSeason = record?.let { rec ->
                             detail.episodes.firstOrNull { it.episodeUrl == rec.episodeUrl || it.episodeNumber == rec.episodeNumber }?.seasonNumber
                         } ?: uniqueSeasons.first()
@@ -628,10 +629,6 @@ class DetailActivity : AppCompatActivity() {
                         }
                         seasonAdapter = sAdapter
                         recyclerSeasons.adapter = sAdapter
-                    } else {
-                        // Season capsules may still be applied once TMDB metadata is available
-                        recyclerSeasons.visibility = View.GONE
-                        selectedSeason = 1
                     }
 
                     val initialEpisodes = if (uniqueSeasons.size > 1) {
