@@ -302,7 +302,7 @@
                 android:paddingTop="4dp">
 
                 <!-- Season Selection Capsules (Nuvio: Season 1, Season 2) -->
-                <androidx.recyclerview.widget.RecyclerView
+                <com.example.animetv.ui.TvHorizontalRecyclerView
                     android:id="@+id/recyclerSeasons"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -317,7 +317,7 @@
                     android:visibility="gone" />
 
                 <!-- Episodes List (16:9 full-bleed Nuvio cards) -->
-                <androidx.recyclerview.widget.RecyclerView
+                <com.example.animetv.ui.TvHorizontalRecyclerView
                     android:id="@+id/recyclerEpisodes"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

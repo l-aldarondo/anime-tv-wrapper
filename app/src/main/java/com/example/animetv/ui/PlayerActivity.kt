@@ -57,6 +57,7 @@ class PlayerActivity : AppCompatActivity() {
         const val EXTRA_EPISODE_URL = "extra_episode_url"
         const val EXTRA_EPISODE_TITLE = "extra_episode_title"
         const val EXTRA_EPISODE_NUMBER = "extra_episode_number"
+        const val EXTRA_SEASON_NUMBER = "extra_season_number"
         const val EXTRA_START_OVER = "extra_start_over"
         const val EXTRA_SYNOPSIS = "extra_synopsis"
 
@@ -74,6 +75,7 @@ class PlayerActivity : AppCompatActivity() {
             episodeUrl: String = "",
             episodeTitle: String = "",
             episodeNumber: Int = 1,
+            seasonNumber: Int = 1,
             startOver: Boolean = false,
             synopsis: String = ""
         ) {
@@ -90,6 +92,7 @@ class PlayerActivity : AppCompatActivity() {
                 putExtra(EXTRA_EPISODE_URL, episodeUrl)
                 putExtra(EXTRA_EPISODE_TITLE, episodeTitle)
                 putExtra(EXTRA_EPISODE_NUMBER, episodeNumber)
+                putExtra(EXTRA_SEASON_NUMBER, seasonNumber)
                 putExtra(EXTRA_START_OVER, startOver)
                 putExtra(EXTRA_SYNOPSIS, synopsis)
             }
@@ -122,6 +125,7 @@ class PlayerActivity : AppCompatActivity() {
     private var episodeUrl: String = ""
     private var episodeTitle: String = ""
     private var episodeNumber: Int = 1
+    private var seasonNumber: Int = 1
     private var hasAutoResumed: Boolean = false
     private var startOverFromBeginning: Boolean = false
     private var currentYouTubeVideoId: String = ""
@@ -205,6 +209,7 @@ class PlayerActivity : AppCompatActivity() {
                 episodeUrl = episodeUrl,
                 episodeTitle = episodeTitle,
                 episodeNumber = episodeNumber,
+                seasonNumber = seasonNumber,
                 positionMs = posMs,
                 durationMs = durMs,
                 synopsis = synopsis
@@ -270,6 +275,7 @@ class PlayerActivity : AppCompatActivity() {
         episodeUrl = intent.getStringExtra(EXTRA_EPISODE_URL) ?: ""
         episodeTitle = intent.getStringExtra(EXTRA_EPISODE_TITLE) ?: ""
         episodeNumber = intent.getIntExtra(EXTRA_EPISODE_NUMBER, 1)
+        seasonNumber = intent.getIntExtra(EXTRA_SEASON_NUMBER, 1)
 
         // Always rewrite pelisserieshoy (rate-limited VIP server) to embed69 (Servidor 1)
         if (videoUrl.contains("player.pelisserieshoy.com/f/")) {

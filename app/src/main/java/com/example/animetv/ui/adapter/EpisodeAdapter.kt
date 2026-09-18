@@ -121,15 +121,18 @@ class EpisodeAdapter(
         )
 
         val rec = lastWatchedRecord
-        val isHistoryWatched = rec != null &&
-                (rec.episodeUrl == ep.episodeUrl || rec.episodeNumber == ep.episodeNumber) &&
-                rec.durationMs > 0 && rec.positionMs >= (rec.durationMs * 0.85)
+        val isSameEpisode = rec != null && (
+            (ep.episodeUrl.isNotEmpty() && rec.episodeUrl.trimEnd('/') == ep.episodeUrl.trimEnd('/')) ||
+            (rec.episodeNumber == ep.episodeNumber && (if (rec.seasonNumber > 0) rec.seasonNumber else 1) == sNum)
+        )
+        val isHistoryWatched = isSameEpisode &&
+                rec!!.durationMs > 0 && rec.positionMs >= (rec.durationMs * 0.85)
 
         val isWatched = isExplicitWatched || isHistoryWatched
         holder.watchedBadge.visibility = if (isWatched) View.VISIBLE else View.GONE
 
         // Playback progress indicator
-        if (rec != null && (rec.episodeUrl == ep.episodeUrl || rec.episodeNumber == ep.episodeNumber) && rec.durationMs > 0) {
+        if (isSameEpisode && rec!!.durationMs > 0) {
             val pct = ((rec.positionMs * 100) / rec.durationMs).toInt().coerceIn(0, 100)
             holder.progressWatched.progress = pct
             holder.progressWatched.visibility = View.VISIBLE

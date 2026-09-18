@@ -24,6 +24,7 @@ import com.example.animetv.FavoriteItem
 import com.example.animetv.FavoritesStore
 import com.example.animetv.R
 import com.example.animetv.core.CatalogRepository
+import com.example.animetv.core.history.PlaybackHistoryStore
 import com.example.animetv.core.history.WatchedEpisodeStore
 import com.example.animetv.core.model.AnimeCard
 import com.example.animetv.core.model.AnimeDetail
@@ -40,6 +41,7 @@ import com.example.animetv.ui.adapter.SeasonCapsuleAdapter
 import com.example.animetv.ui.adapter.TorrentItemAdapter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 
 class DetailActivity : AppCompatActivity() {
@@ -134,7 +136,10 @@ class DetailActivity : AppCompatActivity() {
         val layoutDetailHero: View = findViewById(R.id.layoutDetailHero)
         recyclerSeasons = findViewById(R.id.recyclerSeasons)
         recyclerSeasons.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        recyclerSeasons.itemAnimator = null
         recyclerEpisodes = findViewById(R.id.recyclerEpisodes)
+        recyclerEpisodes.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        recyclerEpisodes.itemAnimator = null
 
         // Smooth scroll controller for TV:
         // Down into Seasons/Episodes -> automatically glide down to reveal episode cards
@@ -160,8 +165,6 @@ class DetailActivity : AppCompatActivity() {
             wasInBelowHero = isInBelowHero
         }
         progressBar = findViewById(R.id.progressBarDetail)
-
-        recyclerEpisodes.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         isAscendingOrder = com.example.animetv.core.history.UiPreferencesStore.isEpisodesAscending(this)
 
         @Suppress("DEPRECATION")
@@ -296,13 +299,7 @@ class DetailActivity : AppCompatActivity() {
 
         btnPlayTorrent.text = "⚡ Torrent"
 
-        episodeAdapter?.let { adapter ->
-            val list = getSortedEpisodes(rawEpisodes, isAscendingOrder)
-            adapter.updateList(list, record = record)
-            if (list.isNotEmpty()) {
-                bindFocusedEpisode(list[0])
-            }
-        }
+        displayEpisodesForSeason(selectedSeason)
     }
 
     private fun getSortedEpisodes(list: List<AnimeEpisode>, ascending: Boolean): List<AnimeEpisode> {
@@ -357,10 +354,10 @@ class DetailActivity : AppCompatActivity() {
         if (sortedList.isNotEmpty()) {
             val focused = currentlyFocusedEpisode
             val focusedIndex = focused?.let { f ->
-                sortedList.indexOfFirst { it.episodeUrl == f.episodeUrl || (it.seasonNumber == f.seasonNumber && it.episodeNumber == f.episodeNumber) }
+                sortedList.indexOfFirst { it.episodeUrl == f.episodeUrl || (((if (it.seasonNumber > 0) it.seasonNumber else 1) == season) && it.episodeNumber == f.episodeNumber) }
             }?.takeIf { it >= 0 }
             val recordIndex = record?.let { rec ->
-                sortedList.indexOfFirst { it.episodeUrl == rec.episodeUrl || it.episodeNumber == rec.episodeNumber }
+                sortedList.indexOfFirst { it.episodeUrl == rec.episodeUrl || (((if (rec.seasonNumber > 0) rec.seasonNumber else 1) == season) && it.episodeNumber == rec.episodeNumber) }
             }?.takeIf { it >= 0 }
             val resumeIndex = focusedIndex ?: recordIndex ?: 0
             bindFocusedEpisode(sortedList[resumeIndex])
@@ -816,10 +813,21 @@ class DetailActivity : AppCompatActivity() {
         if (rawEpisodes.isEmpty()) return
         lifecycleScope.launch {
             try {
-                val seasons = rawEpisodes.map { it.seasonNumber }.distinct()
+                val hasMultipleSeasonsInRaw = rawEpisodes.any { it.seasonNumber > 1 }
+                val seasons = rawEpisodes.map { if (it.seasonNumber > 0) it.seasonNumber else 1 }.distinct()
                 val tmdbEpisodesMap = mutableMapOf<Pair<Int, Int>, com.example.animetv.core.tmdb.TmdbEpisode>()
-                for (sNum in seasons) {
-                    val eps = TmdbMetadataRepository.getSeasonEpisodes(this@DetailActivity, tmdb.tmdbId, sNum)
+
+                val deferreds = seasons.map { sNum ->
+                    async(Dispatchers.IO) {
+                        try {
+                            TmdbMetadataRepository.getSeasonEpisodes(this@DetailActivity, tmdb.tmdbId, sNum)
+                        } catch (e: Exception) {
+                            emptyList()
+                        }
+                    }
+                }
+                val results = deferreds.awaitAll()
+                for (eps in results) {
                     for (ep in eps) {
                         tmdbEpisodesMap[Pair(ep.seasonNumber, ep.episodeNumber)] = ep
                     }
@@ -827,8 +835,12 @@ class DetailActivity : AppCompatActivity() {
 
                 if (tmdbEpisodesMap.isNotEmpty()) {
                     rawEpisodes = rawEpisodes.map { ep ->
-                        val tEp = tmdbEpisodesMap[Pair(ep.seasonNumber, ep.episodeNumber)]
-                            ?: tmdbEpisodesMap[Pair(1, ep.episodeNumber)]
+                        val effectiveSeason = if (ep.seasonNumber > 0) ep.seasonNumber else 1
+                        // CRITICAL: For shows with multiple seasons (e.g. Adventure Time), NEVER fallback
+                        // to Season 1! Only fall back to Season 1 if the scraper provided all episodes under Season 1.
+                        val tEp = tmdbEpisodesMap[Pair(effectiveSeason, ep.episodeNumber)]
+                            ?: if (!hasMultipleSeasonsInRaw) tmdbEpisodesMap[Pair(1, ep.episodeNumber)] else null
+
                         if (tEp != null) {
                             val enrichedTitle = if (tEp.name.isNotEmpty() && !tEp.name.equals("Episodio ${ep.episodeNumber}", true)) {
                                 "${ep.episodeNumber}. ${tEp.name}"
@@ -1334,7 +1346,11 @@ class DetailActivity : AppCompatActivity() {
         detail: AnimeDetail?,
         episode: AnimeEpisode?
     ) {
-        val title = "${card.title} - ${episode?.title ?: item.resolutionBadge}"
+        val currentEp = episode ?: currentlyFocusedEpisode ?: rawEpisodes.firstOrNull()
+        val sNum = currentEp?.seasonNumber?.takeIf { it > 0 } ?: selectedSeason
+        val eNum = currentEp?.episodeNumber ?: 1
+        val epUrl = currentEp?.episodeUrl ?: ""
+        val title = "${card.title} - ${currentEp?.title ?: item.resolutionBadge}"
         val torrServerUrl = TorrentSettingsStore.getTorrServerUrl(this)
 
         lifecycleScope.launch {
@@ -1362,9 +1378,10 @@ class DetailActivity : AppCompatActivity() {
                     animeTitle = card.title,
                     posterUrl = bestPoster,
                     source = "Torrent (${item.provider})",
-                    episodeUrl = item.magnetUrl,
-                    episodeTitle = item.title,
-                    episodeNumber = episode?.episodeNumber ?: 1,
+                    episodeUrl = epUrl.ifEmpty { item.magnetUrl },
+                    episodeTitle = currentEp?.title ?: item.title,
+                    episodeNumber = eNum,
+                    seasonNumber = sNum,
                     startOver = false
                 )
                 return@launch
@@ -1378,13 +1395,30 @@ class DetailActivity : AppCompatActivity() {
             if (TorrServerClient.isNovaPlayerInstalled(this@DetailActivity)) {
                 Toast.makeText(this@DetailActivity, "Iniciando streaming en Nova Video Player...", Toast.LENGTH_SHORT).show()
                 dialog.dismiss()
+                val bestPoster = CoverUtils.pickBestCover(currentTmdbMeta?.posterUrl, detail?.posterUrl ?: card.posterUrl)
+                WatchedEpisodeStore.setEpisodeWatched(this@DetailActivity, card.detailUrl, sNum, eNum, epUrl, watched = true)
+                PlaybackHistoryStore.saveProgress(
+                    context = this@DetailActivity,
+                    animeDetailUrl = card.detailUrl,
+                    animeTitle = card.title,
+                    posterUrl = bestPoster,
+                    source = "Torrent (${item.provider})",
+                    episodeUrl = epUrl.ifEmpty { item.magnetUrl },
+                    episodeTitle = currentEp?.title ?: item.title,
+                    episodeNumber = eNum,
+                    seasonNumber = sNum,
+                    positionMs = 1440_000L,
+                    durationMs = 1440_000L,
+                    synopsis = currentEp?.synopsis ?: detail?.synopsis ?: ""
+                )
+                refreshPlaybackState()
                 TorrServerClient.launchNovaPlayer(this@DetailActivity, targetMagnet, title)
                 return@launch
             }
 
             // 3. Check if VLC is installed
             if (TorrServerClient.isVlcInstalled(this@DetailActivity)) {
-                showVlcOrNovaPromptDialog(item, title, targetMagnet)
+                showVlcOrNovaPromptDialog(item, title, targetMagnet, currentEp)
                 return@launch
             }
 
@@ -1393,11 +1427,33 @@ class DetailActivity : AppCompatActivity() {
         }
     }
 
-    private fun showVlcOrNovaPromptDialog(item: TorrentStreamItem, title: String, targetMagnet: String = item.magnetUrl) {
+    private fun showVlcOrNovaPromptDialog(item: TorrentStreamItem, title: String, targetMagnet: String = item.magnetUrl, episode: AnimeEpisode? = null) {
+        val currentEp = episode ?: currentlyFocusedEpisode ?: rawEpisodes.firstOrNull()
+        val sNum = currentEp?.seasonNumber?.takeIf { it > 0 } ?: selectedSeason
+        val eNum = currentEp?.episodeNumber ?: 1
+        val epUrl = currentEp?.episodeUrl ?: ""
+
         AlertDialog.Builder(this)
             .setTitle("🎬 Reproductor de Torrents")
             .setMessage("Se detectó VLC en este dispositivo.\n\nPara la mejor experiencia con motor BitTorrent integrado en la memoria, recomendamos Nova Video Player (gratuito y de código abierto).\n\n¿Cómo deseas reproducir?")
             .setPositiveButton("▶ Abrir en VLC") { _, _ ->
+                val bestPoster = CoverUtils.pickBestCover(currentTmdbMeta?.posterUrl, currentDetail?.posterUrl ?: currentCard?.posterUrl ?: "")
+                WatchedEpisodeStore.setEpisodeWatched(this, currentCard?.detailUrl ?: "", sNum, eNum, epUrl, watched = true)
+                PlaybackHistoryStore.saveProgress(
+                    context = this,
+                    animeDetailUrl = currentCard?.detailUrl ?: "",
+                    animeTitle = currentCard?.title ?: "",
+                    posterUrl = bestPoster,
+                    source = "Torrent (${item.provider})",
+                    episodeUrl = epUrl.ifEmpty { item.magnetUrl },
+                    episodeTitle = currentEp?.title ?: item.title,
+                    episodeNumber = eNum,
+                    seasonNumber = sNum,
+                    positionMs = 1440_000L,
+                    durationMs = 1440_000L,
+                    synopsis = currentEp?.synopsis ?: currentDetail?.synopsis ?: ""
+                )
+                refreshPlaybackState()
                 TorrServerClient.launchVlc(this, targetMagnet, title)
             }
             .setNeutralButton("📥 Instalar Nova Player") { _, _ ->

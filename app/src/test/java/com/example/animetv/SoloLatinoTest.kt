@@ -15,6 +15,20 @@ class SoloLatinoTest {
     }
 
     @Test
+    fun testAdventureTimeDetail() = kotlinx.coroutines.runBlocking {
+        val s = com.example.animetv.core.source.SoloLatinoSource()
+        val d = s.getAnimeDetail("https://sololatino.net/serie/hora-de-aventura")
+        println("=== ADVENTURE TIME DETAIL ===")
+        println("Title: ${d.title}, tmdbId: ${d.tmdbId}, tmdbMediaType: ${d.tmdbMediaType}")
+        println("Episodes count: ${d.episodes.size}")
+        val seasonGroups = d.episodes.groupBy { it.seasonNumber }
+        println("Seasons found in scraper: ${seasonGroups.keys.sorted()}")
+        seasonGroups.forEach { (sNum, eps) ->
+            println("Season $sNum has ${eps.size} eps. First: ${eps.firstOrNull()?.title} (${eps.firstOrNull()?.episodeUrl}), Last: ${eps.lastOrNull()?.title}")
+        }
+    }
+
+    @Test
     fun testSearch() = kotlinx.coroutines.runBlocking {
         val s = com.example.animetv.core.source.SoloLatinoSource()
         val results = s.search("Parecido a un asesinato")

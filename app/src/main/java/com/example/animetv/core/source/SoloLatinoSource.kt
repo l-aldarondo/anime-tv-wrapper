@@ -176,7 +176,7 @@ class SoloLatinoSource : AnimeSource {
                 ?.ifEmpty { null }
                 ?: doc.selectFirst("meta[property=og:description], meta[name=description]")?.attr("content")?.trim()
                 ?: ""
-            val synopsis = android.text.Html.fromHtml(rawSynopsis, android.text.Html.FROM_HTML_MODE_LEGACY).toString().trim()
+            val synopsis = org.jsoup.Jsoup.parse(rawSynopsis).text().trim()
             val metaImg = doc.selectFirst("meta[property=og:image], meta[name=twitter:image]")?.attr("content")?.trim() ?: ""
             val domImg = doc.selectFirst(".card__poster, .poster img, .cover img, .film-poster img")?.let {
                 it.attr("src").ifEmpty { it.attr("data-src") }

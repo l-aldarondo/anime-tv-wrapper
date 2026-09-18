@@ -13,6 +13,7 @@ data class PlaybackRecord(
     val episodeUrl: String,
     val episodeTitle: String,
     val episodeNumber: Int,
+    val seasonNumber: Int = 1,
     val positionMs: Long,
     val durationMs: Long,
     val synopsis: String = "",
@@ -27,6 +28,7 @@ data class PlaybackRecord(
             put("episodeUrl", episodeUrl)
             put("episodeTitle", episodeTitle)
             put("episodeNumber", episodeNumber)
+            put("seasonNumber", seasonNumber)
             put("positionMs", positionMs)
             put("durationMs", durationMs)
             put("synopsis", synopsis)
@@ -47,6 +49,7 @@ data class PlaybackRecord(
                 episodeUrl = epUrl,
                 episodeTitle = obj.optString("episodeTitle", "Episodio"),
                 episodeNumber = obj.optInt("episodeNumber", 1),
+                seasonNumber = obj.optInt("seasonNumber", 1),
                 positionMs = obj.optLong("positionMs", 0L),
                 durationMs = obj.optLong("durationMs", 0L),
                 synopsis = obj.optString("synopsis", ""),
@@ -70,6 +73,7 @@ object PlaybackHistoryStore {
         episodeUrl: String,
         episodeTitle: String,
         episodeNumber: Int,
+        seasonNumber: Int = 1,
         positionMs: Long,
         durationMs: Long,
         synopsis: String = ""
@@ -105,6 +109,7 @@ object PlaybackHistoryStore {
             episodeUrl = episodeUrl,
             episodeTitle = episodeTitle,
             episodeNumber = episodeNumber,
+            seasonNumber = seasonNumber,
             positionMs = positionMs,
             durationMs = durationMs,
             synopsis = finalSynopsis,
