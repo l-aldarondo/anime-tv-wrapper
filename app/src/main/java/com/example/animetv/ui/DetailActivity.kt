@@ -404,16 +404,7 @@ class DetailActivity : AppCompatActivity() {
     private fun bindInitialCard(card: AnimeCard) {
         txtTitle.text = card.title
         txtMeta.text = "${card.source}  •  ${card.episodeBadge.ifEmpty { "Serie" }}"
-        txtSynopsis.text = card.synopsis.ifEmpty { "Cargando sinopsis y capítulos..." }
-
-        val initPoster = if (CoverUtils.isValidCover(card.posterUrl)) card.posterUrl else ""
-        if (initPoster.isNotEmpty()) {
-            Glide.with(this)
-                .load(initPoster)
-                .centerCrop()
-                .diskCacheStrategy(DiskCacheStrategy.ALL)
-                .into(imgBackdrop)
-        }
+        txtSynopsis.text = "Cargando detalles..."
 
         updateFavoriteButton(card)
         btnToggleFavorite.setOnClickListener {
