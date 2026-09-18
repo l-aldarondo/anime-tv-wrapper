@@ -29,9 +29,6 @@ class CinecalidadTest {
         assertTrue("Search should return results for Deadpool", searchResults.isNotEmpty())
 
         val first = searchResults.first()
-        val detail = source.getAnimeDetail(first.detailUrl)
-        println("DETAIL: Title=${detail.title}, Synopsis length=${detail.synopsis.length}, Episodes=${detail.episodes.size}")
-
         val stream = source.resolveStream(first.detailUrl)
         println("RESOLVE STREAM RESULT: $stream")
         assertNotNull("StreamResult should not be null", stream)
