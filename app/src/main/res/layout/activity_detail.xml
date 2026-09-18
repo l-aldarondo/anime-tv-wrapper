@@ -244,79 +244,7 @@
                 android:paddingHorizontal="@dimen/safe_zone_margin"
                 android:paddingTop="20dp">
 
-            <!-- Episodes Section Header with First / Sort / Last Cluster -->
-            <LinearLayout
-                android:id="@+id/layoutEpisodesHeaderRow"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="12dp">
 
-                <TextView
-                    android:id="@+id/txtEpisodesHeader"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="Episodios Disponibles"
-                    style="@style/TextAppearance.SectionHeader" />
-
-                <!-- Episode Navigation & Sort Controls: « (First), ⇅ (Sort), » (Last) -->
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <!-- Jump to First Episode -->
-                    <Button
-                        android:id="@+id/btnJumpFirst"
-                        android:layout_width="42dp"
-                        android:layout_height="36dp"
-                        android:background="@drawable/bg_topbar_pill"
-                        android:focusable="true"
-                        android:focusableInTouchMode="true"
-                        android:text="«"
-                        android:textColor="@color/primary_text"
-                        android:textSize="18sp"
-                        android:textStyle="bold"
-                        android:gravity="center"
-                        android:padding="0dp" />
-
-                    <!-- Bidirectional Sort Toggle: ⇅ 1 ➔ N / ⇅ N ➔ 1 -->
-                    <Button
-                        android:id="@+id/btnSortOrder"
-                        android:layout_width="wrap_content"
-                        android:layout_height="36dp"
-                        android:layout_marginStart="8dp"
-                        android:background="@drawable/bg_topbar_pill"
-                        android:focusable="true"
-                        android:focusableInTouchMode="true"
-                        android:paddingHorizontal="14dp"
-                        android:text="⇅ 1 ➔ N"
-                        android:textColor="@color/primary_text"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-
-                    <!-- Jump to Last Episode -->
-                    <Button
-                        android:id="@+id/btnJumpLast"
-                        android:layout_width="42dp"
-                        android:layout_height="36dp"
-                        android:layout_marginStart="8dp"
-                        android:background="@drawable/bg_topbar_pill"
-                        android:focusable="true"
-                        android:focusableInTouchMode="true"
-                        android:text="»"
-                        android:textColor="@color/primary_text"
-                        android:textSize="18sp"
-                        android:textStyle="bold"
-                        android:gravity="center"
-                        android:padding="0dp" />
-
-                </LinearLayout>
-
-            </LinearLayout>
 
             <!-- Season Selection Capsules (Stremio / Nuvio style) -->
             <androidx.recyclerview.widget.RecyclerView
@@ -344,6 +272,67 @@
                 android:paddingVertical="16dp"
                 android:overScrollMode="never"
                 android:nextFocusUp="@id/recyclerSeasons" />
+
+            <!-- Episode Navigation & Sort Controls: « (First), ⇅ (Sort), » (Last) -->
+            <LinearLayout
+                android:id="@+id/layoutEpisodesControlsRow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_gravity="start"
+                android:layout_marginTop="8dp">
+
+                <!-- Jump to First Episode -->
+                <Button
+                    android:id="@+id/btnJumpFirst"
+                    android:layout_width="42dp"
+                    android:layout_height="36dp"
+                    android:background="@drawable/bg_topbar_pill"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:text="«"
+                    android:textColor="@color/primary_text"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:gravity="center"
+                    android:padding="0dp"
+                    android:nextFocusUp="@id/recyclerEpisodes" />
+
+                <!-- Bidirectional Sort Toggle: ⇅ 1 ➔ N / ⇅ N ➔ 1 -->
+                <Button
+                    android:id="@+id/btnSortOrder"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_topbar_pill"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:paddingHorizontal="14dp"
+                    android:text="⇅ 1 ➔ N"
+                    android:textColor="@color/primary_text"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:nextFocusUp="@id/recyclerEpisodes" />
+
+                <!-- Jump to Last Episode -->
+                <Button
+                    android:id="@+id/btnJumpLast"
+                    android:layout_width="42dp"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_topbar_pill"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:text="»"
+                    android:textColor="@color/primary_text"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:gravity="center"
+                    android:padding="0dp"
+                    android:nextFocusUp="@id/recyclerEpisodes" />
+
+            </LinearLayout>
 
             </LinearLayout>
 

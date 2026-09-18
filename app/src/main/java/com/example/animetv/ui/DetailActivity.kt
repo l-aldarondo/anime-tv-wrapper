@@ -75,8 +75,8 @@ class DetailActivity : AppCompatActivity() {
     private lateinit var actionTrailer: IconDrawableRevealButton
     private lateinit var actionFavorite: IconRevealButton
     private lateinit var actionWatched: IconDrawableRevealButton
-    private lateinit var layoutEpisodesHeaderRow: View
-    private lateinit var txtEpisodesHeader: TextView
+    private lateinit var layoutEpisodesControlsRow: View
+
     private lateinit var btnJumpFirst: Button
     private lateinit var btnSortOrder: Button
     private lateinit var btnJumpLast: Button
@@ -133,8 +133,8 @@ class DetailActivity : AppCompatActivity() {
         btnToggleWatched.setOnClickListener {
             toggleWatchedShow()
         }
-        layoutEpisodesHeaderRow = findViewById(R.id.layoutEpisodesHeaderRow)
-        txtEpisodesHeader = findViewById(R.id.txtEpisodesHeader)
+        layoutEpisodesControlsRow = findViewById(R.id.layoutEpisodesControlsRow)
+
         btnJumpFirst = findViewById(R.id.btnJumpFirst)
         btnSortOrder = findViewById(R.id.btnSortOrder)
         btnJumpLast = findViewById(R.id.btnJumpLast)
@@ -363,11 +363,6 @@ class DetailActivity : AppCompatActivity() {
             // Leave focus on whichever view already holds it (e.g. season capsule)
         } else {
             recyclerEpisodes.scrollToPosition(0)
-        }
-        txtEpisodesHeader.text = if (hasMultiInRaw || (seasonAdapter?.itemCount ?: 0) > 1) {
-            "Temporada $season (${sortedList.size} Episodios)"
-        } else {
-            "Episodios Disponibles (${sortedList.size})"
         }
         refreshWatchedButtonState()
     }
@@ -603,7 +598,7 @@ class DetailActivity : AppCompatActivity() {
                 if (currentTmdbMeta == null || currentTmdbMeta?.overview.isNullOrEmpty()) {
                     txtSynopsis.text = detail.synopsis.ifEmpty { "Sin sinopsis disponible." }
                 }
-                txtEpisodesHeader.text = "Episodios Disponibles (${detail.episodes.size})"
+
 
                 // Trailer Button
                 val effectiveTrailer = detail.trailerUrl.ifEmpty { currentTmdbMeta?.trailerUrl ?: "" }
@@ -613,7 +608,7 @@ class DetailActivity : AppCompatActivity() {
                 // single "episode" stub for the movie itself — the WEB/TOR buttons still play it
                 // correctly via the existing episode-based wiring below, only the episode chrome
                 // (header, grid, spotlight panel) is hidden.
-                layoutEpisodesHeaderRow.visibility = if (isCurrentMovie) View.GONE else View.VISIBLE
+                layoutEpisodesControlsRow.visibility = if (isCurrentMovie) View.GONE else View.VISIBLE
                 recyclerEpisodes.visibility = if (isCurrentMovie) View.GONE else View.VISIBLE
 
                 if (detail.episodes.isNotEmpty()) {
@@ -676,12 +671,6 @@ class DetailActivity : AppCompatActivity() {
                         if (resumeIndex > 0) {
                             recyclerEpisodes.scrollToPosition(resumeIndex)
                         }
-                    }
-
-                    txtEpisodesHeader.text = if (uniqueSeasons.size > 1) {
-                        "Temporada $selectedSeason (${sortedList.size} Episodios)"
-                    } else {
-                        "Episodios Disponibles (${sortedList.size})"
                     }
 
                     refreshPlaybackState()
@@ -824,7 +813,7 @@ class DetailActivity : AppCompatActivity() {
         }
         seasonAdapter = sAdapter
         recyclerSeasons.adapter = sAdapter
-        txtEpisodesHeader.text = "Temporada $selectedSeason (${episodeAdapter?.itemCount ?: rawEpisodes.size} Episodios)"
+
     }
 
     /**
@@ -840,7 +829,7 @@ class DetailActivity : AppCompatActivity() {
                 progressBar.visibility = View.GONE
 
                 if (tmdbEps.isEmpty()) {
-                    txtEpisodesHeader.text = "Temporada $season (Sin episodios disponibles)"
+
                     episodeAdapter?.updateList(emptyList())
                     return@launch
                 }
@@ -888,7 +877,7 @@ class DetailActivity : AppCompatActivity() {
                     if (stubs.isNotEmpty()) bindFocusedEpisode(stubs[0])
                 }
 
-                txtEpisodesHeader.text = "Temporada $season (${stubs.size} Episodios • TMDB)"
+
                 recyclerEpisodes.scrollToPosition(0)
             } catch (e: Exception) {
                 progressBar.visibility = View.GONE
