@@ -13,7 +13,7 @@ import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 class NineAnimeSource : AnimeSource {
-    override val name: String = "9Anime (Global HD)"
+    override val name: String = "9Anime HD"
     override var baseUrl: String = "https://9anime.or.at"
     override val mirrors: List<String> = listOf(
         "https://9anime.or.at",

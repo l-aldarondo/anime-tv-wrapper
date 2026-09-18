@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 
 class JKAnimeSource : AnimeSource {
-    override val name: String = "JKAnime"
+    override val name: String = "JK Anime"
     override var baseUrl: String = "https://jkanime.net"
     override val mirrors: List<String> = listOf(
         "https://jkanime.net",

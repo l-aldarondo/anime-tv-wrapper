@@ -31,12 +31,14 @@ class EpisodeAdapter(
     private val onEpisodeFocus: ((AnimeEpisode) -> Unit)? = null,
     private val onEpisodeClick: (AnimeEpisode) -> Unit,
     private val onEpisodeTorrentClick: ((AnimeEpisode) -> Unit)? = null,
+    private val onEpisodeOptionsClick: ((AnimeEpisode) -> Unit)? = null,
     private val onWatchedChanged: (() -> Unit)? = null
 ) : RecyclerView.Adapter<EpisodeAdapter.ViewHolder>() {
 
     class ViewHolder(val view: View) : RecyclerView.ViewHolder(view) {
         val still: ImageView = view.findViewById(R.id.imgEpisodeStill)
         val watchedBadge: TextView = view.findViewById(R.id.txtEpisodeWatchedBadge)
+        val torBadge: TextView = view.findViewById(R.id.txtEpisodeTorBadge)
         val badge: TextView = view.findViewById(R.id.txtEpisodeBadge)
         val title: TextView = view.findViewById(R.id.txtEpisodeTitle)
         val synopsis: TextView = view.findViewById(R.id.txtEpisodeSynopsis)
@@ -76,10 +78,15 @@ class EpisodeAdapter(
         val sNum = if (ep.seasonNumber > 0) ep.seasonNumber else 1
         val eNum = ep.episodeNumber
 
-        // Episode Badge (e.g. EPISODE 11)
+        // Episode Badge (e.g. EPISODIO 11)
         holder.badge.text = "EPISODIO $eNum"
-        holder.title.text = ep.title.ifEmpty { "Episodio $eNum" }
+        val cleanTitle = ep.title
+            .replace(Regex("""^(?:Episodio|Episode|Capítulo|Capitulo|Cap\.?|Ep\.?)\s*\d+[\s:\.\-–—]*""", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("""^\d+[\s:\.\-–—]+"""), "")
+            .trim()
+        holder.title.text = if (cleanTitle.isNotEmpty()) cleanTitle else "Episodio $eNum"
         holder.synopsis.text = ep.synopsis.ifEmpty { "Sin sinopsis disponible para este episodio." }
+        holder.torBadge.visibility = if (onEpisodeTorrentClick != null || onEpisodeOptionsClick != null) View.VISIBLE else View.GONE
 
         if (ep.releaseDate.isNotEmpty()) {
             holder.releaseDate.text = ep.releaseDate
@@ -171,23 +178,31 @@ class EpisodeAdapter(
             onWatchedChanged?.invoke()
         }
 
+        fun showOptionsOrWatched() {
+            if (onEpisodeOptionsClick != null) {
+                onEpisodeOptionsClick.invoke(ep)
+            } else {
+                toggleWatchedStatus()
+            }
+        }
+
         // Touch/mouse long click
         holder.itemView.isLongClickable = true
         holder.itemView.setOnLongClickListener {
-            toggleWatchedStatus()
+            showOptionsOrWatched()
             true
         }
 
         // Android TV remote handling:
-        // 1. Quick press DPAD_CENTER / ENTER -> Play episode
-        // 2. Hold DPAD_CENTER / ENTER (~500ms) -> Toggle watched status with haptic feedback
-        // 3. Press MENU / INFO -> Instantly toggle watched status
+        // 1. Quick press DPAD_CENTER / ENTER -> Play episode (instant WEB play)
+        // 2. Hold DPAD_CENTER / ENTER (~500ms) -> Show options dialog (WEB / Torrent / Watched / Restart)
+        // 3. Press MENU / INFO -> Instantly show options dialog
         var isLongPressTriggered = false
         val longPressTimeout = ViewConfiguration.getLongPressTimeout().toLong().coerceIn(400L, 600L)
         val longPressRunnable = Runnable {
             isLongPressTriggered = true
             holder.itemView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-            toggleWatchedStatus()
+            showOptionsOrWatched()
         }
 
         holder.itemView.setOnKeyListener { _, keyCode, event ->
@@ -213,7 +228,7 @@ class EpisodeAdapter(
                 }
             } else if (keyCode == KeyEvent.KEYCODE_MENU || keyCode == KeyEvent.KEYCODE_INFO) {
                 if (event.action == KeyEvent.ACTION_UP) {
-                    toggleWatchedStatus()
+                    showOptionsOrWatched()
                     return@setOnKeyListener true
                 }
             }

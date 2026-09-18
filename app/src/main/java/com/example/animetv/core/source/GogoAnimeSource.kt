@@ -13,7 +13,7 @@ import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 class GogoAnimeSource : AnimeSource {
-    override val name: String = "GogoAnime (Global Sub)"
+    override val name: String = "GoGoAnime"
     override var baseUrl: String = "https://gogoanime.by"
     override val mirrors: List<String> = listOf(
         "https://gogoanime.by",

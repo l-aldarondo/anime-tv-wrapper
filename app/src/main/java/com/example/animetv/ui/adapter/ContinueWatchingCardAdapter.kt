@@ -28,6 +28,7 @@ class ContinueWatchingCardAdapter(
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val still: ImageView = view.findViewById(R.id.imgPoster)
         val title: TextView = view.findViewById(R.id.txtTitle)
+        val subtitle: TextView = view.findViewById(R.id.txtSubtitle)
         val badge: TextView = view.findViewById(R.id.txtBadge)
         val progress: ProgressBar = view.findViewById(R.id.progressWatched)
     }
@@ -41,7 +42,18 @@ class ContinueWatchingCardAdapter(
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val item = items[position]
         holder.title.text = item.title
-        holder.badge.text = item.episodeBadge
+        if (item.subtitle.isNotEmpty()) {
+            holder.subtitle.text = item.subtitle
+            holder.subtitle.visibility = View.VISIBLE
+        } else {
+            holder.subtitle.visibility = View.GONE
+        }
+        if (item.episodeBadge.isNotEmpty()) {
+            holder.badge.text = item.episodeBadge
+            holder.badge.visibility = View.VISIBLE
+        } else {
+            holder.badge.visibility = View.GONE
+        }
         holder.progress.progress = item.progressPercent.coerceIn(0, 100)
 
         val validPoster = if (CoverUtils.isValidCover(item.posterUrl)) item.posterUrl.trim() else ""
@@ -67,6 +79,19 @@ class ContinueWatchingCardAdapter(
                 view.animate().scaleX(1.0f).scaleY(1.0f).translationZ(0f)
                     .setInterpolator(focusInterpolator).setDuration(275).start()
             }
+        }
+
+        holder.itemView.setOnKeyListener { _, keyCode, event ->
+            if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+                val pos = holder.bindingAdapterPosition
+                if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT && pos >= items.size - 1) {
+                    return@setOnKeyListener true // Clamp at end of row
+                }
+                if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT && pos <= 0) {
+                    return@setOnKeyListener true // Clamp at start of row
+                }
+            }
+            false
         }
 
         holder.itemView.setOnClickListener {

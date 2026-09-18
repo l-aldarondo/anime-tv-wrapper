@@ -22,7 +22,7 @@ import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 class SoloLatinoSource : AnimeSource {
-    override val name: String = "SoloLatino (Audio Latino)"
+    override val name: String = "SoloLatino"
     override var baseUrl: String = "https://sololatino.net"
     override val mirrors: List<String> = listOf(
         "https://sololatino.net",

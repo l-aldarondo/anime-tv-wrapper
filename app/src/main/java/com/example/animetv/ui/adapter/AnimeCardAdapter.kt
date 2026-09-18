@@ -40,7 +40,7 @@ class AnimeCardAdapter(
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val item = items[position]
         holder.title?.text = item.title
-        holder.source.text = item.source
+        holder.source.text = formatSourceTag(item.source)
 
         // Badge logic simplification
         val badgeText = item.episodeBadge.ifEmpty { item.rating }
@@ -98,6 +98,18 @@ class AnimeCardAdapter(
                         .setInterpolator(focusInterpolator).setDuration(275).start()
                 }
             }
+            setOnKeyListener { _, keyCode, event ->
+                if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+                    val pos = holder.bindingAdapterPosition
+                    if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT && pos >= items.size - 1) {
+                        return@setOnKeyListener true // Clamp at end of row
+                    }
+                    if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT && pos <= 0) {
+                        return@setOnKeyListener true // Clamp at start of row
+                    }
+                }
+                false
+            }
             setOnClickListener { onCardClick(item) }
             setOnLongClickListener {
                 onCardLongClick?.invoke(item)
@@ -123,5 +135,19 @@ class AnimeCardAdapter(
         items.clear()
         items.addAll(newItems)
         notifyDataSetChanged()
+    }
+
+    companion object {
+        fun formatSourceTag(raw: String): String {
+            return when {
+                raw.contains("SoloLatino", ignoreCase = true) -> "SoloLatino"
+                raw.contains("9Anime", ignoreCase = true) -> "9Anime HD"
+                raw.contains("GoGoAnime", ignoreCase = true) -> "GoGoAnime"
+                raw.contains("JKAnime", ignoreCase = true) || raw.contains("JK Anime", ignoreCase = true) -> "JK Anime"
+                raw.contains("SoloStream", ignoreCase = true) -> "SoloStream"
+                raw.contains("AnimeYT", ignoreCase = true) -> "AnimeYT"
+                else -> raw.replace(Regex("""\s*\(.*?\)"""), "").trim()
+            }
+        }
     }
 }

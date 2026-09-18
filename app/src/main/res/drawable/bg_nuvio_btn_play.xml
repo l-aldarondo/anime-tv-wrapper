@@ -1,18 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Focused on TV remote (Selected state) -->
+    <!-- Focused state on TV remote -->
     <item android:state_focused="true">
         <shape android:shape="rectangle">
             <solid android:color="#FFFFFF" />
             <stroke android:width="3dp" android:color="@color/active_accent" />
-            <corners android:radius="18dp" />
+            <corners android:radius="24dp" />
         </shape>
     </item>
-    <!-- Idle state (Selected) -->
+    <!-- Pressed state -->
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#E0E0E0" />
+            <corners android:radius="24dp" />
+        </shape>
+    </item>
+    <!-- Idle state: crisp white pill -->
     <item>
         <shape android:shape="rectangle">
             <solid android:color="#FFFFFF" />
-            <corners android:radius="18dp" />
+            <corners android:radius="24dp" />
         </shape>
     </item>
 </selector>

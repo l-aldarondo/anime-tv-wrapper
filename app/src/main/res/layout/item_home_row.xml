@@ -18,7 +18,7 @@
         style="@style/TextAppearance.SectionHeader" />
 
     <!-- clipChildren="false" so a focused card's scale-up glow renders fully -->
-    <androidx.recyclerview.widget.RecyclerView
+    <com.example.animetv.ui.TvHorizontalRecyclerView
         android:id="@+id/recyclerRowCards"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

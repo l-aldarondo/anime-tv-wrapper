@@ -6,13 +6,7 @@ import com.example.animetv.core.extractor.HeadlessStreamExtractor
 import com.example.animetv.core.model.AnimeCard
 import com.example.animetv.core.model.AnimeDetail
 import com.example.animetv.core.model.StreamResult
-import com.example.animetv.core.source.AnimeSource
-import com.example.animetv.core.source.AnimeYTSource
-import com.example.animetv.core.source.GogoAnimeSource
-import com.example.animetv.core.source.JKAnimeSource
-import com.example.animetv.core.source.NineAnimeSource
-import com.example.animetv.core.source.SoloLatinoSource
-import com.example.animetv.core.source.SoloStreamSource
+import com.example.animetv.core.source.*
 import com.example.animetv.core.util.CoverUtils
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -26,184 +20,106 @@ object CatalogRepository {
     val jkAnimeSource: AnimeSource = JKAnimeSource()
     val animeYtSource: AnimeSource = AnimeYTSource()
     val gogoAnimeSource: AnimeSource = GogoAnimeSource()
-
-    private var cachedLatinoTrending: List<AnimeCard> = emptyList()
-    private var cachedSoloLatinoSections: List<com.example.animetv.core.model.CatalogRow> = emptyList()
-    private var cachedSoloStream: List<AnimeCard> = emptyList()
-    private var cachedNineAnime: List<AnimeCard> = emptyList()
-    private var cachedJKRecent: List<AnimeCard> = emptyList()
-    private var cachedAnimeYt: List<AnimeCard> = emptyList()
-    private var cachedGogo: List<AnimeCard> = emptyList()
+    val cinecalidadSource = CinecalidadSource()
 
     suspend fun loadHomeContent(context: Context? = null, forceRefresh: Boolean = false): HomeCatalogData = coroutineScope {
-        // 1. Parallel mirror rotation (health check) - ultra fast HEAD requests
         val rotationJob = async {
-            try {
-                listOf(
-                    async { runCatching { soloLatinoSource.rotateMirror() } },
-                    async { runCatching { soloStreamSource.rotateMirror() } },
-                    async { runCatching { nineAnimeSource.rotateMirror() } },
-                    async { runCatching { jkAnimeSource.rotateMirror() } },
-                    async { runCatching { animeYtSource.rotateMirror() } },
-                    async { runCatching { gogoAnimeSource.rotateMirror() } }
-                ).awaitAll()
-            } catch (e: Exception) {
-                Log.e("CatalogRepository", "Mirror rotation failed", e)
-            }
+            listOf(
+                async { runCatching { soloLatinoSource.rotateMirror() } },
+                async { runCatching { nineAnimeSource.rotateMirror() } },
+                async { runCatching { jkAnimeSource.rotateMirror() } },
+                async { runCatching { gogoAnimeSource.rotateMirror() } },
+                async { runCatching { animeYtSource.rotateMirror() } },
+                async { runCatching { cinecalidadSource.rotateMirror() } }
+            ).awaitAll()
         }
 
-        if (!forceRefresh) {
-            // Priority 1: Memory cache (Instant)
-            if (cachedLatinoTrending.isNotEmpty() && cachedJKRecent.isNotEmpty()) {
-                return@coroutineScope HomeCatalogData(
-                    latinoTrending = cachedLatinoTrending,
-                    soloStreamTrending = cachedSoloStream,
-                    nineAnimeTrending = cachedNineAnime,
-                    recentEpisodes = cachedJKRecent,
-                    animeYtTrending = emptyList(),
-                    gogoTrending = cachedGogo,
-                    soloLatinoSections = cachedSoloLatinoSections
-                )
-            }
-            // Priority 2: Disk cache (Fast)
-            if (context != null) {
-                val diskCached = HomeCatalogCache.load(context)
-                if (diskCached != null && (diskCached.latinoTrending.isNotEmpty() || diskCached.recentEpisodes.isNotEmpty())) {
-                    cachedLatinoTrending = diskCached.latinoTrending
-                    cachedSoloLatinoSections = diskCached.soloLatinoSections
-                    cachedSoloStream = diskCached.soloStreamTrending
-                    cachedNineAnime = diskCached.nineAnimeTrending
-                    cachedJKRecent = diskCached.recentEpisodes
-                    cachedAnimeYt = emptyList()
-                    cachedGogo = diskCached.gogoTrending
-                    return@coroutineScope diskCached
-                }
-            }
+        if (!forceRefresh && context != null) {
+            HomeCatalogCache.load(context)?.let { return@coroutineScope it }
         }
 
-        // Priority 3: Fresh load (Wait for mirrors first)
         rotationJob.await()
-
-        val latinoDeferred = async { runCatching { soloLatinoSource.getTrending() }.getOrDefault(emptyList()) }
-        val latinoSectionsDeferred = async { runCatching { soloLatinoSource.getHomeSections() }.getOrDefault(emptyList()) }
-        val nineDeferred = async { runCatching { nineAnimeSource.getTrending() }.getOrDefault(emptyList()) }
-        val jkDeferred = async { runCatching { jkAnimeSource.getRecentEpisodes() }.getOrDefault(emptyList()) }
-        val gogoDeferred = async { runCatching { gogoAnimeSource.getTrending() }.getOrDefault(emptyList()) }
-
-        val latino = latinoDeferred.await()
-        val latinoSections = latinoSectionsDeferred.await()
-        val nine = nineDeferred.await()
-        val jk = jkDeferred.await()
-        val gogo = gogoDeferred.await()
-
-        if (latino.isNotEmpty()) cachedLatinoTrending = latino
-        if (latinoSections.isNotEmpty()) cachedSoloLatinoSections = latinoSections
-        if (nine.isNotEmpty()) cachedNineAnime = nine
-        if (jk.isNotEmpty()) cachedJKRecent = jk
-        if (gogo.isNotEmpty()) cachedGogo = gogo
+        
+        val latinoDef = async { runCatching { soloLatinoSource.getTrending() }.getOrDefault(emptyList()) }
+        val jkDef = async { runCatching { jkAnimeSource.getRecentEpisodes() }.getOrDefault(emptyList()) }
+        val nineDef = async { runCatching { nineAnimeSource.getTrending() }.getOrDefault(emptyList()) }
+        val gogoDef = async { runCatching { gogoAnimeSource.getTrending() }.getOrDefault(emptyList()) }
+        val animeYtDef = async { runCatching { animeYtSource.getTrending() }.getOrDefault(emptyList()) }
+        val sectionsDef = async { runCatching { soloLatinoSource.getHomeSections() }.getOrDefault(emptyList()) }
 
         val freshData = HomeCatalogData(
-            latinoTrending = cachedLatinoTrending,
-            soloStreamTrending = emptyList(),
-            nineAnimeTrending = cachedNineAnime,
-            recentEpisodes = cachedJKRecent,
-            animeYtTrending = emptyList(),
-            gogoTrending = cachedGogo,
-            soloLatinoSections = cachedSoloLatinoSections
+            latinoTrending = latinoDef.await(),
+            nineAnimeTrending = nineDef.await(),
+            recentEpisodes = jkDef.await(),
+            gogoTrending = gogoDef.await(),
+            animeYtTrending = animeYtDef.await(),
+            soloLatinoSections = sectionsDef.await()
         )
 
-        if (context != null && (freshData.latinoTrending.isNotEmpty() || freshData.recentEpisodes.isNotEmpty())) {
-            HomeCatalogCache.save(context, freshData)
-        }
-
+        if (context != null) HomeCatalogCache.save(context, freshData)
         freshData
     }
 
-    private val TITLE_ALIASES: Map<String, List<String>> = mapOf(
-        "hidden murder" to listOf("Parecido a un asesinato"),
-        "parecido a un asesinato" to listOf("Hidden Murder"),
-        "yomi no tsugai" to listOf("Daemons of the Shadow Realm", "Yomi no Tsugai: Dúo del Inframundo"),
-        "daemons of the shadow realm" to listOf("Yomi no Tsugai", "Yomi no Tsugai: Dúo del Inframundo"),
-        "daemon of the shadow" to listOf("Yomi no Tsugai", "Daemons of the Shadow Realm"),
-        "hora de aventura" to listOf("Adventure Time", "Hora de Aventura", "Hora de Aventuras"),
-        "la hora de la aventura" to listOf("Adventure Time", "Hora de Aventura", "Hora de Aventuras"),
-        "hora de la aventura" to listOf("Adventure Time", "Hora de Aventura", "Hora de Aventuras"),
-        "la hora de aventura" to listOf("Adventure Time", "Hora de Aventura", "Hora de Aventuras"),
-        "hora de aventuras" to listOf("Adventure Time", "Hora de Aventura", "Hora de Aventuras"),
-        "adventure time" to listOf("Hora de Aventura", "Adventure Time", "Hora de Aventuras")
-    )
-
-    private fun getSearchQueries(query: String): List<String> {
-        val qClean = query.trim().lowercase()
-        val list = mutableListOf(query.trim())
-        for ((k, aliases) in TITLE_ALIASES) {
-            if (qClean.contains(k) || k.contains(qClean)) {
-                list.addAll(aliases)
-            }
-        }
-        return list.distinct()
-    }
-
     suspend fun searchAll(query: String): List<AnimeCard> = coroutineScope {
-        val queries = getSearchQueries(query)
-        val list = mutableListOf<AnimeCard>()
-
-        for (q in queries) {
-            val latinoDef = async { runCatching { soloLatinoSource.search(q) }.getOrDefault(emptyList()) }
-            val streamDef = async { runCatching { soloStreamSource.search(q) }.getOrDefault(emptyList()) }
-            val nineDef = async { runCatching { nineAnimeSource.search(q) }.getOrDefault(emptyList()) }
-            val jkDef = async { runCatching { jkAnimeSource.search(q) }.getOrDefault(emptyList()) }
-            val gogoDef = async { runCatching { gogoAnimeSource.search(q) }.getOrDefault(emptyList()) }
-
-            list.addAll(latinoDef.await())
-            list.addAll(streamDef.await())
-            list.addAll(nineDef.await())
-            list.addAll(jkDef.await())
-            list.addAll(gogoDef.await())
-        }
-        list.distinctBy { it.detailUrl }
+        val jobs = listOf(
+            async { runCatching { soloLatinoSource.search(query) }.getOrDefault(emptyList()) },
+            async { runCatching { jkAnimeSource.search(query) }.getOrDefault(emptyList()) },
+            async { runCatching { nineAnimeSource.search(query) }.getOrDefault(emptyList()) },
+            async { runCatching { gogoAnimeSource.search(query) }.getOrDefault(emptyList()) },
+            async { runCatching { animeYtSource.search(query) }.getOrDefault(emptyList()) },
+            async { runCatching { cinecalidadSource.search(query) }.getOrDefault(emptyList()) }
+        )
+        jobs.awaitAll().flatten().distinctBy { it.detailUrl }
     }
 
     suspend fun getAnimeDetail(card: AnimeCard): AnimeDetail {
-        val detail = when {
-            card.source.contains("SoloStream", ignoreCase = true) ->
-                soloStreamSource.getAnimeDetail(card.detailUrl)
-            card.source.contains("9Anime", ignoreCase = true) || card.detailUrl.contains("9anime") ->
-                nineAnimeSource.getAnimeDetail(card.detailUrl)
-            card.source.contains("SoloLatino", ignoreCase = true) || card.detailUrl.contains("sololatino") ->
-                soloLatinoSource.getAnimeDetail(card.detailUrl)
-            card.source.contains("JKAnime", ignoreCase = true) || card.detailUrl.contains("jkanime") ->
-                jkAnimeSource.getAnimeDetail(card.detailUrl)
-            card.source.contains("AnimeYT", ignoreCase = true) || card.detailUrl.contains("animeyt") ->
-                animeYtSource.getAnimeDetail(card.detailUrl)
-            card.source.contains("GogoAnime", ignoreCase = true) || card.detailUrl.contains("gogoanime") ->
-                gogoAnimeSource.getAnimeDetail(card.detailUrl)
-            else -> jkAnimeSource.getAnimeDetail(card.detailUrl)
+        return when {
+            card.source.contains("Cinecalidad") -> cinecalidadSource.getAnimeDetail(card.detailUrl)
+            card.source.contains("9Anime") -> nineAnimeSource.getAnimeDetail(card.detailUrl)
+            card.source.contains("JKAnime") -> jkAnimeSource.getAnimeDetail(card.detailUrl)
+            card.source.contains("GogoAnime") -> gogoAnimeSource.getAnimeDetail(card.detailUrl)
+            card.source.contains("AnimeYT") -> animeYtSource.getAnimeDetail(card.detailUrl)
+            else -> soloLatinoSource.getAnimeDetail(card.detailUrl)
         }
-        val bestPoster = CoverUtils.pickBestCover(detail.posterUrl, card.posterUrl)
-        return detail.copy(posterUrl = bestPoster)
     }
 
-    suspend fun resolveStream(context: Context, episodeUrl: String, source: String): StreamResult? {
-        // 1. Direct resolution from source
-        val directResult = when {
-            source.contains("SoloStream", ignoreCase = true) ->
-                soloStreamSource.resolveStream(episodeUrl)
-            source.contains("9Anime", ignoreCase = true) || episodeUrl.contains("9anime") ->
-                nineAnimeSource.resolveStream(episodeUrl)
-            source.contains("JKAnime", ignoreCase = true) || episodeUrl.contains("jkanime") ->
-                jkAnimeSource.resolveStream(episodeUrl)
-            source.contains("AnimeYT", ignoreCase = true) || episodeUrl.contains("animeyt") ->
-                animeYtSource.resolveStream(episodeUrl)
-            source.contains("GogoAnime", ignoreCase = true) || episodeUrl.contains("gogoanime") ->
-                gogoAnimeSource.resolveStream(episodeUrl)
-            else -> soloLatinoSource.resolveStream(episodeUrl)
+    suspend fun resolveStream(context: Context, episodeUrl: String, source: String): StreamResult? = coroutineScope {
+        // Parallel extraction: Primary vs Cinecalidad Backup
+        val primaryDeferred = async {
+            runCatching {
+                when {
+                    source.contains("JKAnime") -> jkAnimeSource.resolveStream(episodeUrl)
+                    source.contains("9Anime") -> nineAnimeSource.resolveStream(episodeUrl)
+                    source.contains("Cinecalidad") -> cinecalidadSource.resolveStream(episodeUrl)
+                    source.contains("Gogo") -> gogoAnimeSource.resolveStream(episodeUrl)
+                    source.contains("AnimeYT") -> animeYtSource.resolveStream(episodeUrl)
+                    else -> soloLatinoSource.resolveStream(episodeUrl)
+                }
+            }.getOrNull()
         }
 
-        if (directResult != null) return directResult
+        val backupDeferred = async {
+            if (source.contains("SoloLatino") || source.contains("SoloStream")) {
+                runCatching {
+                    val title = episodeUrl.trimEnd('/').substringAfterLast('/').replace("-", " ")
+                    cinecalidadSource.search(title).firstOrNull()?.let { cinecalidadSource.resolveStream(it.detailUrl) }
+                }.getOrNull()
+            } else null
+        }
 
-        // 2. Offscreen media interception via HeadlessStreamExtractor
-        return HeadlessStreamExtractor.extractStreamUrl(context, episodeUrl)
+        val primary = primaryDeferred.await()
+        val backup = backupDeferred.await()
+
+        // QUALITY RANKING: Direct HLS is always better than Embed
+        val bestResult = when {
+            primary?.isHls == true && !primary.isEmbed -> primary
+            backup?.isHls == true && !backup.isEmbed -> backup
+            primary != null -> primary
+            backup != null -> backup
+            else -> null
+        }
+
+        bestResult ?: HeadlessStreamExtractor.extractStreamUrl(context, episodeUrl)
     }
 }
 

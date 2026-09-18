@@ -8,7 +8,7 @@
     <FrameLayout
         android:id="@+id/layoutDetailHeroBackground"
         android:layout_width="match_parent"
-        android:layout_height="620dp"
+        android:layout_height="540dp"
         android:background="@color/surface_layer"
         android:clipChildren="false">
 
@@ -36,87 +36,252 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:fillViewport="true"
-        android:clipChildren="false">
+        android:clipChildren="false"
+        android:clipToPadding="false">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:clipChildren="false"
+            android:clipToPadding="false"
             android:orientation="vertical"
             android:paddingBottom="40dp">
 
-            <!-- Space for hero text/buttons overlaid on the static background behind ScrollView -->
+            <!-- Hero Section: ClearArt Logo, Actions, Synopsis, Metadata (Nuvio Layout) -->
             <FrameLayout
                 android:id="@+id/layoutDetailHero"
                 android:layout_width="match_parent"
-                android:layout_height="620dp"
-                android:clipChildren="false">
+                android:layout_height="wrap_content"
+                android:minHeight="460dp"
+                android:clipChildren="false"
+                android:clipToPadding="false">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="bottom"
                     android:orientation="vertical"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
                     android:paddingHorizontal="@dimen/safe_zone_margin"
-                    android:paddingBottom="28dp">
+                    android:paddingTop="36dp"
+                    android:paddingBottom="12dp">
 
-                    <!-- Title -->
+                    <!-- ClearArt Logo (TMDB/Cinemeta transparent PNG) -->
+                    <ImageView
+                        android:id="@+id/imgDetailLogo"
+                        android:layout_width="wrap_content"
+                        android:layout_height="84dp"
+                        android:layout_marginBottom="14dp"
+                        android:maxWidth="360dp"
+                        android:adjustViewBounds="true"
+                        android:scaleType="fitStart"
+                        android:visibility="gone"
+                        android:contentDescription="@null" />
+
+                    <!-- Fallback Title when no Logo is available -->
                     <TextView
                         android:id="@+id/txtDetailTitle"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:layout_marginBottom="14dp"
                         style="@style/TextAppearance.HeroTitle"
                         android:maxLines="2"
                         android:ellipsize="end"
                         android:shadowColor="#000000"
                         android:shadowRadius="10" />
 
+                    <!-- Nuvio Action Buttons Row directly under Logo -->
+                    <LinearLayout
+                        android:id="@+id/layoutActionButtons"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="14dp"
+                        android:gravity="center_vertical"
+                        android:clipChildren="false"
+                        android:clipToPadding="false"
+                        android:orientation="horizontal">
 
+                        <!-- Main CTA: White Pill (e.g. ▶ Next S1 E11) -->
+                        <Button
+                            android:id="@+id/btnPlayFirst"
+                            android:layout_width="wrap_content"
+                            android:layout_height="44dp"
+                            android:background="@drawable/bg_nuvio_btn_play"
+                            android:focusable="true"
+                            android:focusableInTouchMode="true"
+                            android:paddingHorizontal="22dp"
+                            android:text="▶ Next S1 E1"
+                            android:textColor="#101216"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
 
-                    <!-- Director / Cast (from TMDB credits) -->
+                        <!-- Torrent Stream Action: Translucent Dark Pill (⚡ Torrent) -->
+                        <Button
+                            android:id="@+id/btnPlayTorrent"
+                            android:layout_width="wrap_content"
+                            android:layout_height="44dp"
+                            android:layout_marginStart="12dp"
+                            android:background="@drawable/bg_nuvio_btn_secondary"
+                            android:focusable="true"
+                            android:focusableInTouchMode="true"
+                            android:paddingHorizontal="18dp"
+                            android:text="⚡ Torrent"
+                            android:textColor="#00E5FF"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <!-- Favorite / List Button -->
+                        <Button
+                            android:id="@+id/btnToggleFavorite"
+                            android:layout_width="44dp"
+                            android:layout_height="44dp"
+                            android:layout_marginStart="12dp"
+                            android:background="@drawable/bg_nuvio_btn_circle"
+                            android:focusable="true"
+                            android:focusableInTouchMode="true"
+                            android:text="+"
+                            android:textColor="#FFFFFF"
+                            android:textSize="20sp"
+                            android:textStyle="bold"
+                            android:gravity="center"
+                            android:padding="0dp" />
+
+                        <!-- Trailer Button -->
+                        <Button
+                            android:id="@+id/btnTrailer"
+                            android:layout_width="44dp"
+                            android:layout_height="44dp"
+                            android:layout_marginStart="12dp"
+                            android:background="@drawable/bg_nuvio_btn_circle"
+                            android:focusable="true"
+                            android:focusableInTouchMode="true"
+                            android:text="🎬"
+                            android:textColor="#FFFFFF"
+                            android:textSize="16sp"
+                            android:gravity="center"
+                            android:padding="0dp" />
+
+                        <!-- Watched Button -->
+                        <Button
+                            android:id="@+id/btnToggleWatched"
+                            android:layout_width="44dp"
+                            android:layout_height="44dp"
+                            android:layout_marginStart="12dp"
+                            android:background="@drawable/bg_nuvio_btn_circle"
+                            android:focusable="true"
+                            android:focusableInTouchMode="true"
+                            android:text="✓"
+                            android:textColor="#81C784"
+                            android:textSize="18sp"
+                            android:textStyle="bold"
+                            android:gravity="center"
+                            android:padding="0dp" />
+
+                        <!-- Restart Button (if in-progress) -->
+                        <Button
+                            android:id="@+id/btnRestartEpisode"
+                            android:layout_width="44dp"
+                            android:layout_height="44dp"
+                            android:layout_marginStart="12dp"
+                            android:background="@drawable/bg_nuvio_btn_circle"
+                            android:focusable="true"
+                            android:focusableInTouchMode="true"
+                            android:text="↺"
+                            android:textColor="#FFFFFF"
+                            android:textSize="18sp"
+                            android:textStyle="bold"
+                            android:gravity="center"
+                            android:padding="0dp"
+                            android:visibility="gone" />
+
+                    </LinearLayout>
+
+                    <!-- Director / Creator (Nuvio: Creator: Pendleton Ward) -->
                     <TextView
                         android:id="@+id/txtMovieCredits"
                         android:layout_width="720dp"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        android:lineSpacingExtra="4dp"
-                        style="@style/TextAppearance.MetadataLabel"
+                        android:layout_marginBottom="6dp"
+                        android:lineSpacingExtra="3dp"
+                        android:textColor="#B0B8C4"
+                        android:textSize="13sp"
                         android:shadowColor="#000000"
                         android:shadowRadius="6"
                         android:visibility="gone" />
 
-                    <!-- Synopsis -->
+                    <!-- Synopsis (3-4 lines, high contrast) -->
                     <TextView
                         android:id="@+id/txtDetailSynopsis"
                         android:layout_width="720dp"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
+                        android:layout_marginBottom="8dp"
                         android:lineSpacingExtra="4dp"
-                        android:maxLines="4"
+                        android:maxLines="3"
                         android:ellipsize="end"
-                        style="@style/TextAppearance.BodyText"
-                        android:shadowColor="#000000"
-                        android:shadowRadius="6" />
-
-                    <!-- Genres • Year • Rating -->
-                    <TextView
-                        android:id="@+id/txtDetailMeta"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:textColor="#FFD54F"
+                        android:textColor="#E6EDF3"
                         android:textSize="14sp"
-                        android:textStyle="bold"
                         android:shadowColor="#000000"
-                        android:shadowRadius="6" />
+                        android:shadowRadius="8" />
 
-                    <!-- Certification • Runtime -->
+                    <!-- Metadata line: Genres • Year + Yellow IMDb Badge (Nuvio signature) -->
+                    <LinearLayout
+                        android:id="@+id/layoutDetailMetaRow"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="4dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/txtDetailMeta"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textColor="#FFFFFF"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:shadowColor="#000000"
+                            android:shadowRadius="6" />
+
+                        <LinearLayout
+                            android:id="@+id/layoutDetailImdb"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="10dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:visibility="gone">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/bg_imdb_badge"
+                                android:paddingHorizontal="4dp"
+                                android:paddingVertical="1dp"
+                                android:text="IMDb"
+                                android:textColor="#000000"
+                                android:textSize="10sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/txtDetailImdbScore"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="5dp"
+                                android:shadowColor="#000000"
+                                android:shadowRadius="4"
+                                android:textColor="#FFFFFF"
+                                android:textSize="13sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                    </LinearLayout>
+
+                    <!-- Badges: [TV-PG | ENDED] • 11m • United States • EN -->
                     <TextView
                         android:id="@+id/txtMovieBadges"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:textColor="@color/secondary_text"
+                        android:textColor="#8B949E"
                         android:textSize="12sp"
                         android:shadowColor="#000000"
                         android:shadowRadius="6"
@@ -126,207 +291,41 @@
 
             </FrameLayout>
 
-            <!-- Below-hero content keeps its own horizontal margin since the hero itself is
-                 full-bleed (no ScrollView-wide padding anymore). -->
+            <!-- Below-hero content: Season Capsules & Episode Cards -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:clipChildren="false"
+                android:clipToPadding="false"
                 android:paddingHorizontal="@dimen/safe_zone_margin"
-                android:paddingTop="20dp">
+                android:paddingTop="4dp">
 
-
-
-            <!-- Symmetrical Action Buttons (Moved from top to here) -->
-            <HorizontalScrollView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                android:scrollbars="none">
-
-                <LinearLayout
-                    android:layout_width="wrap_content"
+                <!-- Season Selection Capsules (Nuvio: Season 1, Season 2) -->
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/recyclerSeasons"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
+                    android:layout_marginBottom="8dp"
+                    android:orientation="horizontal"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
+                    android:paddingVertical="6dp"
+                    android:paddingStart="4dp"
+                    android:paddingEnd="16dp"
+                    android:overScrollMode="never"
+                    android:visibility="gone" />
 
-                    <!-- Action row: WEB, TOR, Reiniciar, Tráiler, Mi Lista, Visto -->
-                    <Button
-                        android:id="@+id/btnPlayFirst"
-                        android:layout_width="wrap_content"
-                        android:layout_height="44dp"
-                        android:background="@drawable/bg_netflix_btn_play"
-                        android:focusable="true"
-                        android:focusableInTouchMode="true"
-                        android:nextFocusDown="@id/recyclerSeasons"
-                        android:paddingHorizontal="18dp"
-                        android:text="▶"
-                        android:textColor="@color/color_netflix_btn_play"
-                        android:textSize="16sp"
-                        android:textStyle="bold" />
-
-                    <Button
-                        android:id="@+id/btnPlayTorrent"
-                        android:layout_width="wrap_content"
-                        android:layout_height="44dp"
-                        android:layout_marginStart="12dp"
-                        android:background="@drawable/bg_netflix_btn_secondary"
-                        android:focusable="true"
-                        android:focusableInTouchMode="true"
-                        android:nextFocusDown="@id/recyclerSeasons"
-                        android:paddingHorizontal="18dp"
-                        android:text="⚡"
-                        android:textColor="#00E5FF"
-                        android:textSize="16sp"
-                        android:textStyle="bold" />
-
-                    <Button
-                        android:id="@+id/btnRestartEpisode"
-                        android:layout_width="wrap_content"
-                        android:layout_height="44dp"
-                        android:layout_marginStart="12dp"
-                        android:background="@drawable/bg_netflix_btn_secondary"
-                        android:focusable="true"
-                        android:focusableInTouchMode="true"
-                        android:nextFocusDown="@id/recyclerSeasons"
-                        android:paddingHorizontal="16dp"
-                        android:text="↺"
-                        android:textColor="@color/primary_text"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        android:visibility="gone" />
-
-                    <Button
-                        android:id="@+id/btnTrailer"
-                        android:layout_width="wrap_content"
-                        android:layout_height="44dp"
-                        android:layout_marginStart="12dp"
-                        android:background="@drawable/bg_netflix_btn_secondary"
-                        android:focusable="true"
-                        android:focusableInTouchMode="true"
-                        android:nextFocusDown="@id/recyclerSeasons"
-                        android:paddingHorizontal="14dp"
-                        android:text=""
-                        android:textColor="@color/primary_text"
-                        android:textSize="13sp"
-                        android:textStyle="bold" />
-
-                    <Button
-                        android:id="@+id/btnToggleFavorite"
-                        android:layout_width="wrap_content"
-                        android:layout_height="44dp"
-                        android:layout_marginStart="12dp"
-                        android:background="@drawable/bg_netflix_btn_secondary"
-                        android:focusable="true"
-                        android:focusableInTouchMode="true"
-                        android:nextFocusDown="@id/recyclerSeasons"
-                        android:paddingHorizontal="16dp"
-                        android:text="+"
-                        android:textColor="@color/primary_text"
-                        android:textSize="16sp"
-                        android:textStyle="bold" />
-
-                    <Button
-                        android:id="@+id/btnToggleWatched"
-                        android:layout_width="wrap_content"
-                        android:layout_height="44dp"
-                        android:layout_marginStart="12dp"
-                        android:background="@drawable/bg_netflix_btn_secondary"
-                        android:focusable="true"
-                        android:focusableInTouchMode="true"
-                        android:nextFocusDown="@id/recyclerSeasons"
-                        android:paddingHorizontal="14dp"
-                        android:text=""
-                        android:textColor="@color/primary_text"
-                        android:textSize="13sp"
-                        android:textStyle="bold" />
-
-                    <!-- Episode Navigation & Sort Controls -->
-                    <View
-                        android:layout_width="1dp"
-                        android:layout_height="24dp"
-                        android:layout_marginStart="16dp"
-                        android:layout_marginEnd="4dp"
-                        android:background="#44ffffff" />
-
-                    <Button
-                        android:id="@+id/btnJumpFirst"
-                        android:layout_width="44dp"
-                        android:layout_height="44dp"
-                        android:layout_marginStart="12dp"
-                        android:background="@drawable/bg_netflix_btn_secondary"
-                        android:focusable="true"
-                        android:focusableInTouchMode="true"
-                        android:nextFocusDown="@id/recyclerSeasons"
-                        android:text="«"
-                        android:textColor="@color/primary_text"
-                        android:textSize="18sp"
-                        android:textStyle="bold"
-                        android:gravity="center"
-                        android:padding="0dp" />
-
-                    <Button
-                        android:id="@+id/btnSortOrder"
-                        android:layout_width="wrap_content"
-                        android:layout_height="44dp"
-                        android:layout_marginStart="12dp"
-                        android:background="@drawable/bg_netflix_btn_secondary"
-                        android:focusable="true"
-                        android:focusableInTouchMode="true"
-                        android:nextFocusDown="@id/recyclerSeasons"
-                        android:paddingHorizontal="14dp"
-                        android:text="⇅ 1 ➔ N"
-                        android:textColor="@color/primary_text"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-
-                    <Button
-                        android:id="@+id/btnJumpLast"
-                        android:layout_width="44dp"
-                        android:layout_height="44dp"
-                        android:layout_marginStart="12dp"
-                        android:background="@drawable/bg_netflix_btn_secondary"
-                        android:focusable="true"
-                        android:focusableInTouchMode="true"
-                        android:nextFocusDown="@id/recyclerSeasons"
-                        android:text="»"
-                        android:textColor="@color/primary_text"
-                        android:textSize="18sp"
-                        android:textStyle="bold"
-                        android:gravity="center"
-                        android:padding="0dp" />
-
-                </LinearLayout>
-
-            </HorizontalScrollView>
-
-            <!-- Season Selection Capsules (Stremio / Nuvio style) -->
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/recyclerSeasons"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                android:orientation="horizontal"
-                android:clipChildren="false"
-                android:clipToPadding="false"
-                android:paddingVertical="12dp"
-                android:overScrollMode="never"
-                android:nextFocusUp="@id/btnPlayFirst"
-                android:nextFocusDown="@id/recyclerEpisodes"
-                android:visibility="gone" />
-
-            <!-- Episodes list -->
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/recyclerEpisodes"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:clipChildren="false"
-                android:clipToPadding="false"
-                android:paddingVertical="16dp"
-                android:overScrollMode="never"
-                android:nextFocusUp="@id/recyclerSeasons" />
+                <!-- Episodes List (16:9 full-bleed Nuvio cards) -->
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/recyclerEpisodes"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
+                    android:paddingVertical="8dp"
+                    android:overScrollMode="never" />
 
             </LinearLayout>
 

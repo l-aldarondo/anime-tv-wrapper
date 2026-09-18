@@ -17,7 +17,9 @@ data class AnimeCard(
     val synopsis: String = "",
     // 0-100 watch progress, used by the "Continuar Viendo" row's landscape cards to draw a
     // progress bar on the thumbnail. Unused (0) for any other row.
-    val progressPercent: Int = 0
+    val progressPercent: Int = 0,
+    val subtitle: String = "",
+    val logoUrl: String = ""
 ) : Serializable
 
 /**

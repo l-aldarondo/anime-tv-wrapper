@@ -55,7 +55,12 @@ class SeasonCapsuleAdapter(
         // Auto-select on focus (Stremio style: browse seasons smoothly without needing to click)
         holder.itemView.setOnFocusChangeListener { view, hasFocus ->
             if (hasFocus) {
-                view.animate().scaleX(1.08f).scaleY(1.08f).translationZ(6f).setDuration(150).start()
+                if (position == 0) {
+                    view.pivotX = 0f
+                } else {
+                    view.pivotX = view.width / 2f
+                }
+                view.animate().scaleX(1.06f).scaleY(1.06f).translationZ(6f).setDuration(150).start()
                 if (selectedSeason != s) {
                     val oldPos = seasons.indexOf(selectedSeason)
                     selectedSeason = s

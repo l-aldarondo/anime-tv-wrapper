@@ -34,7 +34,9 @@ data class TmdbMetadata(
     val cast: List<String> = emptyList(),
     val runtimeMinutes: Int = 0,
     val genres: List<String> = emptyList(),
-    val certification: String = ""
+    val certification: String = "",
+    val logoUrl: String = "",
+    val voteAverage: Double = 0.0
 ) {
     val bestTitle: String get() {
         if (titleSpanish.isNotEmpty() && titleSpanish != titleOriginal) {
@@ -67,7 +69,8 @@ private data class ExtendedDetails(
     val director: String = "",
     val cast: List<String> = emptyList(),
     val certification: String = "",
-    val trailerUrl: String = ""
+    val trailerUrl: String = "",
+    val logoUrl: String = ""
 )
 
 data class TmdbEpisode(
@@ -275,10 +278,48 @@ object TmdbMetadataRepository {
             } catch (e: Exception) { "" }
         }
 
+        val logoDeferred = async {
+            var logo = ""
+            try {
+                val imgUrl = "$BASE_URL/$mType/$tmdbId/images?api_key=$apiKey&include_image_language=es,en,null"
+                val imgReq = Request.Builder().url(imgUrl).build()
+                client.newCall(imgReq).execute().use { imgResp ->
+                    if (imgResp.isSuccessful) {
+                        val imgJson = JSONObject(imgResp.body?.string() ?: "")
+                        val logos = imgJson.optJSONArray("logos")
+                        if (logos != null && logos.length() > 0) {
+                            var bestPath = ""
+                            for (l in 0 until logos.length()) {
+                                val lObj = logos.getJSONObject(l)
+                                val path = lObj.optString("file_path", "")
+                                val lang = lObj.optString("iso_639_1", "")
+                                if (path.isNotEmpty()) {
+                                    if (lang == "es" || lang == "en") {
+                                        bestPath = path
+                                        break
+                                    }
+                                    if (bestPath.isEmpty()) bestPath = path
+                                }
+                            }
+                            if (bestPath.isNotEmpty()) {
+                                logo = "$IMAGE_BASE_W500$bestPath"
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {}
+            logo
+        }
+
         val enDetails = enDetailsDeferred.await()
         val credits = creditsDeferred.await()
+        val resolvedImdbId = imdbDeferred.await()
+        var resolvedLogo = logoDeferred.await()
+        if (resolvedLogo.isEmpty() && resolvedImdbId.startsWith("tt")) {
+            resolvedLogo = "https://images.metahub.space/logo/medium/$resolvedImdbId/img.png"
+        }
         ExtendedDetails(
-            imdbId = imdbDeferred.await(),
+            imdbId = resolvedImdbId,
             englishTitle = enDetails.englishTitle,
             numSeasons = enDetails.numSeasons,
             seasonCounts = enDetails.seasonCounts,
@@ -287,7 +328,8 @@ object TmdbMetadataRepository {
             director = credits.director,
             cast = credits.cast,
             certification = certificationDeferred.await(),
-            trailerUrl = trailerDeferred.await()
+            trailerUrl = trailerDeferred.await(),
+            logoUrl = resolvedLogo
         )
     }
 
@@ -534,6 +576,7 @@ object TmdbMetadataRepository {
                 var director = ""
                 var castNames: List<String> = emptyList()
                 var certification = ""
+                var logoUrl = ""
 
                 if (tmdbId > 0) {
                     val ext = fetchExtendedDetails(apiKey, tmdbId, mType)
@@ -547,6 +590,7 @@ object TmdbMetadataRepository {
                     castNames = ext.cast
                     certification = ext.certification
                     trailerUrl = ext.trailerUrl
+                    logoUrl = ext.logoUrl
                 }
 
                 // Fallback: If IMDb ID is still missing, query Cinemeta search
@@ -568,6 +612,10 @@ object TmdbMetadataRepository {
                                         val mId = mObj.optString("imdb_id", mObj.optString("id", ""))
                                         if (mId.startsWith("tt") && titleSimilarity(mName, qClean) >= 0.4) {
                                             imdbId = mId
+                                            if (logoUrl.isEmpty()) {
+                                                val cinLogo = mObj.optString("logo", "")
+                                                logoUrl = if (cinLogo.isNotEmpty()) cinLogo else "https://images.metahub.space/logo/medium/$mId/img.png"
+                                            }
                                             break
                                         }
                                     }
@@ -597,7 +645,9 @@ object TmdbMetadataRepository {
                     cast = castNames,
                     runtimeMinutes = runtimeMinutes,
                     genres = genreNames,
-                    certification = certification
+                    certification = certification,
+                    logoUrl = logoUrl,
+                    voteAverage = voteAvg
                 )
 
                 android.util.Log.d("TmdbMatch", "RESOLVED raw='$rawTitle' query='$queryToSearch' key='$cacheKey' -> tmdbId=$tmdbId title='$spanishTitle' orig='$originalTitle' score=$bestScore poster=${meta.posterUrl}")
@@ -689,7 +739,9 @@ object TmdbMetadataRepository {
                     cast = ext.cast,
                     runtimeMinutes = ext.runtimeMinutes,
                     genres = ext.genres,
-                    certification = ext.certification
+                    certification = ext.certification,
+                    logoUrl = ext.logoUrl,
+                    voteAverage = voteAvg
                 )
 
                 android.util.Log.d("TmdbMatch", "RESOLVED (by id) tmdbId=$tmdbId -> title='$spanishTitle' orig='$originalTitle' poster=${meta.posterUrl}")

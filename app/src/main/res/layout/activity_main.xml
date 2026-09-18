@@ -1,23 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/mainRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
     android:background="@color/primary_canvas">
 
-    <!-- Scrollable Main View: large reactive hero on top, all catalog rows scroll continuously
-         beneath it — matching the real Nuvio/Stremio home layout (verified against actual
-         reference screenshots), not the earlier one-row-at-a-time "board" experiment. -->
-    <!-- Fixed Hero: ~42% screen height (270dp) pinned at the top.
-         Art sits to the right, protected by left and bottom gradients.
-         Reflects whichever card currently has D-pad focus in the rows below.
-         Stays fixed at all times while catalog rows scroll beneath it. -->
+    <!-- 1. Full-screen backdrop artwork layer (Nuvio / Stremio TV Style)
+         Spans the entire screen without any hard black boxes or artificial crops -->
     <FrameLayout
         android:id="@+id/layoutHeroBanner"
         android:layout_width="match_parent"
-        android:layout_height="310dp"
-        android:background="@color/surface_layer">
+        android:layout_height="match_parent">
 
         <ImageView
             android:id="@+id/imgHeroBackdrop"
@@ -26,39 +19,37 @@
             android:scaleType="centerCrop"
             android:contentDescription="@null" />
 
-        <!-- Left-to-right gradient: ensures title, metadata, and synopsis are crisp
+        <!-- Left-to-right gradient: ensures title, logo, metadata, and synopsis are crisp
              over any backdrop while letting the artwork shine on the right -->
         <com.example.animetv.ui.GradientOverlayView
             android:id="@+id/viewHeroLeftGradient"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
-        <!-- Bottom gradient: dissolves hero smoothly into canvas color -->
+        <!-- Bottom gradient: smoothly transitions down the screen without creating a solid black cut -->
         <com.example.animetv.ui.GradientOverlayView
             android:id="@+id/viewHeroBottomGradient"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
-        <!-- Floating pill nav bar, overlaid on the hero image -->
+    </FrameLayout>
+
+    <!-- 2. Foreground content layer: top nav, reactive hero info, and scrollable catalog rows -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <!-- Top Navigation Bar: sleek translucent pill bar over backdrop -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_gravity="top"
             android:orientation="horizontal"
             android:gravity="center_vertical"
             android:paddingHorizontal="@dimen/safe_zone_margin"
-            android:paddingTop="14dp">
+            android:paddingTop="14dp"
+            android:paddingBottom="4dp">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="NuVibe TV"
-                android:textColor="@color/primary_text"
-                android:textSize="17sp"
-                android:textStyle="bold"
-                android:letterSpacing="0.06"
-                android:shadowColor="#000000"
-                android:shadowRadius="8" />
 
             <View
                 android:layout_width="0dp"
@@ -68,7 +59,7 @@
             <Button
                 android:id="@+id/btnNavCatalog"
                 android:layout_width="wrap_content"
-                android:layout_height="36dp"
+                android:layout_height="34dp"
                 android:background="@drawable/bg_topbar_pill"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
@@ -83,7 +74,7 @@
             <Button
                 android:id="@+id/btnNavMyList"
                 android:layout_width="wrap_content"
-                android:layout_height="36dp"
+                android:layout_height="34dp"
                 android:layout_marginStart="8dp"
                 android:background="@drawable/bg_topbar_pill"
                 android:focusable="true"
@@ -99,7 +90,7 @@
             <Button
                 android:id="@+id/btnNavSearch"
                 android:layout_width="wrap_content"
-                android:layout_height="36dp"
+                android:layout_height="34dp"
                 android:layout_marginStart="8dp"
                 android:background="@drawable/bg_topbar_pill"
                 android:focusable="true"
@@ -114,7 +105,7 @@
             <Button
                 android:id="@+id/btnNavRefresh"
                 android:layout_width="wrap_content"
-                android:layout_height="36dp"
+                android:layout_height="34dp"
                 android:layout_marginStart="8dp"
                 android:background="@drawable/bg_topbar_pill"
                 android:focusable="true"
@@ -129,7 +120,7 @@
             <Button
                 android:id="@+id/btnNavSettings"
                 android:layout_width="wrap_content"
-                android:layout_height="36dp"
+                android:layout_height="34dp"
                 android:layout_marginStart="8dp"
                 android:background="@drawable/bg_topbar_pill"
                 android:focusable="true"
@@ -143,48 +134,124 @@
 
         </LinearLayout>
 
-        <!-- Hero Info Container (Title, Metadata, Synopsis) -->
+        <!-- Reactive Hero Information (Logo / Title, Metadata, Badges, Synopsis) -->
         <LinearLayout
+            android:id="@+id/layoutHeroInfo"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_gravity="bottom"
             android:orientation="vertical"
             android:paddingHorizontal="@dimen/safe_zone_margin"
-            android:paddingBottom="12dp">
+            android:paddingTop="2dp"
+            android:paddingBottom="10dp">
 
-            <TextView
-                android:id="@+id/txtHeroTitle"
-                android:layout_width="600dp"
-                android:layout_height="wrap_content"
-                android:textColor="@color/primary_text"
-                android:textSize="24sp"
-                android:textStyle="bold"
-                android:maxLines="1"
-                android:ellipsize="end"
-                android:shadowColor="#000000"
-                android:shadowRadius="10" />
+            <!-- Official Transparent PNG Logo or Bold Fallback Title (Nuvio Signature) -->
+            <FrameLayout
+                android:layout_width="wrap_content"
+                android:layout_height="80dp">
 
-            <!-- Quick-scan metadata line: year • rating • genres/seasons -->
+                <ImageView
+                    android:id="@+id/imgHeroLogo"
+                    android:layout_width="wrap_content"
+                    android:layout_height="80dp"
+                    android:maxWidth="380dp"
+                    android:adjustViewBounds="true"
+                    android:scaleType="fitStart"
+                    android:visibility="gone"
+                    android:contentDescription="@null" />
+
+                <TextView
+                    android:id="@+id/txtHeroTitle"
+                    android:layout_width="580dp"
+                    android:layout_height="match_parent"
+                    android:gravity="center_vertical|start"
+                    android:textColor="@color/primary_text"
+                    android:textSize="26sp"
+                    android:textStyle="bold"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:shadowColor="#000000"
+                    android:shadowRadius="10" />
+
+            </FrameLayout>
+
+            <!-- Primary Metadata line (e.g. S1 E11 • Wizard • Animación • 2010-2018) -->
             <TextView
                 android:id="@+id/txtHeroMeta"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:textColor="#FFD54F"
+                android:textColor="#C5C8D4"
                 android:textSize="11sp"
                 android:textStyle="bold"
                 android:shadowColor="#000000"
                 android:shadowRadius="6"
                 android:visibility="gone" />
 
+            <!-- Badges line: NEXT UP + IMDb rating pill (Nuvio signature) -->
+            <LinearLayout
+                android:id="@+id/layoutHeroBadges"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/txtHeroNextUpBadge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="NEXT UP"
+                    android:textColor="#E0E3EB"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.08"
+                    android:shadowColor="#000000"
+                    android:shadowRadius="4" />
+
+                <LinearLayout
+                    android:id="@+id/layoutHeroImdb"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_imdb_badge"
+                        android:text="IMDb"
+                        android:textColor="#000000"
+                        android:textSize="9sp"
+                        android:textStyle="bold"
+                        android:paddingHorizontal="4dp"
+                        android:paddingVertical="1dp" />
+
+                    <TextView
+                        android:id="@+id/txtHeroImdbScore"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:shadowColor="#000000"
+                        android:shadowRadius="4" />
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <!-- Synopsis (compact 2 lines so catalog rows start high enough to peek the second row) -->
             <TextView
                 android:id="@+id/txtHeroSynopsis"
-                android:layout_width="560dp"
+                android:layout_width="540dp"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:maxLines="2"
                 android:ellipsize="end"
-                android:textColor="#C5C8D4"
+                android:textColor="#B0B4C3"
                 android:textSize="11sp"
                 android:lineSpacingExtra="2dp"
                 android:shadowColor="#000000"
@@ -192,41 +259,43 @@
 
         </LinearLayout>
 
-    </FrameLayout>
-
-    <!-- Scrollable Catalog Rows: occupies remaining screen height below fixed hero -->
-    <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1">
-
-        <androidx.core.widget.NestedScrollView
-            android:id="@+id/scrollMain"
+        <!-- Scrollable Catalog Rows: floats seamlessly over full-screen backdrop -->
+        <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clipChildren="false"
-            android:fillViewport="true">
+            android:layout_height="0dp"
+            android:layout_weight="1">
 
-            <LinearLayout
-                android:id="@+id/layoutCatalogRows"
+            <androidx.core.widget.NestedScrollView
+                android:id="@+id/scrollMain"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
+                android:layout_height="match_parent"
                 android:clipChildren="false"
-                android:paddingTop="0dp"
-                android:paddingBottom="40dp" />
+                android:fillViewport="true"
+                android:background="@android:color/transparent">
 
-        </androidx.core.widget.NestedScrollView>
+                <LinearLayout
+                    android:id="@+id/layoutCatalogRows"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:clipChildren="false"
+                    android:background="@android:color/transparent"
+                    android:paddingTop="0dp"
+                    android:paddingBottom="40dp" />
 
-        <!-- Global Progress Bar -->
-        <ProgressBar
-            android:id="@+id/progressBarHome"
-            android:layout_width="60dp"
-            android:layout_height="60dp"
-            android:layout_gravity="center"
-            android:indeterminateTint="@color/active_accent"
-            android:visibility="gone" />
+            </androidx.core.widget.NestedScrollView>
 
-    </FrameLayout>
+            <!-- Global Progress Bar -->
+            <ProgressBar
+                android:id="@+id/progressBarHome"
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                android:layout_gravity="center"
+                android:indeterminateTint="@color/active_accent"
+                android:visibility="gone" />
 
-</LinearLayout>
+        </FrameLayout>
+
+    </LinearLayout>
+
+</FrameLayout>

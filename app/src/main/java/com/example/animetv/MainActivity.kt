@@ -43,6 +43,7 @@ import com.example.animetv.ui.adapter.ContinueWatchingCardAdapter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Locale
 
 /**
  * 100% Native Android TV application entry point (Nuvio/Stremio-style Home). A large hero banner
@@ -60,8 +61,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var imgHeroBackdrop: ImageView
     private lateinit var viewHeroLeftGradient: com.example.animetv.ui.GradientOverlayView
     private lateinit var viewHeroBottomGradient: com.example.animetv.ui.GradientOverlayView
+    private lateinit var imgHeroLogo: ImageView
     private lateinit var txtHeroTitle: TextView
     private lateinit var txtHeroMeta: TextView
+    private lateinit var layoutHeroBadges: LinearLayout
+    private lateinit var txtHeroNextUpBadge: TextView
+    private lateinit var layoutHeroImdb: LinearLayout
+    private lateinit var txtHeroImdbScore: TextView
     private lateinit var txtHeroSynopsis: TextView
 
     // Top Header Navigation Buttons
@@ -115,8 +121,13 @@ class MainActivity : AppCompatActivity() {
         viewHeroLeftGradient = findViewById(R.id.viewHeroLeftGradient)
         viewHeroBottomGradient = findViewById(R.id.viewHeroBottomGradient)
         setupHeroGradients()
+        imgHeroLogo = findViewById(R.id.imgHeroLogo)
         txtHeroTitle = findViewById(R.id.txtHeroTitle)
         txtHeroMeta = findViewById(R.id.txtHeroMeta)
+        layoutHeroBadges = findViewById(R.id.layoutHeroBadges)
+        txtHeroNextUpBadge = findViewById(R.id.txtHeroNextUpBadge)
+        layoutHeroImdb = findViewById(R.id.layoutHeroImdb)
+        txtHeroImdbScore = findViewById(R.id.txtHeroImdbScore)
         txtHeroSynopsis = findViewById(R.id.txtHeroSynopsis)
 
         btnNavCatalog = findViewById(R.id.btnNavCatalog)
@@ -142,25 +153,30 @@ class MainActivity : AppCompatActivity() {
         val canvas = androidx.core.content.ContextCompat.getColor(this, R.color.primary_canvas)
         fun withAlpha(color: Int, alpha: Int): Int = (color and 0x00FFFFFF) or (alpha shl 24)
 
+        // Left-to-right fade: protects title & synopsis on the left without darkening the center/right art
         viewHeroLeftGradient.setGradient(
             com.example.animetv.ui.GradientOverlayView.Direction.LEFT_TO_RIGHT,
             intArrayOf(
-                withAlpha(canvas, 225),
-                withAlpha(canvas, 150),
-                withAlpha(canvas, 30),
+                withAlpha(canvas, 230),
+                withAlpha(canvas, 175),
+                withAlpha(canvas, 80),
+                withAlpha(canvas, 15),
                 withAlpha(canvas, 0)
             ),
-            floatArrayOf(0f, 0.22f, 0.40f, 0.55f)
+            floatArrayOf(0f, 0.22f, 0.42f, 0.65f, 0.85f)
         )
 
+        // Bottom-to-top fade: keeps the backdrop clearly visible behind the first row ("Continuar Viendo")
+        // and only deepens to canvas color on the lower rows
         viewHeroBottomGradient.setGradient(
             com.example.animetv.ui.GradientOverlayView.Direction.BOTTOM_TO_TOP,
             intArrayOf(
-                withAlpha(canvas, 255),
-                withAlpha(canvas, 90),
+                withAlpha(canvas, 245),
+                withAlpha(canvas, 150),
+                withAlpha(canvas, 50),
                 withAlpha(canvas, 0)
             ),
-            floatArrayOf(0f, 0.08f, 0.20f)
+            floatArrayOf(0f, 0.25f, 0.55f, 0.85f)
         )
     }
 
@@ -170,7 +186,7 @@ class MainActivity : AppCompatActivity() {
         val txtTitle = rowView.findViewById<TextView>(R.id.txtRowTitle)
         val recycler = rowView.findViewById<RecyclerView>(R.id.recyclerRowCards)
         txtTitle.text = row.title
-        recycler.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        recycler.layoutManager = com.example.animetv.ui.TvRowLayoutManager(this)
 
         val onCardLongClick: (AnimeCard) -> Unit = if (row.type == CatalogRowType.CONTINUE_WATCHING) {
             { card -> showRemoveFromHistoryDialog(card) }
@@ -356,8 +372,45 @@ class MainActivity : AppCompatActivity() {
      */
     private fun updateInfoPanel(card: AnimeCard) {
         currentFocusedCard = card
-        txtHeroTitle.text = card.title
+
+        // ClearArt / Official Logo Handling (Nuvio signature)
+        if (card.logoUrl.isNotEmpty()) {
+            Glide.with(this)
+                .load(card.logoUrl)
+                .override(Target.SIZE_ORIGINAL)
+                .listener(object : RequestListener<Drawable> {
+                    override fun onLoadFailed(
+                        e: GlideException?, model: Any?, target: Target<Drawable>, isFirstResource: Boolean
+                    ): Boolean {
+                        if (currentFocusedCard?.detailUrl == card.detailUrl) {
+                            imgHeroLogo.visibility = View.GONE
+                            txtHeroTitle.visibility = View.VISIBLE
+                            txtHeroTitle.text = card.title
+                        }
+                        return false
+                    }
+
+                    override fun onResourceReady(
+                        resource: Drawable, model: Any, target: Target<Drawable>?, dataSource: DataSource, isFirstResource: Boolean
+                    ): Boolean {
+                        if (currentFocusedCard?.detailUrl == card.detailUrl) {
+                            imgHeroLogo.visibility = View.VISIBLE
+                            txtHeroTitle.visibility = View.GONE
+                        }
+                        return false
+                    }
+                })
+                .fitCenter()
+                .transition(DrawableTransitionOptions.withCrossFade(200))
+                .into(imgHeroLogo)
+        } else {
+            imgHeroLogo.visibility = View.GONE
+            txtHeroTitle.visibility = View.VISIBLE
+            txtHeroTitle.text = card.title
+        }
+
         txtHeroSynopsis.text = if (card.synopsis.isNotEmpty()) card.synopsis else "Cargando información..."
+        layoutHeroBadges.visibility = View.GONE
         loadHeroMeta(card)
 
         val imageToLoad = card.backdropUrl.ifEmpty { card.posterUrl }
@@ -380,6 +433,7 @@ class MainActivity : AppCompatActivity() {
      */
     private fun loadHeroMeta(card: AnimeCard) {
         txtHeroMeta.visibility = View.GONE
+        layoutHeroBadges.visibility = View.GONE
         heroMetaJob?.cancel()
         heroMetaJob = lifecycleScope.launch {
             val isMovie = card.detailUrl.contains("/pelicula/") || card.episodeBadge.equals("Película", ignoreCase = true)
@@ -397,7 +451,51 @@ class MainActivity : AppCompatActivity() {
             if (currentFocusedCard?.detailUrl != card.detailUrl) return@launch
 
             if (meta != null) {
+                // If official logo found via TMDB/Metahub, promote it to hero logo
+                if (meta.logoUrl.isNotEmpty()) {
+                    Glide.with(this@MainActivity)
+                        .load(meta.logoUrl)
+                        .override(Target.SIZE_ORIGINAL)
+                        .listener(object : RequestListener<Drawable> {
+                            override fun onLoadFailed(
+                                e: GlideException?, model: Any?, target: Target<Drawable>, isFirstResource: Boolean
+                            ): Boolean {
+                                if (currentFocusedCard?.detailUrl == card.detailUrl) {
+                                    imgHeroLogo.visibility = View.GONE
+                                    txtHeroTitle.visibility = View.VISIBLE
+                                    txtHeroTitle.text = card.title
+                                }
+                                return false
+                            }
+
+                            override fun onResourceReady(
+                                resource: Drawable, model: Any, target: Target<Drawable>?, dataSource: DataSource, isFirstResource: Boolean
+                            ): Boolean {
+                                if (currentFocusedCard?.detailUrl == card.detailUrl) {
+                                    imgHeroLogo.visibility = View.VISIBLE
+                                    txtHeroTitle.visibility = View.GONE
+                                }
+                                return false
+                            }
+                        })
+                        .fitCenter()
+                        .transition(DrawableTransitionOptions.withCrossFade(200))
+                        .into(imgHeroLogo)
+                } else {
+                    imgHeroLogo.visibility = View.GONE
+                    txtHeroTitle.visibility = View.VISIBLE
+                    txtHeroTitle.text = card.title
+                }
+
                 val parts = mutableListOf<String>()
+                if (card.subtitle.isNotEmpty()) {
+                    parts.add(card.subtitle)
+                }
+                if (meta.genres.isNotEmpty()) {
+                    parts.add(meta.genres.take(2).joinToString(" / "))
+                } else if (meta.isAnimation) {
+                    parts.add("Animación")
+                }
                 if (meta.releaseYear.isNotEmpty()) parts.add(meta.releaseYear)
                 if (meta.certification.isNotEmpty()) parts.add(meta.certification)
                 if (meta.mediaType == "movie" && meta.runtimeMinutes > 0) {
@@ -412,6 +510,27 @@ class MainActivity : AppCompatActivity() {
                     txtHeroMeta.text = parts.joinToString("   •   ")
                     txtHeroMeta.visibility = View.VISIBLE
                 }
+
+                // Show NEXT UP and IMDb rating badges (Nuvio style)
+                val isContinueOrNext = card.source.contains("Continuar", ignoreCase = true) ||
+                        card.episodeBadge.contains("left", ignoreCase = true) ||
+                        card.episodeBadge.contains("Next", ignoreCase = true) ||
+                        card.episodeBadge.contains("Ep", ignoreCase = true)
+                txtHeroNextUpBadge.visibility = if (isContinueOrNext) View.VISIBLE else View.GONE
+
+                val imdbScore = when {
+                    meta.voteAverage > 0 -> String.format(Locale.US, "%.1f", meta.voteAverage)
+                    card.rating.isNotEmpty() -> card.rating.replace(Regex("""[^\d.]"""), "")
+                    else -> ""
+                }
+                if (imdbScore.isNotEmpty() && imdbScore != "0.0") {
+                    txtHeroImdbScore.text = imdbScore
+                    layoutHeroImdb.visibility = View.VISIBLE
+                } else {
+                    layoutHeroImdb.visibility = View.GONE
+                }
+                layoutHeroBadges.visibility = View.VISIBLE
+
                 if (meta.overview.isNotEmpty()) {
                     txtHeroSynopsis.text = meta.overview
                 }
@@ -485,13 +604,33 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 val isMovie = cleanDetailUrl.contains("/pelicula/") || rec.episodeTitle.contains("Película", ignoreCase = true)
+                val remainingMs = (rec.durationMs - rec.positionMs).coerceAtLeast(0)
+                val remainingMinutes = (remainingMs / (1000 * 60)).toInt()
+
+                // Nuvio-style smart badges: "21m left", "Next Up", or "2h 10m left"
                 val badge = when {
-                    isMovie && progressPct > 0 -> "Película • $progressPct%"
-                    isMovie -> "Película"
-                    rec.episodeNumber > 0 && progressPct > 0 -> "Ep ${rec.episodeNumber} • $progressPct%"
-                    rec.episodeNumber > 0 -> "Ep ${rec.episodeNumber}"
+                    progressPct in 90..100 -> "Next Up"
+                    remainingMinutes in 1..90 -> "${remainingMinutes}m left"
+                    isMovie && remainingMinutes > 90 -> {
+                        val h = remainingMinutes / 60
+                        val m = remainingMinutes % 60
+                        if (m > 0) "${h}h ${m}m left" else "${h}h left"
+                    }
                     progressPct > 0 -> "$progressPct%"
-                    else -> "Viendo"
+                    rec.episodeNumber > 0 -> "Ep ${rec.episodeNumber}"
+                    else -> "Next Up"
+                }
+
+                val resolvedSubtitle = when {
+                    rec.episodeTitle.isNotEmpty() && rec.episodeTitle != "Película Completa" && rec.episodeTitle != resolvedTitle -> {
+                        if (rec.episodeNumber > 0 && !rec.episodeTitle.contains("Ep", true)) {
+                            "S1 E${rec.episodeNumber} • ${rec.episodeTitle}"
+                        } else {
+                            rec.episodeTitle
+                        }
+                    }
+                    rec.episodeNumber > 0 -> "S1 E${rec.episodeNumber}"
+                    else -> ""
                 }
 
                 var resolvedPoster = if (CoverUtils.isValidCover(rec.posterUrl)) rec.posterUrl.trim() else ""
@@ -530,7 +669,9 @@ class MainActivity : AppCompatActivity() {
                     episodeBadge = badge,
                     synopsis = resolvedSynopsis,
                     backdropUrl = catalogCard?.backdropUrl ?: "",
-                    progressPercent = progressPct
+                    progressPercent = progressPct,
+                    subtitle = resolvedSubtitle,
+                    logoUrl = catalogCard?.logoUrl ?: ""
                 )
             }.distinctBy { it.detailUrl }
 
@@ -672,7 +813,7 @@ class MainActivity : AppCompatActivity() {
         val txtLabel = dialog.findViewById<TextView>(R.id.txtSearchResultsLabel)
         val recycler = dialog.findViewById<RecyclerView>(R.id.recyclerSearchResults)
 
-        recycler.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        recycler.layoutManager = com.example.animetv.ui.TvRowLayoutManager(this)
         val searchAdapter = AnimeCardAdapter(mutableListOf(), onCardClick = { card ->
             dialog.dismiss()
             DetailActivity.start(this, card)
