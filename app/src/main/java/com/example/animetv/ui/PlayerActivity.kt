@@ -648,6 +648,24 @@ class PlayerActivity : AppCompatActivity() {
                 if (AdBlockEngine.shouldBlock(reqUrl)) {
                     return AdBlockEngine.EMPTY_RESPONSE
                 }
+
+                // If an embedded player starts requesting a direct video stream (.m3u8, /hls/, or .mp4),
+                // switch immediately to native ExoPlayer!
+                if (!hasExoPlayerFailed && !isInterceptingMedia && (reqUrl.contains(".m3u8") || (reqUrl.contains(".mp4") && !reqUrl.contains("favicon")) || reqUrl.contains("/hls/") || reqUrl.contains("/manifest"))) {
+                    isInterceptingMedia = true
+                    val capturedHeaders = request?.requestHeaders ?: emptyMap()
+                    val reqReferer = capturedHeaders["Referer"] ?: referer
+                    mainHandler.post {
+                        android.util.Log.d("PlayerActivity", "Intercepted direct media from embed: $reqUrl. Switching to native ExoPlayer!")
+                        try {
+                            cleanWebPlayer.stopLoading()
+                            cleanWebPlayer.visibility = View.GONE
+                        } catch (e: Exception) {}
+                        isEmbedMode = false
+                        initializeExoPlayer(reqUrl, reqReferer)
+                    }
+                }
+
                 return super.shouldInterceptRequest(view, request)
             }
 
@@ -705,7 +723,7 @@ class PlayerActivity : AppCompatActivity() {
                             + ' html, body { margin: 0 !important; padding: 0 !important; background: #000 !important; overflow: hidden !important; width: 100vw !important; height: 100vh !important; }'
                             + ' #DisplayContent, #PlayerDisplay, #player-frame, #iframeContainer.active, #iframePlayer, #iframe-embed, .wb_-playerarea, .mytsumi-player, .mytsumi-stage, #mytsumi-media, video { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; z-index: 10 !important; border: none !important; object-fit: contain !important; background: #000 !important; }'
                             + ' .mytsumi-media iframe, #player-embed iframe, #iframe-embed, iframe[src*="stream"], iframe[src*="embed"], iframe[src*="bysesukior"], iframe[src*="megaplay"], iframe[src*="1anime"], iframe[src*="mega.nz"], iframe[src*="ok.ru"] { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; z-index: 10 !important; border: none !important; }'
-                            + ' .jw-controls, .jw-controlbar, .jw-display-icon-container, .jw-display-icon-display, .jw-logo, .jw-title, .jw-preview, .loading-content, .ps_-status, .server-notice, .ps_-block, .vjs-control-bar, .vjs-big-play-button, .plyr__controls, .play-button-circle, .play-btn, .fake-player-container, #servers-content, header, footer, .banner, .ads, .wb__-cover, #tutorialOverlay, #tutorialBackdrop, .tutorial-overlay, #fakePlayer { display: none !important; opacity: 0 !important; pointer-events: none !important; visibility: hidden !important; }';
+                            + ' video::-webkit-media-controls, video::-webkit-media-controls-enclosure, video::-webkit-media-controls-panel, video::-webkit-media-controls-play-button, video::-webkit-media-controls-timeline, video::-webkit-media-controls-current-time-display, video::-webkit-media-controls-time-remaining-display, video::-webkit-media-controls-mute-button, video::-webkit-media-controls-toggle-closed-captions-button, video::-webkit-media-controls-volume-slider, .jw-controls, .jw-controlbar, .jw-display-icon-container, .jw-display-icon-display, .jw-logo, .jw-title, .jw-preview, .loading-content, .ps_-status, .server-notice, .ps_-block, .vjs-control-bar, .vjs-big-play-button, .plyr__controls, .play-button-circle, .play-btn, .fake-player-container, #servers-content, header, footer, .banner, .ads, .wb__-cover, #tutorialOverlay, #tutorialBackdrop, .tutorial-overlay, #fakePlayer, .controls, .control-bar, .player-controls, .fp-ui, .fp-controls, .rmp-overlay, .rmp-ui, [class*="controlBar"], [class*="ControlBar"], [class*="bottom-controls"], [class*="progressBar"], [class*="ProgressBar"] { display: none !important; opacity: 0 !important; pointer-events: none !important; visibility: hidden !important; }';
                         document.head.appendChild(style);
 
                         function nukeDecoysAndPlay() {

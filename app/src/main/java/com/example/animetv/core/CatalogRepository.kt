@@ -111,12 +111,20 @@ object CatalogRepository {
         val backup = backupDeferred.await()
 
         // QUALITY RANKING: Direct HLS is always better than Embed
-        val bestResult = when {
+        val rawResult = when {
             primary?.isHls == true && !primary.isEmbed -> primary
             backup?.isHls == true && !backup.isEmbed -> backup
             primary != null -> primary
             backup != null -> backup
             else -> null
+        }
+
+        val bestResult = if (rawResult != null && rawResult.isEmbed) {
+            val referer = rawResult.headers["Referer"] ?: "https://v2.cinecalidad.vip/"
+            val sniffed = HeadlessStreamExtractor.extractStreamUrl(context, rawResult.videoUrl, referer)
+            if (sniffed != null && !sniffed.isEmbed) sniffed else rawResult
+        } else {
+            rawResult
         }
 
         bestResult ?: HeadlessStreamExtractor.extractStreamUrl(context, episodeUrl)

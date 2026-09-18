@@ -92,40 +92,46 @@ object HeadlessStreamExtractor {
                                 val clickScript = """
                                     (function() {
                                         try {
-                                            // 1. Click 'Servidor 1' (avoid PREMIUM VIP paywall)
-                                            var btns = document.querySelectorAll('[data-server-btn]');
-                                            var targetBtn = null;
-                                            for (var i = 0; i < btns.length; i++) {
-                                                var t = (btns[i].textContent || '').toUpperCase();
-                                                if (t.includes('SERVIDOR 1') || (!t.includes('PREMIUM') && btns.length > 1)) {
-                                                    targetBtn = btns[i];
-                                                    break;
+                                            function autoClick() {
+                                                // 1. Click 'Servidor 1' (avoid PREMIUM VIP paywall)
+                                                var btns = document.querySelectorAll('[data-server-btn]');
+                                                for (var i = 0; i < btns.length; i++) {
+                                                    var t = (btns[i].textContent || '').toUpperCase();
+                                                    if (t.includes('SERVIDOR 1') || (!t.includes('PREMIUM') && btns.length > 1)) {
+                                                        btns[i].click();
+                                                        break;
+                                                    }
+                                                }
+
+                                                // 2. Auto-click center element (FileMoon / Vidoza verification)
+                                                var centerEl = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
+                                                if (centerEl && centerEl.tagName !== 'BODY' && centerEl.tagName !== 'HTML') {
+                                                    centerEl.click();
+                                                }
+
+                                                // 3. Click fake player overlays or play buttons
+                                                var playOverlay = document.querySelector('.play-button-overlay, #play-button, .fake-player-container, .play-button-circle, button, .play-wrapper, div[class*="play"], svg, [aria-label="Play"]');
+                                                if (playOverlay) playOverlay.click();
+
+                                                // 4. Force video play
+                                                var v = document.querySelector('video');
+                                                if (v && v.paused) {
+                                                    v.muted = false;
+                                                    v.play().catch(function(){});
                                                 }
                                             }
-                                            if (!targetBtn && btns.length > 1) targetBtn = btns[1];
-                                            if (targetBtn) targetBtn.click();
 
-                                            // 2. Click fake player overlays or play buttons
-                                            var playOverlay = document.querySelector('.play-button-overlay, #play-button, .fake-player-container, .play-button-circle');
-                                            if (playOverlay) playOverlay.click();
-
-                                            // 3. Inspect iframes
-                                            var iframes = document.querySelectorAll('iframe');
-                                            for (var i = 0; i < iframes.length; i++) {
-                                                var src = iframes[i].src;
-                                                if (src && !src.includes('turnstile') && !src.includes('google') && !src.includes('trailer')) {
-                                                    console.log('PLAYER_IFRAME:' + src);
-                                                }
-                                            }
+                                            autoClick();
+                                            var attempts = 0;
+                                            var timer = setInterval(function() {
+                                                attempts++;
+                                                if (attempts > 8) clearInterval(timer);
+                                                autoClick();
+                                            }, 500);
                                         } catch(e) {}
                                     })();
                                 """.trimIndent()
                                 view?.evaluateJavascript(clickScript, null)
-
-                                // Check again after 1.2 seconds in case elements rendered dynamically
-                                mainHandler.postDelayed({
-                                    view?.evaluateJavascript(clickScript, null)
-                                }, 1200)
                             }
 
                             override fun shouldInterceptRequest(
