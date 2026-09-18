@@ -798,12 +798,19 @@ class PlayerActivity : AppCompatActivity() {
                                 }
                             } catch(e) {}
 
-                            // 6. Click real play icons
+                            // 6. Click real play icons (including FileMoon human verification and center play icons)
                             try {
-                                var playButtons = document.querySelectorAll('.jw-display-icon-display, .vjs-big-play-button, .play-button-circle, button[aria-label="Play"], .play-btn');
+                                var playButtons = document.querySelectorAll('.jw-display-icon-display, .vjs-big-play-button, .play-button-circle, button[aria-label="Play"], .play-btn, #btn-play, button, div[class*="play"], [onclick*="play"], svg');
                                 playButtons.forEach(function(btn) {
                                     btn.click();
                                 });
+                                var v = document.querySelector('video');
+                                if (!v || v.paused) {
+                                    var centerEl = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
+                                    if (centerEl && centerEl.tagName !== 'BODY' && centerEl.tagName !== 'HTML') {
+                                        centerEl.click();
+                                    }
+                                }
                             } catch(e) {}
 
                             // 7. Auto-resume or restart
@@ -829,8 +836,8 @@ class PlayerActivity : AppCompatActivity() {
                         }
 
                         nukeDecoysAndPlay();
-                        var intv = setInterval(nukeDecoysAndPlay, 600);
-                        setTimeout(function() { clearInterval(intv); }, 6000);
+                        var intv = setInterval(nukeDecoysAndPlay, 500);
+                        setTimeout(function() { clearInterval(intv); }, 10000);
 
                         // 8. Periodic progress updates to Android
                         setInterval(function() {
