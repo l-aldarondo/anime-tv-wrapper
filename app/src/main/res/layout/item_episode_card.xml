@@ -37,15 +37,15 @@
         <!-- Top Left: Watched Circle Indicator -->
         <TextView
             android:id="@+id/txtEpisodeWatchedBadge"
-            android:layout_width="20dp"
-            android:layout_height="20dp"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
             android:layout_gravity="top|start"
             android:layout_margin="10dp"
             android:background="@drawable/bg_watched_circle"
             android:gravity="center"
             android:text="✓"
             android:textColor="#052512"
-            android:textSize="11sp"
+            android:textSize="13sp"
             android:textStyle="bold"
             android:visibility="gone" />
 
@@ -60,7 +60,7 @@
             android:paddingHorizontal="7dp"
             android:paddingVertical="2dp"
             android:textColor="#81C784"
-            android:textSize="10sp"
+            android:textSize="12sp"
             android:textStyle="bold"
             android:letterSpacing="0.04" />
 
@@ -79,7 +79,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:textColor="#FFFFFF"
-                android:textSize="13sp"
+                android:textSize="15sp"
                 android:textStyle="bold"
                 android:maxLines="1"
                 android:ellipsize="end"
@@ -93,7 +93,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:textColor="#C5C8D4"
-                android:textSize="10sp"
+                android:textSize="13sp"
                 android:maxLines="2"
                 android:ellipsize="end"
                 android:lineSpacingExtra="1dp"
@@ -113,7 +113,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textColor="#FFD54F"
-                    android:textSize="10sp"
+                    android:textSize="12sp"
                     android:textStyle="bold"
                     android:visibility="gone" />
 
@@ -126,7 +126,7 @@
                     android:paddingHorizontal="4dp"
                     android:paddingVertical="1dp"
                     android:textColor="#FFD54F"
-                    android:textSize="9sp"
+                    android:textSize="11sp"
                     android:textStyle="bold"
                     android:visibility="gone" />
 
@@ -140,7 +140,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textColor="#8E93A3"
-                    android:textSize="9sp"
+                    android:textSize="11sp"
                     android:visibility="gone" />
 
             </LinearLayout>
