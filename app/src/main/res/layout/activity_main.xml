@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/mainRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
     android:background="@color/primary_canvas">
 
     <!-- Scrollable Main View: large reactive hero on top, all catalog rows scroll continuously
@@ -213,7 +212,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:clipChildren="false"
-                android:paddingTop="10dp"
+                android:paddingTop="270dp"
                 android:paddingBottom="40dp" />
 
         </androidx.core.widget.NestedScrollView>
@@ -229,4 +228,4 @@
 
     </FrameLayout>
 
-</LinearLayout>
+</FrameLayout>

@@ -4,8 +4,35 @@
     android:layout_height="match_parent"
     android:background="@color/primary_canvas">
 
+    <!-- STATIC BACKGROUND IMAGE AND GRADIENTS -->
+    <FrameLayout
+        android:id="@+id/layoutDetailHeroBackground"
+        android:layout_width="match_parent"
+        android:layout_height="620dp"
+        android:background="@color/surface_layer"
+        android:clipChildren="false">
+
+        <ImageView
+            android:id="@+id/imgDetailBackdrop"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:contentDescription="@null" />
+
+        <com.example.animetv.ui.GradientOverlayView
+            android:id="@+id/viewDetailTextGradient"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <com.example.animetv.ui.GradientOverlayView
+            android:id="@+id/viewDetailBottomGradient"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </FrameLayout>
+
     <!-- Main Scrollable Content -->
     <ScrollView
+        android:id="@+id/scrollDetail"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:fillViewport="true"
@@ -18,35 +45,12 @@
             android:orientation="vertical"
             android:paddingBottom="40dp">
 
-            <!-- Nuvio-style hero: full-bleed backdrop with title/actions/synopsis overlaid on
-                 the lower-left, matching a real Nuvio detail-page reference screenshot (verified
-                 against a downloaded example) instead of the old small-poster + sidebar layout. -->
+            <!-- Space for hero text/buttons overlaid on the static background behind ScrollView -->
             <FrameLayout
                 android:id="@+id/layoutDetailHero"
                 android:layout_width="match_parent"
                 android:layout_height="620dp"
-                android:background="@color/surface_layer"
                 android:clipChildren="false">
-
-                <ImageView
-                    android:id="@+id/imgDetailBackdrop"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:scaleType="centerCrop"
-                    android:contentDescription="@null" />
-
-                <!-- Left-to-right gradient keeps the text block on the left legible without
-                     flattening the artwork on the right, and a bottom gradient dissolves the
-                     hero into the canvas color before the episode list beneath it. -->
-                <com.example.animetv.ui.GradientOverlayView
-                    android:id="@+id/viewDetailTextGradient"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent" />
-
-                <com.example.animetv.ui.GradientOverlayView
-                    android:id="@+id/viewDetailBottomGradient"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent" />
 
                 <LinearLayout
                     android:layout_width="match_parent"

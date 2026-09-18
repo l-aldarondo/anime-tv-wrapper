@@ -12,6 +12,7 @@ import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.ScrollView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -137,8 +138,22 @@ class DetailActivity : AppCompatActivity() {
         btnJumpFirst = findViewById(R.id.btnJumpFirst)
         btnSortOrder = findViewById(R.id.btnSortOrder)
         btnJumpLast = findViewById(R.id.btnJumpLast)
+        val scrollDetail: ScrollView = findViewById(R.id.scrollDetail)
         recyclerSeasons = findViewById(R.id.recyclerSeasons)
         recyclerSeasons.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+
+        // When focus moves to the seasons list, scroll down to reveal the episode cards
+        var wasInSeasons = false
+        recyclerSeasons.viewTreeObserver.addOnGlobalFocusChangeListener { oldFocus, newFocus ->
+            val isInSeasons = newFocus != null && recyclerSeasons.indexOfChild(newFocus) != -1
+            if (isInSeasons && !wasInSeasons) {
+                // Focus just entered the season row, scroll down to reveal episodes
+                scrollDetail.post {
+                    scrollDetail.smoothScrollTo(0, recyclerSeasons.bottom)
+                }
+            }
+            wasInSeasons = isInSeasons
+        }
         recyclerEpisodes = findViewById(R.id.recyclerEpisodes)
         progressBar = findViewById(R.id.progressBarDetail)
 
