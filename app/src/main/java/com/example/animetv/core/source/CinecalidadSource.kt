@@ -14,11 +14,11 @@ import java.util.concurrent.TimeUnit
 
 class CinecalidadSource : AnimeSource {
     override val name: String = "Cinecalidad (Backup Latino)"
-    override var baseUrl: String = "https://www.cinecalidad.ro"
+    override var baseUrl: String = "https://v2.cinecalidad.vip"
     override val mirrors: List<String> = listOf(
-        "https://www.cinecalidad.ro",
-        "https://cinecalidad.ro",
-        "https://v2.cinecalidad.vip"
+        "https://v2.cinecalidad.vip",
+        "https://cinecalidad.vip",
+        "https://www.cinecalidad.ro"
     )
 
     private val client = OkHttpClient.Builder()
@@ -46,18 +46,19 @@ class CinecalidadSource : AnimeSource {
         val list = mutableListOf<AnimeCard>()
         val html = fetchHtml(baseUrl)
         if (html.isEmpty()) return@withContext list
-        
+
         val doc = Jsoup.parse(html, baseUrl)
-        val items = doc.select(".home_post_cont, .post_box, .contenedor-list, .home-post, .item")
+        val items = doc.select("article, .home_post_cont, .post_box, .contenedor-list, .home-post, .item")
         for (item in items) {
-            val a = item.selectFirst("a") ?: continue
+            val a = item.selectFirst("a[href*='/pelicula/'], a[href*='/series/']") ?: item.selectFirst("a") ?: continue
             val href = a.absUrl("href")
+            if (href.isEmpty() || href.endsWith("/peliculas/") || href.endsWith("/series/")) continue
+
             val img = item.selectFirst("img")
             val posterUrl = img?.attr("data-src")?.ifEmpty { img.attr("src") } ?: ""
-            val title = img?.attr("alt")?.trim()?.ifEmpty {
-                item.selectFirst(".titulo, .in_title")?.text()?.trim()
-            } ?: a.text().trim()
-            
+            val title = item.selectFirst(".entry-title, h2, h3, .titulo, .in_title")?.text()?.trim()
+                ?.ifEmpty { img?.attr("alt")?.trim() } ?: a.text().trim()
+
             if (title.isNotEmpty() && href.isNotEmpty()) {
                 list.add(AnimeCard(
                     id = href,
@@ -80,18 +81,19 @@ class CinecalidadSource : AnimeSource {
         val searchUrl = "$baseUrl/?s=$encoded"
         val html = fetchHtml(searchUrl)
         if (html.isEmpty()) return@withContext list
-        
+
         val doc = Jsoup.parse(html, baseUrl)
-        val items = doc.select(".home_post_cont, .post_box, .contenedor-list, .home-post, .item")
+        val items = doc.select("article, .home_post_cont, .post_box, .contenedor-list, .home-post, .item")
         for (item in items) {
-            val a = item.selectFirst("a") ?: continue
+            val a = item.selectFirst("a[href*='/pelicula/'], a[href*='/series/']") ?: item.selectFirst("a") ?: continue
             val href = a.absUrl("href")
+            if (href.isEmpty() || href.endsWith("/peliculas/") || href.endsWith("/series/")) continue
+
             val img = item.selectFirst("img")
             val posterUrl = img?.attr("data-src")?.ifEmpty { img.attr("src") } ?: ""
-            val title = img?.attr("alt")?.trim()?.ifEmpty {
-                item.selectFirst(".titulo, .in_title")?.text()?.trim()
-            } ?: a.text().trim()
-            
+            val title = item.selectFirst(".entry-title, h2, h3, .titulo, .in_title")?.text()?.trim()
+                ?.ifEmpty { img?.attr("alt")?.trim() } ?: a.text().trim()
+
             if (title.isNotEmpty() && href.isNotEmpty()) {
                 list.add(AnimeCard(
                     id = href,
@@ -129,16 +131,40 @@ class CinecalidadSource : AnimeSource {
     override suspend fun resolveStream(episodeUrl: String): StreamResult? = withContext(Dispatchers.IO) {
         val html = fetchHtml(episodeUrl)
         if (html.isEmpty()) return@withContext null
-        
-        // Cinecalidad uses multiple servers (Vidoza, Upstream, etc.)
-        // We look for iframes or script patterns
+
+        // 1. Cinecalidad v2 uses play.cinecalidad.vip/?link=ENCODED_URL
+        val playRegex = Regex("""(?:src=["']|https?://)play\.cinecalidad\.vip/\?link=([^"'\s&]+)""")
+        val playMatch = playRegex.find(html)
+        if (playMatch != null) {
+            val encodedLink = playMatch.groupValues[1]
+            val decoded = try {
+                java.net.URLDecoder.decode(encodedLink, "UTF-8")
+            } catch (e: Exception) { encodedLink }
+            if (decoded.startsWith("http")) {
+                return@withContext StreamResult(
+                    videoUrl = decoded,
+                    isHls = decoded.contains(".m3u8"),
+                    isEmbed = true,
+                    serverName = "Cinecalidad (VIP)",
+                    headers = mapOf("Referer" to baseUrl)
+                )
+            }
+        }
+
+        // 2. Direct iframes (Filemoon, Vidoza, Upstream, etc.)
         val iframes = Regex("""<iframe[^>]*src=["']([^"']+)["']""").findAll(html)
         for (ifr in iframes) {
-            val url = ifr.groupValues[1]
-            if (url.contains("vidoza") || url.contains("upstream") || url.contains("filemoon")) {
+            val rawUrl = ifr.groupValues[1]
+            val url = if (rawUrl.contains("play.cinecalidad.vip/?link=")) {
+                val enc = rawUrl.substringAfter("link=").substringBefore("&")
+                try { java.net.URLDecoder.decode(enc, "UTF-8") } catch (e: Exception) { rawUrl }
+            } else rawUrl
+
+            if (url.contains("filemoon") || url.contains("vidoza") || url.contains("upstream") ||
+                url.contains("streamtape") || url.contains("dood") || url.contains("waaw")) {
                 return@withContext StreamResult(
                     videoUrl = url,
-                    isHls = false,
+                    isHls = url.contains(".m3u8"),
                     isEmbed = true,
                     serverName = "Cinecalidad Embed",
                     headers = mapOf("Referer" to baseUrl)

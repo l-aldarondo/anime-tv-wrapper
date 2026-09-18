@@ -62,8 +62,48 @@ object TorrentSearchRepository {
 
         jobs.forEach { runCatching { rawResults.addAll(it.await()) } }
 
+        val maxFileSizeGb = TorrentSettingsStore.getMaxFileSizeGb(context)
+        val disallow4k = TorrentSettingsStore.isDisallow4k(context)
+        val qualityFilter = TorrentSettingsStore.getQualityFilter(context)
+        val languageFilter = TorrentSettingsStore.getLanguageFilter(context)
+
         rawResults.distinctBy { extractInfoHash(it.magnetUrl).ifEmpty { it.title } }
             .filter { isTitleRelevant(it.title, query, originalQuery, seasonNumber, episodeNumber, isMovie) }
+            .filter { item ->
+                // 1. Max File Size filter (e.g. <= 1.5 GB, <= 3 GB)
+                if (maxFileSizeGb > 0.05f) {
+                    val maxBytes = (maxFileSizeGb * 1024L * 1024L * 1024L).toLong()
+                    val itemBytes = if (item.sizeBytes > 0L) item.sizeBytes else parseSizeToBytes(item.sizeFormatted)
+                    if (itemBytes > 0L && itemBytes > maxBytes) {
+                        return@filter false
+                    }
+                }
+
+                // 2. Disallow 4K filter
+                if (disallow4k) {
+                    if (item.resolutionBadge.equals("4K", ignoreCase = true) ||
+                        item.title.contains("4k", ignoreCase = true) ||
+                        item.title.contains("2160p", ignoreCase = true)) {
+                        return@filter false
+                    }
+                }
+
+                // 3. Quality filter ("720p", "1080p", "all")
+                if (qualityFilter == "720p") {
+                    if (item.resolutionBadge.contains("1080p", ignoreCase = true) ||
+                        item.resolutionBadge.contains("4k", ignoreCase = true)) {
+                        return@filter false
+                    }
+                }
+
+                // 4. Language filter ("all", "spanish_only", "dual_audio", "sub_only")
+                when (languageFilter) {
+                    "spanish_only" -> item.languagePriority == 1 || item.languagePriority == 2
+                    "dual_audio" -> item.languagePriority == 3
+                    "sub_only" -> item.languagePriority == 4
+                    else -> true
+                }
+            }
             .sortedWith(compareBy({ it.languagePriority }, { -it.seeders }))
     }
 
@@ -178,12 +218,16 @@ object TorrentSearchRepository {
                     else if (pageTitle.contains("720p", ignoreCase = true) || html.contains("720p", ignoreCase = true)) "720p"
                     else "HDRip"
 
+                    val sizeMatch = Regex("""(?i)(?:tamaño|peso)[^0-9]*([\d\.]+\s*(?:gb|mb))""").find(html)
+                    val sizeFormatted = sizeMatch?.groupValues?.get(1)?.trim() ?: "Elite"
+                    val sizeBytes = parseSizeToBytes(sizeFormatted)
+
                     TorrentStreamItem(
                         title = pageTitle,
                         magnetUrl = resolvedMagnet,
                         seeders = 40,
-                        sizeBytes = 0,
-                        sizeFormatted = "Elite",
+                        sizeBytes = sizeBytes,
+                        sizeFormatted = sizeFormatted,
                         resolutionBadge = res,
                         languageBadge = lang,
                         languagePriority = priority,
@@ -459,7 +503,7 @@ object TorrentSearchRepository {
                                 title = "$name: $titleLine",
                                 magnetUrl = magnetUrl,
                                 seeders = seeders,
-                                sizeBytes = 0L,
+                                sizeBytes = parseSizeToBytes(sizeFormatted),
                                 sizeFormatted = sizeFormatted,
                                 resolutionBadge = res,
                                 languageBadge = langBadge,
@@ -648,6 +692,18 @@ object TorrentSearchRepository {
         } else {
             val mb = bytes / (1024.0 * 1024.0)
             String.format(Locale.US, "%.0f MB", mb)
+        }
+    }
+
+    fun parseSizeToBytes(sizeStr: String): Long {
+        if (sizeStr.isBlank()) return 0L
+        val clean = sizeStr.trim().uppercase(Locale.US)
+        val num = Regex("""([\d\.]+)""").find(clean)?.groupValues?.get(1)?.toDoubleOrNull() ?: return 0L
+        return when {
+            clean.contains("GB") -> (num * 1024L * 1024L * 1024L).toLong()
+            clean.contains("MB") -> (num * 1024L * 1024L).toLong()
+            clean.contains("KB") -> (num * 1024L).toLong()
+            else -> 0L
         }
     }
 }
