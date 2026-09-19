@@ -41,6 +41,7 @@ import com.example.animetv.ui.DetailActivity
 import com.example.animetv.ui.adapter.AnimeCardAdapter
 import com.example.animetv.ui.adapter.ContinueWatchingCardAdapter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
@@ -90,6 +91,18 @@ class MainActivity : AppCompatActivity() {
     // this, replacing the old auto-rotating "featured suggestions" hero.
     private var currentFocusedCard: AnimeCard? = null
     private var heroMetaJob: kotlinx.coroutines.Job? = null
+    private var heroDebounceJob: kotlinx.coroutines.Job? = null
+
+    private fun onCardFocused(card: AnimeCard) {
+        currentFocusedCard = card
+        heroDebounceJob?.cancel()
+        heroDebounceJob = lifecycleScope.launch {
+            kotlinx.coroutines.delay(150)
+            if (isActive && currentFocusedCard?.detailUrl == card.detailUrl) {
+                updateInfoPanel(card)
+            }
+        }
+    }
 
     // True once the hero/initial D-pad focus has been seeded from the first loaded row, so a
     // later background refresh (silent revalidation, pull-to-refresh) never yanks focus or the
@@ -183,6 +196,7 @@ class MainActivity : AppCompatActivity() {
     /** Inflates one row (title + horizontal card list) for [row], wiring focus back to the hero. */
     private fun buildRowView(row: CatalogRow): View {
         val rowView = layoutInflater.inflate(R.layout.item_home_row, layoutCatalogRows, false)
+        rowView.tag = row.title
         val txtTitle = rowView.findViewById<TextView>(R.id.txtRowTitle)
         val recycler = rowView.findViewById<RecyclerView>(R.id.recyclerRowCards)
         txtTitle.text = row.title
@@ -194,7 +208,7 @@ class MainActivity : AppCompatActivity() {
             { card -> toggleCardFavorite(card) }
         }
         val onCardFocus: (AnimeCard) -> Unit = { card ->
-            updateInfoPanel(card)
+            onCardFocused(card)
             rowView.post {
                 val rowTop = rowView.top
                 val rowBottom = rowView.bottom
@@ -760,10 +774,31 @@ class MainActivity : AppCompatActivity() {
             allRows.add(CatalogRow(title = "Series Populares", cards = data.latinoTrending.reversed()))
         }
 
-        layoutCatalogRows.removeAllViews()
-        for (row in allRows) {
-            if (row.cards.isEmpty()) continue
-            layoutCatalogRows.addView(buildRowView(row))
+        if (layoutCatalogRows.childCount == 0) {
+            for (row in allRows) {
+                if (row.cards.isEmpty()) continue
+                layoutCatalogRows.addView(buildRowView(row))
+            }
+        } else {
+            // In-place row updates: preserve view hierarchy so D-pad focus is never lost
+            val continueRow = allRows.firstOrNull { it.type == CatalogRowType.CONTINUE_WATCHING }
+            val existingContinueView = layoutCatalogRows.findViewWithTag<View>("Continuar Viendo")
+            if (continueRow != null && existingContinueView == null) {
+                layoutCatalogRows.addView(buildRowView(continueRow), 0)
+            } else if (continueRow == null && existingContinueView != null) {
+                layoutCatalogRows.removeView(existingContinueView)
+            }
+
+            for (row in allRows) {
+                val existingView = layoutCatalogRows.findViewWithTag<View>(row.title)
+                if (existingView != null) {
+                    val recycler = existingView.findViewById<RecyclerView>(R.id.recyclerRowCards)
+                    when (val adapter = recycler.adapter) {
+                        is AnimeCardAdapter -> adapter.submitList(row.cards)
+                        is ContinueWatchingCardAdapter -> adapter.submitList(row.cards)
+                    }
+                }
+            }
         }
 
         // Seed the hero + initial D-pad focus from the very first card once, on first load only —
@@ -776,6 +811,42 @@ class MainActivity : AppCompatActivity() {
                 updateInfoPanel(firstCard)
                 focusFirstCard()
             }
+        }
+    }
+
+    private fun updateFavoritesRowOnly() {
+        val storedFavorites = FavoritesStore.getFavorites(this)
+        val favCards = if (storedFavorites.isNotEmpty()) {
+            storedFavorites.map { fav ->
+                AnimeCard(
+                    id = fav.url,
+                    title = fav.title,
+                    posterUrl = fav.poster,
+                    detailUrl = fav.url,
+                    source = if (fav.source.isNotEmpty()) fav.source else "Mi Lista",
+                    episodeBadge = "Guardado"
+                )
+            }
+        } else {
+            listOf(
+                AnimeCard(
+                    id = "empty_favorites_guide",
+                    title = "Tu lista está vacía",
+                    posterUrl = "",
+                    detailUrl = "",
+                    source = "Mi Lista",
+                    episodeBadge = "+ Añadir",
+                    synopsis = "Añade tus series o películas favoritas manteniendo presionado el botón central del control remoto en cualquier póster, o con el botón '+' en la pantalla de Detalles."
+                )
+            )
+        }
+
+        val favRowView = layoutCatalogRows.findViewWithTag<View>("Mi Lista")
+        if (favRowView != null) {
+            val recycler = favRowView.findViewById<RecyclerView>(R.id.recyclerRowCards)
+            (recycler.adapter as? AnimeCardAdapter)?.submitList(favCards)
+        } else {
+            refreshRowsWithFavorites()
         }
     }
 
@@ -794,7 +865,7 @@ class MainActivity : AppCompatActivity() {
             FavoritesStore.add(this, fav)
             Toast.makeText(this, "Añadido a Mi Lista", Toast.LENGTH_SHORT).show()
         }
-        refreshRowsWithFavorites()
+        updateFavoritesRowOnly()
     }
 
     private fun showSearchDialog() {

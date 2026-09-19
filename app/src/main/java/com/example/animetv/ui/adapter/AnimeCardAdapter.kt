@@ -41,86 +41,92 @@ class AnimeCardAdapter(
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        // Guard: position may be stale if list was updated during fast scroll
-        val item = items.getOrNull(position) ?: return
+        try {
+            val item = items.getOrNull(position) ?: return
 
-        holder.title?.text = item.title
-        holder.source.text = formatSourceTag(item.source)
+            holder.title?.text = item.title
+            holder.source.text = formatSourceTag(item.source)
 
-        // Badge logic
-        val badgeText = item.episodeBadge.ifEmpty { item.rating }
-        if (badgeText.isNotEmpty()) {
-            holder.badge.visibility = View.VISIBLE
-            holder.badge.text = badgeText
-        } else {
-            holder.badge.visibility = View.GONE
-        }
-
-        // Load initial scraped poster
-        val validPoster = if (CoverUtils.isValidCover(item.posterUrl)) item.posterUrl.trim() else ""
-        Glide.with(holder.itemView)
-            .load(validPoster.ifEmpty { R.drawable.bg_card_poster_placeholder })
-            .centerCrop()
-            .diskCacheStrategy(DiskCacheStrategy.ALL)
-            .placeholder(R.drawable.bg_card_poster_placeholder)
-            .error(R.drawable.bg_card_poster_placeholder)
-            .into(holder.poster)
-
-        // Asynchronously fetch HQ metadata from TMDB
-        holder.tmdbJob?.cancel()
-        holder.tmdbJob = adapterScope.launch {
-            val isMovie = item.detailUrl.contains("/pelicula/") || item.episodeBadge.equals("Película", ignoreCase = true)
-            val isLiveAction = item.source.contains("SoloLatino", ignoreCase = true) && !item.detailUrl.contains("/animes")
-
-            val meta = withContext(Dispatchers.IO) {
-                try {
-                    com.example.animetv.core.tmdb.TmdbMetadataRepository.searchMetadata(
-                        holder.itemView.context, item.title, isMovie, isLiveAction
-                    )
-                } catch (_: Exception) { null }
+            // Badge logic
+            val badgeText = item.episodeBadge.ifEmpty { item.rating }
+            if (badgeText.isNotEmpty()) {
+                holder.badge.visibility = View.VISIBLE
+                holder.badge.text = badgeText
+            } else {
+                holder.badge.visibility = View.GONE
             }
 
-            if (isActive && meta != null && meta.posterUrl.isNotEmpty()) {
-                Glide.with(holder.itemView)
-                    .load(meta.posterUrl)
-                    .centerCrop()
-                    .diskCacheStrategy(DiskCacheStrategy.ALL)
-                    .placeholder(holder.poster.drawable)
-                    .into(holder.poster)
-            }
-        }
+            // Load initial scraped poster
+            val validPoster = if (CoverUtils.isValidCover(item.posterUrl)) item.posterUrl.trim() else ""
+            Glide.with(holder.itemView)
+                .load(validPoster.ifEmpty { R.drawable.bg_card_poster_placeholder })
+                .centerCrop()
+                .diskCacheStrategy(DiskCacheStrategy.ALL)
+                .placeholder(R.drawable.bg_card_poster_placeholder)
+                .error(R.drawable.bg_card_poster_placeholder)
+                .into(holder.poster)
 
-        // TV Focus Animation — scale up + elevate on focus
-        val focusInterpolator = AnimationUtils.loadInterpolator(holder.itemView.context, R.interpolator.premium_focus)
-        holder.itemView.apply {
-            setOnFocusChangeListener { view, hasFocus ->
-                if (hasFocus) {
-                    view.animate().scaleX(1.1f).scaleY(1.1f).translationZ(16f)
-                        .setInterpolator(focusInterpolator).setDuration(275).start()
-                    onCardFocus?.invoke(item)
-                } else {
-                    view.animate().scaleX(1.0f).scaleY(1.0f).translationZ(0f)
-                        .setInterpolator(focusInterpolator).setDuration(275).start()
+            // Asynchronously fetch HQ metadata from TMDB with debounce to avoid network floods during fast D-pad scroll
+            holder.tmdbJob?.cancel()
+            holder.tmdbJob = adapterScope.launch {
+                delay(200) // Debounce: only load if card remains on screen for 200ms
+                if (!isActive) return@launch
+                val isMovie = item.detailUrl.contains("/pelicula/") || item.episodeBadge.equals("Película", ignoreCase = true)
+                val isLiveAction = item.source.contains("SoloLatino", ignoreCase = true) && !item.detailUrl.contains("/animes")
+
+                val meta = withContext(Dispatchers.IO) {
+                    try {
+                        com.example.animetv.core.tmdb.TmdbMetadataRepository.searchMetadata(
+                            holder.itemView.context, item.title, isMovie, isLiveAction
+                        )
+                    } catch (_: Exception) { null }
+                }
+
+                if (isActive && meta != null && meta.posterUrl.isNotEmpty()) {
+                    Glide.with(holder.itemView)
+                        .load(meta.posterUrl)
+                        .centerCrop()
+                        .diskCacheStrategy(DiskCacheStrategy.ALL)
+                        .placeholder(holder.poster.drawable)
+                        .into(holder.poster)
                 }
             }
-            setOnKeyListener { _, keyCode, event ->
-                if (event.action == android.view.KeyEvent.ACTION_DOWN) {
-                    val pos = holder.bindingAdapterPosition
-                    if (pos == RecyclerView.NO_ID.toInt()) return@setOnKeyListener false
-                    if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT && pos >= items.size - 1) {
-                        return@setOnKeyListener true // Clamp at end of row
-                    }
-                    if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT && pos <= 0) {
-                        return@setOnKeyListener true // Clamp at start of row
+
+            // TV Focus Animation — scale up + elevate on focus
+            val focusInterpolator = AnimationUtils.loadInterpolator(holder.itemView.context, R.interpolator.premium_focus)
+            holder.itemView.apply {
+                setOnFocusChangeListener { view, hasFocus ->
+                    view.animate().cancel()
+                    if (hasFocus) {
+                        view.animate().scaleX(1.08f).scaleY(1.08f).translationZ(12f)
+                            .setInterpolator(focusInterpolator).setDuration(150).start()
+                        onCardFocus?.invoke(item)
+                    } else {
+                        view.animate().scaleX(1.0f).scaleY(1.0f).translationZ(0f)
+                            .setInterpolator(focusInterpolator).setDuration(150).start()
                     }
                 }
-                false
+                setOnKeyListener { _, keyCode, event ->
+                    if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+                        val pos = holder.bindingAdapterPosition
+                        if (pos == RecyclerView.NO_POSITION) return@setOnKeyListener false
+                        if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT && pos >= items.size - 1) {
+                            return@setOnKeyListener true // Clamp at end of row
+                        }
+                        if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT && pos <= 0) {
+                            return@setOnKeyListener true // Clamp at start of row
+                        }
+                    }
+                    false
+                }
+                setOnClickListener { onCardClick(item) }
+                setOnLongClickListener {
+                    onCardLongClick?.invoke(item)
+                    true
+                }
             }
-            setOnClickListener { onCardClick(item) }
-            setOnLongClickListener {
-                onCardLongClick?.invoke(item)
-                true
-            }
+        } catch (e: Exception) {
+            android.util.Log.e("AnimeCardAdapter", "Error binding card: ${e.message}", e)
         }
     }
 
@@ -128,6 +134,10 @@ class AnimeCardAdapter(
 
     override fun onViewRecycled(holder: ViewHolder) {
         super.onViewRecycled(holder)
+        holder.itemView.animate().cancel()
+        holder.itemView.scaleX = 1.0f
+        holder.itemView.scaleY = 1.0f
+        holder.itemView.translationZ = 0f
         holder.tmdbJob?.cancel()
         holder.tmdbJob = null
         Glide.with(holder.itemView).clear(holder.poster)

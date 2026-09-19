@@ -71,19 +71,21 @@ class ContinueWatchingCardAdapter(
 
         val focusInterpolator = AnimationUtils.loadInterpolator(holder.itemView.context, R.interpolator.premium_focus)
         holder.itemView.setOnFocusChangeListener { view, hasFocus ->
+            view.animate().cancel()
             if (hasFocus) {
-                view.animate().scaleX(1.1f).scaleY(1.1f).translationZ(16f)
-                    .setInterpolator(focusInterpolator).setDuration(275).start()
+                view.animate().scaleX(1.08f).scaleY(1.08f).translationZ(12f)
+                    .setInterpolator(focusInterpolator).setDuration(150).start()
                 onCardFocus?.invoke(item)
             } else {
                 view.animate().scaleX(1.0f).scaleY(1.0f).translationZ(0f)
-                    .setInterpolator(focusInterpolator).setDuration(275).start()
+                    .setInterpolator(focusInterpolator).setDuration(150).start()
             }
         }
 
         holder.itemView.setOnKeyListener { _, keyCode, event ->
             if (event.action == android.view.KeyEvent.ACTION_DOWN) {
                 val pos = holder.bindingAdapterPosition
+                if (pos == RecyclerView.NO_POSITION) return@setOnKeyListener false
                 if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT && pos >= items.size - 1) {
                     return@setOnKeyListener true // Clamp at end of row
                 }
@@ -105,4 +107,28 @@ class ContinueWatchingCardAdapter(
     }
 
     override fun getItemCount(): Int = items.size
+
+    fun submitList(newItems: List<AnimeCard>) {
+        val oldItems = items.toList()
+        val diff = androidx.recyclerview.widget.DiffUtil.calculateDiff(object : androidx.recyclerview.widget.DiffUtil.Callback() {
+            override fun getOldListSize() = oldItems.size
+            override fun getNewListSize() = newItems.size
+            override fun areItemsTheSame(oldPos: Int, newPos: Int) =
+                oldItems[oldPos].detailUrl == newItems[newPos].detailUrl
+            override fun areContentsTheSame(oldPos: Int, newPos: Int) =
+                oldItems[oldPos] == newItems[newPos]
+        })
+        items.clear()
+        items.addAll(newItems)
+        diff.dispatchUpdatesTo(this)
+    }
+
+    override fun onViewRecycled(holder: ViewHolder) {
+        super.onViewRecycled(holder)
+        holder.itemView.animate().cancel()
+        holder.itemView.scaleX = 1.0f
+        holder.itemView.scaleY = 1.0f
+        holder.itemView.translationZ = 0f
+        Glide.with(holder.itemView).clear(holder.still)
+    }
 }
