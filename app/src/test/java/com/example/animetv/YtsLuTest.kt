@@ -58,4 +58,23 @@ class YtsLuTest {
         val server = stream?.serverName ?: ""
         assertFalse("Server title or torrent must NOT match Fionna and Cake", server.contains("Fionna", ignoreCase = true))
     }
+
+    @Test
+    fun testSearchTorrentsYts() = runBlocking {
+        // Test with Spanish query and English query fallback
+        val results = com.example.animetv.core.torrent.TorrentSearchRepository.searchTorrentsDirectForTest(
+            query = "Hora de Aventura",
+            originalQuery = "",
+            englishQuery = "Adventure Time",
+            seasonNumber = 1,
+            episodeNumber = 1,
+            isMovie = false,
+            year = "2010"
+        )
+        println("=== TORRENT SEARCH 'Hora de Aventura' -> 'Adventure Time': ${results.size} items ===")
+        results.take(10).forEach {
+            println("Torrent: [${it.provider}] ${it.title} | ${it.resolutionBadge} | ${it.languageBadge} | seeds=${it.seeders}")
+        }
+        assertTrue("Should return YTS torrents when englishQuery is provided", results.isNotEmpty())
+    }
 }

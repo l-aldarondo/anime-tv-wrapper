@@ -56,7 +56,7 @@ object TorrentSearchRepository {
         val jobs = listOf(
             async { if (jackettUrl.isNotEmpty()) fetchFromIndexer(jackettUrl, jackettKey, query, seasonNumber, episodeNumber, isMovie) else emptyList() },
             async { if (resolvedImdbId.isNotEmpty()) fetchFromTorrentio(resolvedImdbId, seasonNumber, episodeNumber, isMovie) else emptyList() },
-            async { fetchFromYtsLu(query, originalQuery, seasonNumber, episodeNumber, isMovie, year) },
+            async { fetchFromYtsLu(query, originalQuery, englishQuery, seasonNumber, episodeNumber, isMovie, year) },
             async { fetchFromEliteTorrent(query, originalQuery, seasonNumber, episodeNumber, isMovie) },
             async { fetchFromNyaa(query, englishQuery, episodeNumber, isMovie, isLiveAction) },
             async { fetchFromAnimeTosho(originalQuery.ifEmpty { query }, episodeNumber, isLiveAction) }
@@ -70,7 +70,7 @@ object TorrentSearchRepository {
         val languageFilter = TorrentSettingsStore.getLanguageFilter(context)
 
         rawResults.distinctBy { extractInfoHash(it.magnetUrl).ifEmpty { it.title } }
-            .filter { isTitleRelevant(it.title, query, originalQuery, seasonNumber, episodeNumber, isMovie) }
+            .filter { isTitleRelevant(it.title, query, originalQuery, englishQuery, seasonNumber, episodeNumber, isMovie) }
             .filter { item ->
                 // 1. Max File Size filter (e.g. <= 1.5 GB, <= 3 GB)
                 if (maxFileSizeGb > 0.05f) {
@@ -109,9 +109,23 @@ object TorrentSearchRepository {
             .sortedWith(compareBy({ it.languagePriority }, { -it.seeders }))
     }
 
+    suspend fun searchTorrentsDirectForTest(
+        query: String,
+        originalQuery: String = "",
+        englishQuery: String = "",
+        seasonNumber: Int = 1,
+        episodeNumber: Int = 1,
+        isMovie: Boolean = false,
+        year: String = ""
+    ): List<TorrentStreamItem> = withContext(Dispatchers.IO) {
+        val ytsResults = fetchFromYtsLu(query, originalQuery, englishQuery, seasonNumber, episodeNumber, isMovie, year)
+        ytsResults.filter { isTitleRelevant(it.title, query, originalQuery, englishQuery, seasonNumber, episodeNumber, isMovie) }
+    }
+
     private suspend fun fetchFromYtsLu(
         query: String,
         originalQuery: String,
+        englishQuery: String = "",
         seasonNumber: Int,
         episodeNumber: Int,
         isMovie: Boolean,
@@ -119,6 +133,7 @@ object TorrentSearchRepository {
     ): List<TorrentStreamItem> = withContext(Dispatchers.IO) {
         val list = mutableListOf<TorrentStreamItem>()
         val candidates = listOfNotNull(
+            englishQuery.takeIf { it.isNotBlank() },
             originalQuery.takeIf { it.isNotBlank() },
             query.takeIf { it.isNotBlank() }
         ).distinct()
@@ -130,76 +145,78 @@ object TorrentSearchRepository {
             val cleanTitle = candidate.replace(Regex("""\b(19\d\d|20\d\d)\b"""), "").trim()
             if (cleanTitle.isEmpty()) continue
 
-            val apiUrl = if (isMovie) {
-                "https://en.yts.lu/?api=torrents&mode=movie&name=${URLEncoder.encode(cleanTitle, "UTF-8")}&year=$yr&quality=all"
-            } else {
-                val s = if (seasonNumber > 0) seasonNumber else 1
-                val e = if (episodeNumber > 0) episodeNumber else 1
-                "https://en.yts.lu/?api=torrents&mode=tv&name=${URLEncoder.encode(cleanTitle, "UTF-8")}&year=$yr&season=$s&episode=$e&quality=all"
-            }
-
-            try {
-                val request = Request.Builder()
-                    .url(apiUrl)
-                    .header("User-Agent", userAgent)
-                    .header("Referer", "https://en.yts.lu/")
-                    .build()
-                val response = client.newCall(request).execute()
-                if (!response.isSuccessful) continue
-                val body = response.body?.string() ?: continue
-                val json = JSONObject(body)
-                val hits = json.optJSONArray("hits") ?: continue
-
-                for (i in 0 until hits.length()) {
-                    val hit = hits.getJSONObject(i)
-                    val rawMagnet = hit.optString("magnetUrl", "").trim()
-                    val magnet = rawMagnet.replace("&amp;", "&")
-                    if (!magnet.startsWith("magnet:?")) continue
-
-                    val itemTitle = hit.optString("title", "").trim()
-                    val seeds = hit.optInt("seeds", 0)
-                    val bytes = hit.optLong("bytes", 0L)
-                    val source = hit.optString("source", "YTS").trim()
-
-                    val res = when {
-                        itemTitle.contains("2160p", true) || itemTitle.contains("4k", true) -> "4K"
-                        itemTitle.contains("1080p", true) -> "1080p"
-                        itemTitle.contains("720p", true) -> "720p"
-                        itemTitle.contains("480p", true) -> "480p"
-                        else -> "HD"
-                    }
-
-                    val sizeFormatted = if (bytes > 0L) {
-                        val gb = bytes.toDouble() / (1024 * 1024 * 1024)
-                        if (gb >= 1.0) String.format(Locale.US, "%.1f GB", gb)
-                        else String.format(Locale.US, "%.0f MB", bytes.toDouble() / (1024 * 1024))
-                    } else "Torrent"
-
-                    val isDual = itemTitle.contains("dual", true) || itemTitle.contains("latino", true) ||
-                            itemTitle.contains("castellano", true) || itemTitle.contains("spanish", true)
-                    val langBadge = if (isDual) "🌐 Multi/Latino" else "🇬🇧 English"
-                    val langPriority = if (isDual) 2 else 3
-
-                    list.add(
-                        TorrentStreamItem(
-                            title = itemTitle,
-                            magnetUrl = magnet,
-                            seeders = seeds,
-                            sizeBytes = bytes,
-                            sizeFormatted = sizeFormatted,
-                            resolutionBadge = res,
-                            languageBadge = langBadge,
-                            languagePriority = langPriority,
-                            provider = "YTS ($source)"
-                        )
-                    )
+            val yearsToTry = if (yr.isNotBlank()) listOf(yr, "") else listOf("")
+            for (currYear in yearsToTry) {
+                val apiUrl = if (isMovie) {
+                    "https://en.yts.lu/?api=torrents&mode=movie&name=${URLEncoder.encode(cleanTitle, "UTF-8")}&year=$currYear&quality=all"
+                } else {
+                    val s = if (seasonNumber > 0) seasonNumber else 1
+                    val e = if (episodeNumber > 0) episodeNumber else 1
+                    "https://en.yts.lu/?api=torrents&mode=tv&name=${URLEncoder.encode(cleanTitle, "UTF-8")}&year=$currYear&season=$s&episode=$e&quality=all"
                 }
-                if (list.isNotEmpty()) break
-            } catch (e: Exception) {
-                android.util.Log.e("YtsLu", "Error querying YtsLu API: $apiUrl", e)
+
+                try {
+                    val request = Request.Builder()
+                        .url(apiUrl)
+                        .header("User-Agent", userAgent)
+                        .header("Referer", "https://en.yts.lu/")
+                        .build()
+                    val response = client.newCall(request).execute()
+                    if (!response.isSuccessful) continue
+                    val body = response.body?.string() ?: continue
+                    val json = JSONObject(body)
+                    val hits = json.optJSONArray("hits") ?: continue
+
+                    for (i in 0 until hits.length()) {
+                        val hit = hits.getJSONObject(i)
+                        val rawMagnet = hit.optString("magnetUrl", "").trim()
+                        val magnet = rawMagnet.replace("&amp;", "&")
+                        if (!magnet.startsWith("magnet:?")) continue
+
+                        val itemTitle = hit.optString("title", "").trim()
+                        val seeds = hit.optInt("seeds", 0)
+                        val bytes = hit.optLong("bytes", 0L)
+                        val source = hit.optString("source", "YTS").trim()
+
+                        val res = when {
+                            itemTitle.contains("2160p", true) || itemTitle.contains("4k", true) -> "4K"
+                            itemTitle.contains("1080p", true) -> "1080p"
+                            itemTitle.contains("720p", true) -> "720p"
+                            itemTitle.contains("480p", true) -> "480p"
+                            else -> "HD"
+                        }
+
+                        val sizeFormatted = if (bytes > 0L) {
+                            val gb = bytes.toDouble() / (1024 * 1024 * 1024)
+                            if (gb >= 1.0) String.format(Locale.US, "%.1f GB", gb)
+                            else String.format(Locale.US, "%.0f MB", bytes.toDouble() / (1024 * 1024))
+                        } else "Torrent"
+
+                        val (langBadge, langPriority) = detectLanguage(itemTitle.lowercase(Locale.ROOT))
+                        val providerLabel = if (source.equals("YTS", ignoreCase = true) || source.isEmpty()) "YTS" else "YTS ($source)"
+
+                        list.add(
+                            TorrentStreamItem(
+                                title = itemTitle,
+                                magnetUrl = magnet,
+                                seeders = seeds,
+                                sizeBytes = bytes,
+                                sizeFormatted = sizeFormatted,
+                                resolutionBadge = res,
+                                languageBadge = langBadge,
+                                languagePriority = langPriority,
+                                provider = providerLabel
+                            )
+                        )
+                    }
+                    if (list.size >= 10) break
+                } catch (e: Exception) {
+                    android.util.Log.e("YtsLu", "Error querying YtsLu API: $apiUrl", e)
+                }
             }
+            if (list.size >= 15) break
         }
-        list
+        list.distinctBy { extractInfoHash(it.magnetUrl).ifEmpty { it.title } }
     }
 
     private suspend fun fetchFromEliteTorrent(
@@ -373,6 +390,7 @@ object TorrentSearchRepository {
         torrentTitle: String,
         query: String,
         originalQuery: String,
+        englishQuery: String = "",
         seasonNumber: Int,
         episodeNumber: Int,
         isMovie: Boolean
@@ -387,17 +405,28 @@ object TorrentSearchRepository {
         if (!isMovie && seasonNumber > 0 && episodeNumber > 0) {
             val s = seasonNumber
             val e = episodeNumber
-            val otherEpMatch = Regex("""(?i)\b(?:${s}x0*(\d+)|s0*${s}e0*(\d+))\b""").find(tLower)
-            if (otherEpMatch != null) {
-                val foundEp = (otherEpMatch.groupValues[1].ifEmpty { otherEpMatch.groupValues[2] }).toIntOrNull()
-                if (foundEp != null && foundEp != e) {
-                    return false
+            val rangeMatch = Regex("""(?i)\b(?:s0*${s}e0*(\d+)[-–—~]e?0*(\d+)|${s}x0*(\d+)[-–—~]0*(\d+))\b""").find(tLower)
+            if (rangeMatch != null) {
+                val startEp = (rangeMatch.groupValues[1].ifEmpty { rangeMatch.groupValues[3] }).toIntOrNull()
+                val endEp = (rangeMatch.groupValues[2].ifEmpty { rangeMatch.groupValues[4] }).toIntOrNull()
+                if (startEp != null && endEp != null) {
+                    if (e < startEp || e > endEp) {
+                        return false
+                    }
+                }
+            } else {
+                val otherEpMatch = Regex("""(?i)\b(?:${s}x0*(\d+)|s0*${s}e0*(\d+))\b""").find(tLower)
+                if (otherEpMatch != null) {
+                    val foundEp = (otherEpMatch.groupValues[1].ifEmpty { otherEpMatch.groupValues[2] }).toIntOrNull()
+                    if (foundEp != null && foundEp != e) {
+                        return false
+                    }
                 }
             }
         }
 
         // 2. Anti-hijack for spinoffs and sequels (e.g. Fionna and Cake vs Adventure Time Finn & Jake)
-        val combinedQueryLower = "${originalQuery.lowercase(Locale.ROOT)} ${query.lowercase(Locale.ROOT)}"
+        val combinedQueryLower = "${englishQuery.lowercase(Locale.ROOT)} ${originalQuery.lowercase(Locale.ROOT)} ${query.lowercase(Locale.ROOT)}"
         val isTargetAdventureTime = combinedQueryLower.contains("adventure time") || combinedQueryLower.contains("hora de aventura")
         val isTargetFionna = combinedQueryLower.contains("fionna") || combinedQueryLower.contains("cake")
         val isTorrentFionna = tLower.contains("fionna") || tLower.contains("cake")
@@ -414,6 +443,7 @@ object TorrentSearchRepository {
         // 3. Title matching
         val stopWords = setOf("the", "a", "an", "el", "la", "los", "las", "un", "una", "de", "del", "y", "en", "por", "para", "con")
         val candidates = listOfNotNull(
+            englishQuery.takeIf { it.isNotBlank() },
             originalQuery.takeIf { it.isNotBlank() },
             query.takeIf { it.isNotBlank() }
         ).distinct()
