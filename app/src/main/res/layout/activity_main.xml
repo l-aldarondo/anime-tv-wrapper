@@ -291,10 +291,7 @@
             android:textSize="13sp"
             android:textStyle="bold"
             android:maxLines="1"
-            android:ellipsize="end"
-            android:nextFocusUp="@id/btnNavSearch"
-            android:nextFocusDown="@id/btnNavCatalog"
-            android:nextFocusLeft="@id/btnNavSearch" />
+            android:ellipsize="end" />
 
         <Button
             android:id="@+id/btnNavCatalog"
@@ -314,10 +311,7 @@
             android:textSize="13sp"
             android:textStyle="bold"
             android:maxLines="1"
-            android:ellipsize="end"
-            android:nextFocusUp="@id/btnNavSearch"
-            android:nextFocusDown="@id/btnNavMyList"
-            android:nextFocusLeft="@id/btnNavCatalog" />
+            android:ellipsize="end" />
 
         <Button
             android:id="@+id/btnNavMyList"
@@ -337,10 +331,7 @@
             android:textSize="13sp"
             android:textStyle="bold"
             android:maxLines="1"
-            android:ellipsize="end"
-            android:nextFocusUp="@id/btnNavCatalog"
-            android:nextFocusDown="@id/btnNavRefresh"
-            android:nextFocusLeft="@id/btnNavMyList" />
+            android:ellipsize="end" />
 
         <Button
             android:id="@+id/btnNavRefresh"
@@ -360,10 +351,7 @@
             android:textSize="13sp"
             android:textStyle="bold"
             android:maxLines="1"
-            android:ellipsize="end"
-            android:nextFocusUp="@id/btnNavMyList"
-            android:nextFocusDown="@id/btnNavSettings"
-            android:nextFocusLeft="@id/btnNavRefresh" />
+            android:ellipsize="end" />
 
         <Button
             android:id="@+id/btnNavSettings"
@@ -383,10 +371,7 @@
             android:textSize="13sp"
             android:textStyle="bold"
             android:maxLines="1"
-            android:ellipsize="end"
-            android:nextFocusUp="@id/btnNavRefresh"
-            android:nextFocusDown="@id/btnNavSettings"
-            android:nextFocusLeft="@id/btnNavSettings" />
+            android:ellipsize="end" />
 
     </LinearLayout>
 

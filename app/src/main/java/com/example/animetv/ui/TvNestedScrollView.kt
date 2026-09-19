@@ -19,22 +19,26 @@ class TvNestedScrollView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : NestedScrollView(context, attrs, defStyleAttr) {
 
+    override fun computeScrollDeltaToGetChildRectOnScreen(rect: Rect): Int {
+        // Return 0 so NestedScrollView's internal scrollToChild does not execute
+        // its single-view scroll that chops off row titles. Our scrollToRow handles row alignment.
+        return 0
+    }
+
     override fun requestChildFocus(child: View?, focused: View?) {
         if (child == null || focused == null) {
             super.requestChildFocus(child, focused)
             return
         }
 
-        // Find the top-level row container (direct child of layoutCatalogRows)
+        // Align the entire row container smoothly
         val rowView = findContainingRowView(focused)
         if (rowView != null) {
             scrollToRow(rowView)
-            // Pass null as focused to prevent Android's default single-view scroller
-            // from chopping off the row title or fighting row alignment
-            super.requestChildFocus(child, null)
-        } else {
-            super.requestChildFocus(child, focused)
         }
+
+        // Always pass valid focused view to super so ViewRootImpl and ViewGroup focus tracking never crashes
+        super.requestChildFocus(child, focused)
     }
 
     override fun requestChildRectangleOnScreen(
