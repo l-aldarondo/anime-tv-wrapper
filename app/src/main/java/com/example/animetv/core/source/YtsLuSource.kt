@@ -22,7 +22,11 @@ import java.util.concurrent.TimeUnit
 class YtsLuSource : AnimeSource {
     override val name: String = "YTS (Películas y Series)"
     override var baseUrl: String = "https://en.yts.lu"
-    override val mirrors: List<String> = listOf("https://en.yts.lu")
+    override val mirrors: List<String> = listOf(
+        "https://en.yts.lu",
+        "https://yts.lu",
+        "https://www13.yts.lu"
+    )
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(12, TimeUnit.SECONDS)
