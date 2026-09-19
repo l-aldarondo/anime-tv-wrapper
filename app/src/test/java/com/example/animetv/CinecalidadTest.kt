@@ -29,9 +29,9 @@ class CinecalidadTest {
         assertTrue("Search should return results for Deadpool", searchResults.isNotEmpty())
 
         val first = searchResults.first()
-        val stream = source.resolveStream(first.detailUrl)
-        println("RESOLVE STREAM RESULT: $stream")
-        assertNotNull("StreamResult should not be null", stream)
-        assertTrue("Stream videoUrl should be valid", stream!!.videoUrl.startsWith("http"))
+        val streams = source.resolveAllStreams(first.detailUrl)
+        println("RESOLVE ALL STREAMS (${streams.size}):")
+        streams.forEach { println("STREAM: ${it.serverName} -> ${it.videoUrl}") }
+        assertTrue("Should resolve streams for Cinecalidad movie", streams.isNotEmpty())
     }
 }

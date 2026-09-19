@@ -252,9 +252,9 @@ object SoloLatinoStreamResolver {
                         resolvedStreamUrl = if (rawHls4.startsWith("http")) {
                             rawHls4
                         } else {
-                            val uri = android.net.Uri.parse(vidhideUrl)
-                            val scheme = uri.scheme ?: "https"
-                            val host = uri.host ?: "morencius.com"
+                            val uri = try { java.net.URI(vidhideUrl) } catch (e: Exception) { null }
+                            val scheme = uri?.scheme ?: "https"
+                            val host = uri?.host ?: "morencius.com"
                             "$scheme://$host$rawHls4"
                         }
                     }
@@ -280,8 +280,8 @@ object SoloLatinoStreamResolver {
                 }
 
                 if (resolvedStreamUrl.isNotEmpty()) {
-                    val uri = android.net.Uri.parse(vidhideUrl)
-                    val origin = "${uri.scheme ?: "https"}://${uri.host ?: "morencius.com"}"
+                    val uri = try { java.net.URI(vidhideUrl) } catch (e: Exception) { null }
+                    val origin = "${uri?.scheme ?: "https"}://${uri?.host ?: "morencius.com"}"
                     return StreamResult(
                         videoUrl = resolvedStreamUrl,
                         isHls = true,

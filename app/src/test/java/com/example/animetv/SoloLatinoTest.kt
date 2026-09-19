@@ -5,6 +5,25 @@ import org.junit.Test
 
 class SoloLatinoTest {
     @Test
+    fun testDarkMatter() = kotlinx.coroutines.runBlocking {
+        val s = com.example.animetv.core.source.SoloLatinoSource()
+        val results = s.search("Dark Matter")
+        println("=== SEARCH RESULTS FOR DARK MATTER: size=${results.size} ===")
+        results.forEach { println("RESULT: ${it.title} -> ${it.detailUrl}") }
+        val first = results.firstOrNull()
+        if (first != null) {
+            val d = s.getAnimeDetail(first.detailUrl)
+            println("DETAIL: title=${d.title}, episodes=${d.episodes.size}")
+            val firstEp = d.episodes.firstOrNull()
+            println("FIRST EPISODE: ${firstEp?.title} -> ${firstEp?.episodeUrl}")
+            if (firstEp != null) {
+                val stream = s.resolveStream(firstEp.episodeUrl)
+                println("RESOLVE STREAM FOR EP 1: $stream")
+            }
+        }
+    }
+
+    @Test
     fun testEpisode8() {
         val url = "https://sololatino.net/serie/hora-de-aventura/temporada-1/episodio-8"
         println("=== TESTING RESOLVE FOR: $url ===")

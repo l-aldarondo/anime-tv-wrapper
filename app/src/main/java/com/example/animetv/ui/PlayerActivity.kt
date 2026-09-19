@@ -788,7 +788,7 @@ class PlayerActivity : AppCompatActivity() {
                             + ' html, body { margin: 0 !important; padding: 0 !important; background: #000 !important; overflow: hidden !important; width: 100vw !important; height: 100vh !important; }'
                             + ' #DisplayContent, #PlayerDisplay, #player-frame, #iframeContainer.active, #iframePlayer, #iframe-embed, .wb_-playerarea, .mytsumi-player, .mytsumi-stage, #mytsumi-media, video { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; z-index: 10 !important; border: none !important; object-fit: contain !important; background: #000 !important; }'
                             + ' .mytsumi-media iframe, #player-embed iframe, #iframe-embed, iframe[src*="stream"], iframe[src*="embed"], iframe[src*="bysesukior"], iframe[src*="megaplay"], iframe[src*="1anime"], iframe[src*="mega.nz"], iframe[src*="ok.ru"] { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; z-index: 10 !important; border: none !important; }'
-                            + ' video::-webkit-media-controls, video::-webkit-media-controls-enclosure, video::-webkit-media-controls-panel, video::-webkit-media-controls-play-button, video::-webkit-media-controls-timeline, video::-webkit-media-controls-current-time-display, video::-webkit-media-controls-time-remaining-display, video::-webkit-media-controls-mute-button, video::-webkit-media-controls-toggle-closed-captions-button, video::-webkit-media-controls-volume-slider, .jw-controls, .jw-controlbar, .jw-display-icon-container, .jw-display-icon-display, .jw-logo, .jw-title, .jw-preview, .loading-content, .ps_-status, .server-notice, .ps_-block, .vjs-control-bar, .vjs-big-play-button, .plyr__controls, .play-button-circle, .play-btn, .fake-player-container, #servers-content, header, footer, .banner, .ads, .wb__-cover, #tutorialOverlay, #tutorialBackdrop, .tutorial-overlay, #fakePlayer, .controls, .control-bar, .player-controls, .fp-ui, .fp-controls, .rmp-overlay, .rmp-ui, [class*="controlBar"], [class*="ControlBar"], [class*="bottom-controls"], [class*="progressBar"], [class*="ProgressBar"] { display: none !important; opacity: 0 !important; pointer-events: none !important; visibility: hidden !important; }';
+                            + ' video::-webkit-media-controls, video::-webkit-media-controls-enclosure, video::-webkit-media-controls-panel, video::-webkit-media-controls-play-button, video::-webkit-media-controls-timeline, video::-webkit-media-controls-current-time-display, video::-webkit-media-controls-time-remaining-display, video::-webkit-media-controls-mute-button, video::-webkit-media-controls-toggle-closed-captions-button, video::-webkit-media-controls-volume-slider, .jw-controls, .jw-controlbar, .jw-display-icon-container, .jw-display-icon-display, .jw-logo, .jw-title, .jw-preview, .loading-content, .ps_-status, .server-notice, .ps_-block, .vjs-control-bar, .plyr__controls, .fake-player-container, #servers-content, header, footer, .banner, .ads, .wb__-cover, #tutorialOverlay, #tutorialBackdrop, .tutorial-overlay, #fakePlayer, .controls, .control-bar, .player-controls, .fp-ui, .fp-controls, .rmp-overlay, .rmp-ui, [class*="controlBar"], [class*="ControlBar"], [class*="bottom-controls"], [class*="progressBar"], [class*="ProgressBar"] { display: none !important; opacity: 0 !important; pointer-events: none !important; visibility: hidden !important; }';
                         document.head.appendChild(style);
 
                         function nukeDecoysAndPlay() {
@@ -800,6 +800,39 @@ class PlayerActivity : AppCompatActivity() {
                                 if (ov) ov.remove();
                                 var bd = document.getElementById('tutorialBackdrop');
                                 if (bd) bd.remove();
+                            } catch(e) {}
+
+                            // 1b. Human Verification & "Asegurar que eres humano" / Turnstile auto-bypasser
+                            try {
+                                var verifyEls = document.querySelectorAll('button, a, div[role="button"], span, p, label, input[type="button"], input[type="submit"]');
+                                for (var vi = 0; vi < verifyEls.length; vi++) {
+                                    var vel = verifyEls[vi];
+                                    var vtxt = ((vel.innerText || '') + ' ' + (vel.textContent || '') + ' ' + (vel.getAttribute('aria-label') || '') + ' ' + (vel.value || '')).toLowerCase();
+                                    if (vtxt.includes('humano') || vtxt.includes('human') || vtxt.includes('asegurar') || vtxt.includes('verificar') || vtxt.includes('verify') || vtxt.includes('robot') || vtxt.includes('challenge')) {
+                                        vel.style.display = 'block';
+                                        vel.style.visibility = 'visible';
+                                        vel.style.opacity = '1';
+                                        vel.style.pointerEvents = 'auto';
+                                        ['mousedown', 'mouseup', 'click'].forEach(function(evName) {
+                                            var ev = new MouseEvent(evName, { bubbles: true, cancelable: true, view: window });
+                                            vel.dispatchEvent(ev);
+                                        });
+                                        if (typeof vel.click === 'function') vel.click();
+                                        if (vel.parentElement && typeof vel.parentElement.click === 'function') {
+                                            vel.parentElement.click();
+                                        }
+                                    }
+                                }
+                                var frames = document.querySelectorAll('iframe');
+                                frames.forEach(function(f) {
+                                    try {
+                                        var doc = f.contentDocument || f.contentWindow.document;
+                                        if (doc) {
+                                            var cf = doc.querySelector('input[type="checkbox"], .ctp-checkbox-label, #challenge-stage, button, .cf-turnstile');
+                                            if (cf) cf.click();
+                                        }
+                                    } catch(e) {}
+                                });
                             } catch(e) {}
 
                             // 2. Annihilate invisible click-jacking overlays & fake players (protecting legit players)
@@ -1049,6 +1082,17 @@ class PlayerActivity : AppCompatActivity() {
                         """
                         (function() {
                             try {
+                                var verifyEls = document.querySelectorAll('button, a, div[role="button"], span, input[type="button"]');
+                                for (var vi = 0; vi < verifyEls.length; vi++) {
+                                    var vel = verifyEls[vi];
+                                    var vtxt = ((vel.innerText || '') + ' ' + (vel.textContent || '')).toLowerCase();
+                                    if (vtxt.includes('humano') || vtxt.includes('human') || vtxt.includes('asegurar') || vtxt.includes('verificar')) {
+                                        vel.click();
+                                        return;
+                                    }
+                                }
+                            } catch(e) {}
+                            try {
                                 if (window.jwplayer && typeof window.jwplayer === 'function') {
                                     var jw = window.jwplayer();
                                     var st = jw.getState();
@@ -1069,6 +1113,12 @@ class PlayerActivity : AppCompatActivity() {
                                         v.pause();
                                     }
                                     return;
+                                }
+                            } catch(e) {}
+                            try {
+                                var centerEl = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
+                                if (centerEl && centerEl.tagName !== 'BODY' && centerEl.tagName !== 'HTML') {
+                                    centerEl.click();
                                 }
                             } catch(e) {}
                             try {

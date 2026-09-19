@@ -1163,25 +1163,8 @@ class DetailActivity : AppCompatActivity() {
                         availableStreams = ArrayList(streams)
                     )
                 } else {
-                    // Fallback: load episode URL directly in embed player
-                    PlayerActivity.start(
-                        this@DetailActivity,
-                        videoUrl = episode.episodeUrl,
-                        title = "${detail.title} - ${episode.title}",
-                        isHls = false,
-                        isEmbed = true,
-                        referer = detail.detailUrl,
-                        animeDetailUrl = detail.detailUrl,
-                        animeTitle = detail.title,
-                        posterUrl = bestPoster,
-                        source = detail.source,
-                        episodeUrl = episode.episodeUrl,
-                        episodeTitle = episode.title,
-                        episodeNumber = episode.episodeNumber,
-                        seasonNumber = episode.seasonNumber,
-                        startOver = startOver,
-                        synopsis = detail.synopsis
-                    )
+                    progressBar.visibility = View.GONE
+                    Toast.makeText(this@DetailActivity, "No se encontró enlace de video disponible para este episodio", Toast.LENGTH_LONG).show()
                 }
             } catch (e: Exception) {
                 progressBar.visibility = View.GONE
@@ -1242,22 +1225,8 @@ class DetailActivity : AppCompatActivity() {
                 progressBar.visibility = View.GONE
                 e.printStackTrace()
             }
-            PlayerActivity.start(
-                this@DetailActivity,
-                videoUrl = url,
-                title = resolvedShowTitle,
-                isHls = false,
-                isEmbed = true,
-                referer = "",
-                animeDetailUrl = currentCard?.detailUrl ?: url,
-                animeTitle = resolvedShowTitle,
-                posterUrl = bestPoster,
-                source = currentCard?.source ?: "",
-                episodeUrl = url,
-                episodeTitle = "Película",
-                episodeNumber = 1,
-                synopsis = resolvedSynopsis
-            )
+            progressBar.visibility = View.GONE
+            Toast.makeText(this@DetailActivity, "No se encontró enlace de video disponible para esta película", Toast.LENGTH_LONG).show()
         }
     }
 

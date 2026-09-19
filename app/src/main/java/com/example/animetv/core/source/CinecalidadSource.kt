@@ -187,24 +187,7 @@ class CinecalidadSource : AnimeSource {
         // <a class="link onlinelink" service="OnlineDoodstream" data="fmdarm4vs0jx"><li>Doodstream</li></a>
         val onlineLinks = doc.select("a.onlinelink, a[service]")
 
-        // Priority 1: Filemoon (Clean Full HD / 4K)
-        val filemoon = onlineLinks.firstOrNull { it.attr("service").equals("OnlineFilemoon", ignoreCase = true) }
-        if (filemoon != null) {
-            val data = filemoon.attr("data").trim()
-            if (data.isNotEmpty()) {
-                list.add(
-                    StreamResult(
-                        videoUrl = "https://filemoon.sx/e/$data",
-                        isHls = false,
-                        isEmbed = true,
-                        serverName = "Cinecalidad (Latino - Filemoon Full HD)",
-                        headers = mapOf("Referer" to baseUrl)
-                    )
-                )
-            }
-        }
-
-        // Priority 2: VOE (Clean Full HD)
+        // Priority 1: VOE (Clean Full HD, no bot verification)
         val voe = onlineLinks.firstOrNull { it.attr("service").equals("OnlineVoe", ignoreCase = true) }
         if (voe != null) {
             val data = voe.attr("data").trim()
@@ -215,6 +198,23 @@ class CinecalidadSource : AnimeSource {
                         isHls = false,
                         isEmbed = true,
                         serverName = "Cinecalidad (Latino - VOE Full HD)",
+                        headers = mapOf("Referer" to baseUrl)
+                    )
+                )
+            }
+        }
+
+        // Priority 2: Filemoon (Full HD / 4K)
+        val filemoon = onlineLinks.firstOrNull { it.attr("service").equals("OnlineFilemoon", ignoreCase = true) }
+        if (filemoon != null) {
+            val data = filemoon.attr("data").trim()
+            if (data.isNotEmpty()) {
+                list.add(
+                    StreamResult(
+                        videoUrl = "https://filemoon.sx/e/$data",
+                        isHls = false,
+                        isEmbed = true,
+                        serverName = "Cinecalidad (Latino - Filemoon Full HD)",
                         headers = mapOf("Referer" to baseUrl)
                     )
                 )
