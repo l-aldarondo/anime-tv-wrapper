@@ -22,6 +22,7 @@ object CatalogRepository {
     val gogoAnimeSource: AnimeSource = GogoAnimeSource()
     val cinecalidadSource = CinecalidadSource()
     val ytsLuSource = YtsLuSource()
+    val laMovieSource = LaMovieSource()
 
     suspend fun loadHomeContent(context: Context? = null, forceRefresh: Boolean = false): HomeCatalogData = coroutineScope {
         val rotationJob = async {
@@ -31,7 +32,8 @@ object CatalogRepository {
                 async { runCatching { jkAnimeSource.rotateMirror() } },
                 async { runCatching { gogoAnimeSource.rotateMirror() } },
                 async { runCatching { animeYtSource.rotateMirror() } },
-                async { runCatching { cinecalidadSource.rotateMirror() } }
+                async { runCatching { cinecalidadSource.rotateMirror() } },
+                async { runCatching { laMovieSource.rotateMirror() } }
             ).awaitAll()
         }
 
@@ -65,6 +67,7 @@ object CatalogRepository {
         val jobs = listOf(
             async { runCatching { soloLatinoSource.search(query) }.getOrDefault(emptyList()) },
             async { runCatching { cinecalidadSource.search(query) }.getOrDefault(emptyList()) },
+            async { runCatching { laMovieSource.search(query) }.getOrDefault(emptyList()) },
             async { runCatching { ytsLuSource.search(query) }.getOrDefault(emptyList()) },
             async { runCatching { jkAnimeSource.search(query) }.getOrDefault(emptyList()) },
             async { runCatching { nineAnimeSource.search(query) }.getOrDefault(emptyList()) },
@@ -76,6 +79,7 @@ object CatalogRepository {
 
     suspend fun getAnimeDetail(card: AnimeCard): AnimeDetail {
         return when {
+            card.source.contains("LaMovie") -> laMovieSource.getAnimeDetail(card.detailUrl)
             card.source.contains("YTS") -> ytsLuSource.getAnimeDetail(card.detailUrl)
             card.source.contains("Cinecalidad") -> cinecalidadSource.getAnimeDetail(card.detailUrl)
             card.source.contains("9Anime") -> nineAnimeSource.getAnimeDetail(card.detailUrl)
@@ -87,10 +91,11 @@ object CatalogRepository {
     }
 
     suspend fun resolveStream(context: Context, episodeUrl: String, source: String): StreamResult? = coroutineScope {
-        // Parallel extraction: Primary vs Cinecalidad Backup
+        // Parallel extraction: Primary vs Cinecalidad (1st backup) vs LaMovie (2nd backup)
         val primaryDeferred = async {
             runCatching {
                 when {
+                    source.contains("LaMovie") -> laMovieSource.resolveStream(episodeUrl)
                     source.contains("YTS") -> ytsLuSource.resolveStream(episodeUrl)
                     source.contains("JKAnime") -> jkAnimeSource.resolveStream(episodeUrl)
                     source.contains("9Anime") -> nineAnimeSource.resolveStream(episodeUrl)
@@ -111,15 +116,27 @@ object CatalogRepository {
             } else null
         }
 
+        val backup2Deferred = async {
+            if (source.contains("SoloLatino") || source.contains("SoloStream")) {
+                runCatching {
+                    laMovieSource.resolveBackupStream(episodeUrl)
+                }.getOrNull()
+            } else null
+        }
+
         val primary = primaryDeferred.await()
         val backup = backupDeferred.await()
+        val backup2 = backup2Deferred.await()
 
         // QUALITY RANKING: Direct HLS is always better than Embed
+        // Order: 1. SoloLatino primary -> 2. Cinecalidad backup -> 3. LaMovie backup
         val rawResult = when {
             primary?.isHls == true && !primary.isEmbed -> primary
             backup?.isHls == true && !backup.isEmbed -> backup
+            backup2?.isHls == true && !backup2.isEmbed -> backup2
             primary != null -> primary
             backup != null -> backup
+            backup2 != null -> backup2
             else -> null
         }
 
