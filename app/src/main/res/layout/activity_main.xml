@@ -225,7 +225,7 @@
         android:elevation="16dp"
         android:visibility="gone">
 
-        <!-- Brand Header (Nuvio / Stremio TV Style) -->
+        <!-- Brand Header (NuVibe TV Style) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -234,18 +234,12 @@
             android:layout_marginBottom="24dp"
             android:paddingHorizontal="4dp">
 
-            <FrameLayout
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:background="@drawable/bg_brand_badge">
-
-                <ImageView
-                    android:layout_width="18dp"
-                    android:layout_height="18dp"
-                    android:layout_gravity="center"
-                    android:src="@drawable/ic_tv"
-                    android:contentDescription="@null" />
-            </FrameLayout>
+            <ImageView
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:src="@drawable/ic_launcher_foreground"
+                android:scaleType="fitCenter"
+                android:contentDescription="@null" />
 
             <LinearLayout
                 android:layout_width="wrap_content"
@@ -257,9 +251,9 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="ANIME"
+                    android:text="NUVIBE"
                     android:textColor="@color/primary_text"
-                    android:textSize="17sp"
+                    android:textSize="18sp"
                     android:textStyle="bold"
                     android:letterSpacing="0.04" />
 
