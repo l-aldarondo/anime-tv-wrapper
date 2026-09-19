@@ -401,25 +401,72 @@ object TorrentSearchRepository {
             .replace("X", "x")
         val tLower = tRaw.lowercase(Locale.ROOT)
 
-        // 1. Episode verification for TV series: reject if it's explicitly a different episode
-        if (!isMovie && seasonNumber > 0 && episodeNumber > 0) {
+        // 1. Season & Episode verification for TV series: reject if it's explicitly a different season or episode
+        if (!isMovie && seasonNumber > 0) {
             val s = seasonNumber
             val e = episodeNumber
-            val rangeMatch = Regex("""(?i)\b(?:s0*${s}e0*(\d+)[-–—~]e?0*(\d+)|${s}x0*(\d+)[-–—~]0*(\d+))\b""").find(tLower)
-            if (rangeMatch != null) {
-                val startEp = (rangeMatch.groupValues[1].ifEmpty { rangeMatch.groupValues[3] }).toIntOrNull()
-                val endEp = (rangeMatch.groupValues[2].ifEmpty { rangeMatch.groupValues[4] }).toIntOrNull()
-                if (startEp != null && endEp != null) {
-                    if (e < startEp || e > endEp) {
-                        return false
+
+            // A. Complete series / All seasons packs (e.g. S01-S10, S1-8, Seasons 1-10, S01 2 3 4 5...)
+            val isCompleteSeries = tLower.contains("complete series") || tLower.contains("serie completa") ||
+                    tLower.contains("all seasons") || tLower.contains("todas las temporadas") ||
+                    Regex("""(?i)\bs0*1\s+2\s+3\b""").containsMatchIn(tLower)
+
+            val multiSeasonRange = Regex("""(?i)\b(?:s|seasons?\s*|temporadas?\s*|temp\s*)0*(\d+)\s*(?:[-–—~]|\bto\b|\bal?\b)\s*(?:s|seasons?\s*|temporadas?\s*|temp\s*)?0*(\d+)\b""").find(tLower)
+            if (multiSeasonRange != null) {
+                val sStart = multiSeasonRange.groupValues[1].toIntOrNull()
+                val sEnd = multiSeasonRange.groupValues[2].toIntOrNull()
+                if (sStart != null && sEnd != null) {
+                    if (s < sStart || s > sEnd) {
+                        return false // Torrent is a multi-season pack that does NOT contain target season s
                     }
                 }
-            } else {
-                val otherEpMatch = Regex("""(?i)\b(?:${s}x0*(\d+)|s0*${s}e0*(\d+))\b""").find(tLower)
-                if (otherEpMatch != null) {
-                    val foundEp = (otherEpMatch.groupValues[1].ifEmpty { otherEpMatch.groupValues[2] }).toIntOrNull()
-                    if (foundEp != null && foundEp != e) {
-                        return false
+            } else if (!isCompleteSeries) {
+                // B. Explicit Season + Episode (e.g. S06E05, 6x01, S01E01, 1x01, S06E01E02, S01E01-13)
+                val seMatch = Regex("""(?i)\b(?:s0*(\d+)e0*(\d+)(?:[-–—~e]0*(\d+))?|0*(\d+)x0*(\d+)(?:[-–—~]0*(\d+))?)""").find(tLower)
+                if (seMatch != null) {
+                    val foundS = (seMatch.groupValues[1].ifEmpty { seMatch.groupValues[4] }).toIntOrNull()
+                    val startE = (seMatch.groupValues[2].ifEmpty { seMatch.groupValues[5] }).toIntOrNull()
+                    val endE = (seMatch.groupValues[3].ifEmpty { seMatch.groupValues[6] }).toIntOrNull()
+
+                    if (foundS != null && foundS != s) {
+                        return false // Mismatched season (e.g. S06E01 or S06E01E02 when looking for S01)
+                    }
+
+                    if (foundS == s && startE != null && e > 0) {
+                        if (endE != null) {
+                            if (e < startE || e > endE) {
+                                return false // Target episode e is outside this batch range
+                            }
+                        } else if (startE != e) {
+                            return false // Single episode, but wrong episode number
+                        }
+                    }
+                } else {
+                    // C. Standalone season word (e.g. Season 6, Temporada 8, Temp 2)
+                    val seasonWordMatch = Regex("""(?i)\b(?:season|temporada|temp)\s*0*(\d+)\b""").find(tLower)
+                    if (seasonWordMatch != null) {
+                        val foundS = seasonWordMatch.groupValues[1].toIntOrNull()
+                        if (foundS != null && foundS != s) {
+                            return false // Different season
+                        }
+                    }
+
+                    // D. Standalone 'S(\d+)' or 'T(\d+)' (e.g. S06, S8, S2, T06)
+                    val standaloneSeasonMatches = Regex("""(?i)\b[st]0*(\d{1,2})\b""").findAll(tLower)
+                    for (sm in standaloneSeasonMatches) {
+                        val numStr = sm.groupValues[1]
+                        val foundS = numStr.toIntOrNull() ?: continue
+                        if (foundS >= 1900 && foundS <= 2099) continue // Skip year
+
+                        val nextChar = tLower.getOrNull(sm.range.last + 1)
+                        if (nextChar == 'e' || nextChar == 'x') continue
+
+                        val prevChar = tLower.getOrNull(sm.range.first - 1)
+                        if (prevChar != null && (prevChar.isLetterOrDigit() || prevChar == '.')) continue
+
+                        if (foundS != s) {
+                            return false // Different season (e.g. S06 or S08 when looking for S01)
+                        }
                     }
                 }
             }
