@@ -268,58 +268,73 @@ class LaMovieSource : AnimeSource {
     }
 
     override suspend fun resolveStream(episodeUrl: String): StreamResult? = withContext(Dispatchers.IO) {
+        resolveAllStreams(episodeUrl).firstOrNull()
+    }
+
+    suspend fun resolveAllStreams(episodeUrl: String): List<StreamResult> = withContext(Dispatchers.IO) {
+        val results = mutableListOf<StreamResult>()
         try {
             val postId = if (episodeUrl.contains("postId=")) {
                 Regex("""postId=(\d+)""").find(episodeUrl)?.groupValues?.get(1)?.toIntOrNull()
             } else null
 
             if (postId != null) {
-                return@withContext resolvePlayerPost(postId)
+                return@withContext resolveAllPlayerPosts(postId)
             }
 
             // Direct embed resolution fallback
             if (episodeUrl.startsWith("http")) {
                 val direct = extractDirectHls(episodeUrl)
                 if (direct != null) {
-                    return@withContext StreamResult(
-                        videoUrl = direct,
-                        isHls = true,
-                        isEmbed = false,
-                        serverName = "LaMovie Direct HLS",
-                        headers = mapOf("Referer" to episodeUrl)
+                    results.add(
+                        StreamResult(
+                            videoUrl = direct,
+                            isHls = true,
+                            isEmbed = false,
+                            serverName = "LaMovie (Direct HLS)",
+                            headers = mapOf("Referer" to episodeUrl)
+                        )
                     )
                 }
-                return@withContext StreamResult(
-                    videoUrl = episodeUrl,
-                    isHls = episodeUrl.contains(".m3u8"),
-                    isEmbed = true,
-                    serverName = "LaMovie Embed",
-                    headers = mapOf("Referer" to baseUrl)
+                results.add(
+                    StreamResult(
+                        videoUrl = episodeUrl,
+                        isHls = episodeUrl.contains(".m3u8"),
+                        isEmbed = true,
+                        serverName = "LaMovie (Embed)",
+                        headers = mapOf("Referer" to baseUrl)
+                    )
                 )
             }
         } catch (e: Exception) {
             e.printStackTrace()
         }
-        null
+        results
     }
 
     private fun resolvePlayerPost(postId: Int): StreamResult? {
+        return resolveAllPlayerPosts(postId).firstOrNull()
+    }
+
+    private fun resolveAllPlayerPosts(postId: Int): List<StreamResult> {
+        val list = mutableListOf<StreamResult>()
         val playerUrl = "$fastApiUrl/player?postId=$postId&demo=0"
         val jsonStr = fetchJson(playerUrl)
-        if (jsonStr.isEmpty()) return null
+        if (jsonStr.isEmpty()) return list
 
         val json = JSONObject(jsonStr)
         val embeds = json.optJSONObject("data")?.optJSONArray("embeds") ?: JSONArray()
-        if (embeds.length() == 0) return null
+        if (embeds.length() == 0) return list
 
-        var fallbackEmbed: StreamResult? = null
-
-        // 1. Try to extract direct HLS from embeds prioritizing Latino audio
+        // 1. Sort embeds giving preference to Latino
         val sortedEmbeds = mutableListOf<JSONObject>()
         for (i in 0 until embeds.length()) {
             sortedEmbeds.add(embeds.getJSONObject(i))
         }
         sortedEmbeds.sortByDescending { it.optString("lang").contains("Latino", ignoreCase = true) }
+
+        val hlsList = mutableListOf<StreamResult>()
+        val embedList = mutableListOf<StreamResult>()
 
         for (item in sortedEmbeds) {
             val embedUrl = item.optString("url")
@@ -329,28 +344,33 @@ class LaMovieSource : AnimeSource {
             if (embedUrl.isNotEmpty()) {
                 val directHls = extractDirectHls(embedUrl)
                 if (directHls != null) {
-                    return StreamResult(
-                        videoUrl = directHls,
-                        isHls = true,
-                        isEmbed = false,
-                        serverName = "LaMovie ($lang - $server)",
-                        headers = mapOf("Referer" to embedUrl)
+                    hlsList.add(
+                        StreamResult(
+                            videoUrl = directHls,
+                            isHls = true,
+                            isEmbed = false,
+                            serverName = "LaMovie ($lang - $server HLS)",
+                            headers = mapOf("Referer" to embedUrl)
+                        )
                     )
                 }
 
-                if (fallbackEmbed == null) {
-                    fallbackEmbed = StreamResult(
+                embedList.add(
+                    StreamResult(
                         videoUrl = embedUrl,
                         isHls = embedUrl.contains(".m3u8"),
                         isEmbed = true,
-                        serverName = "LaMovie ($lang - $server)",
+                        serverName = "LaMovie ($lang - $server Embed)",
                         headers = mapOf("Referer" to baseUrl)
                     )
-                }
+                )
             }
         }
 
-        return fallbackEmbed
+        // Return direct HLS options first, then fallback embeds
+        list.addAll(hlsList)
+        list.addAll(embedList)
+        return list
     }
 
     /**
@@ -387,6 +407,11 @@ class LaMovieSource : AnimeSource {
      * Extracts show/movie title, season and episode numbers from SoloLatino URLs.
      */
     suspend fun resolveBackupStream(episodeUrl: String): StreamResult? = withContext(Dispatchers.IO) {
+        resolveAllBackupStreams(episodeUrl).firstOrNull()
+    }
+
+    suspend fun resolveAllBackupStreams(episodeUrl: String): List<StreamResult> = withContext(Dispatchers.IO) {
+        val results = mutableListOf<StreamResult>()
         try {
             val seasonMatch = Regex("""temporada-(\d+)""").find(episodeUrl)
             val epMatch = Regex("""episodio-(\d+)""").find(episodeUrl)
@@ -402,11 +427,11 @@ class LaMovieSource : AnimeSource {
 
                 val searchCards = search(showQuery)
                 val targetShow = searchCards.firstOrNull { it.episodeBadge.contains("Serie", ignoreCase = true) }
-                    ?: searchCards.firstOrNull() ?: return@withContext null
+                    ?: searchCards.firstOrNull() ?: return@withContext results
 
                 val showId = Regex("""_id=(\d+)""").find(targetShow.detailUrl)?.groupValues?.get(1)?.toIntOrNull()
                     ?: targetShow.id.removePrefix("lamovie_").toIntOrNull()
-                    ?: return@withContext null
+                    ?: return@withContext results
 
                 val epListUrl = "$fastApiUrl/single/episodes/list?_id=$showId&season=$seasonNum&page=1&postsPerPage=100"
                 val epJsonStr = fetchJson(epListUrl)
@@ -417,7 +442,7 @@ class LaMovieSource : AnimeSource {
                         val epObj = posts.getJSONObject(i)
                         if (epObj.optInt("episode_number") == epNum) {
                             val epId = epObj.optInt("_id")
-                            return@withContext resolvePlayerPost(epId)
+                            return@withContext resolveAllPlayerPosts(epId)
                         }
                     }
                 }
@@ -427,18 +452,18 @@ class LaMovieSource : AnimeSource {
                 val movieQuery = cleanTitleQuery(rawTitle)
 
                 val searchCards = search(movieQuery)
-                val targetMovie = searchCards.firstOrNull() ?: return@withContext null
+                val targetMovie = searchCards.firstOrNull() ?: return@withContext results
 
                 val movieId = Regex("""_id=(\d+)""").find(targetMovie.detailUrl)?.groupValues?.get(1)?.toIntOrNull()
                     ?: targetMovie.id.removePrefix("lamovie_").toIntOrNull()
-                    ?: return@withContext null
+                    ?: return@withContext results
 
-                return@withContext resolvePlayerPost(movieId)
+                return@withContext resolveAllPlayerPosts(movieId)
             }
         } catch (e: Exception) {
             e.printStackTrace()
         }
-        null
+        results
     }
 
     private fun cleanTitleQuery(raw: String): String {

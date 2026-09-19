@@ -50,6 +50,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
+import com.example.animetv.core.model.StreamResult
 
 class DetailActivity : AppCompatActivity() {
 
@@ -988,18 +989,26 @@ class DetailActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 Toast.makeText(this@DetailActivity, "Conectando al reproductor...", Toast.LENGTH_SHORT).show()
-                val stream = CatalogRepository.resolveStream(this@DetailActivity, episode.episodeUrl, detail.source)
                 val bestPoster = CoverUtils.pickBestCover(detail.posterUrl, currentCard?.posterUrl)
+
+                // Resolve ALL ranked streams from all sources in parallel
+                val streams = try {
+                    CatalogRepository.resolveAllStreams(this@DetailActivity, episode.episodeUrl, detail.source)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    emptyList()
+                }
                 progressBar.visibility = View.GONE
 
-                if (stream != null && stream.videoUrl.isNotEmpty()) {
+                val bestStream = streams.firstOrNull()
+                if (bestStream != null && bestStream.videoUrl.isNotEmpty()) {
                     PlayerActivity.start(
                         this@DetailActivity,
-                        videoUrl = stream.videoUrl,
+                        videoUrl = bestStream.videoUrl,
                         title = "${detail.title} - ${episode.title}",
-                        isHls = stream.isHls,
-                        isEmbed = stream.isEmbed,
-                        referer = stream.headers["Referer"] ?: "",
+                        isHls = bestStream.isHls,
+                        isEmbed = bestStream.isEmbed,
+                        referer = bestStream.headers["Referer"] ?: "",
                         animeDetailUrl = detail.detailUrl,
                         animeTitle = detail.title,
                         posterUrl = bestPoster,
@@ -1007,11 +1016,13 @@ class DetailActivity : AppCompatActivity() {
                         episodeUrl = episode.episodeUrl,
                         episodeTitle = episode.title,
                         episodeNumber = episode.episodeNumber,
+                        seasonNumber = episode.seasonNumber,
                         startOver = startOver,
-                        synopsis = detail.synopsis
+                        synopsis = detail.synopsis,
+                        availableStreams = ArrayList(streams)
                     )
                 } else {
-                    // Fallback to clean embedded player, NEVER raw HTML in ExoPlayer
+                    // Fallback: load episode URL directly in embed player
                     PlayerActivity.start(
                         this@DetailActivity,
                         videoUrl = episode.episodeUrl,
@@ -1026,6 +1037,7 @@ class DetailActivity : AppCompatActivity() {
                         episodeUrl = episode.episodeUrl,
                         episodeTitle = episode.title,
                         episodeNumber = episode.episodeNumber,
+                        seasonNumber = episode.seasonNumber,
                         startOver = startOver,
                         synopsis = detail.synopsis
                     )

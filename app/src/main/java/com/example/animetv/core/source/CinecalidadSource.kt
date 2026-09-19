@@ -157,19 +157,28 @@ class CinecalidadSource : AnimeSource {
     }
 
     override suspend fun resolveStream(episodeUrl: String): StreamResult? = withContext(Dispatchers.IO) {
+        resolveAllStreams(episodeUrl).firstOrNull()
+    }
+
+    suspend fun resolveAllStreams(episodeUrl: String): List<StreamResult> = withContext(Dispatchers.IO) {
+        val list = mutableListOf<StreamResult>()
+
         // If episodeUrl is already an embed URL
         if (episodeUrl.contains("filemoon") || episodeUrl.contains("voe") || episodeUrl.contains("dood") || episodeUrl.contains("mega")) {
-            return@withContext StreamResult(
-                videoUrl = episodeUrl,
-                isHls = episodeUrl.contains(".m3u8"),
-                isEmbed = true,
-                serverName = "Cinecalidad Embed",
-                headers = mapOf("Referer" to baseUrl)
+            list.add(
+                StreamResult(
+                    videoUrl = episodeUrl,
+                    isHls = episodeUrl.contains(".m3u8"),
+                    isEmbed = true,
+                    serverName = "Cinecalidad (Embed)",
+                    headers = mapOf("Referer" to baseUrl)
+                )
             )
+            return@withContext list
         }
 
         val html = fetchHtml(episodeUrl)
-        if (html.isEmpty()) return@withContext null
+        if (html.isEmpty()) return@withContext list
         val doc = Jsoup.parse(html, episodeUrl)
 
         // 1. Cinecalidad .my online servers (from scripts.min.js):
@@ -183,12 +192,14 @@ class CinecalidadSource : AnimeSource {
         if (filemoon != null) {
             val data = filemoon.attr("data").trim()
             if (data.isNotEmpty()) {
-                return@withContext StreamResult(
-                    videoUrl = "https://filemoon.sx/e/$data",
-                    isHls = false,
-                    isEmbed = true,
-                    serverName = "Filemoon HD",
-                    headers = mapOf("Referer" to baseUrl)
+                list.add(
+                    StreamResult(
+                        videoUrl = "https://filemoon.sx/e/$data",
+                        isHls = false,
+                        isEmbed = true,
+                        serverName = "Cinecalidad (Latino - Filemoon Full HD)",
+                        headers = mapOf("Referer" to baseUrl)
+                    )
                 )
             }
         }
@@ -198,12 +209,14 @@ class CinecalidadSource : AnimeSource {
         if (voe != null) {
             val data = voe.attr("data").trim()
             if (data.isNotEmpty()) {
-                return@withContext StreamResult(
-                    videoUrl = "https://voe.sx/e/$data",
-                    isHls = false,
-                    isEmbed = true,
-                    serverName = "VOE HD",
-                    headers = mapOf("Referer" to baseUrl)
+                list.add(
+                    StreamResult(
+                        videoUrl = "https://voe.sx/e/$data",
+                        isHls = false,
+                        isEmbed = true,
+                        serverName = "Cinecalidad (Latino - VOE Full HD)",
+                        headers = mapOf("Referer" to baseUrl)
+                    )
                 )
             }
         }
@@ -213,12 +226,14 @@ class CinecalidadSource : AnimeSource {
         if (dood != null) {
             val data = dood.attr("data").trim()
             if (data.isNotEmpty()) {
-                return@withContext StreamResult(
-                    videoUrl = "https://doodstream.com/e/$data",
-                    isHls = false,
-                    isEmbed = true,
-                    serverName = "Doodstream",
-                    headers = mapOf("Referer" to baseUrl)
+                list.add(
+                    StreamResult(
+                        videoUrl = "https://doodstream.com/e/$data",
+                        isHls = false,
+                        isEmbed = true,
+                        serverName = "Cinecalidad (Latino - Doodstream)",
+                        headers = mapOf("Referer" to baseUrl)
+                    )
                 )
             }
         }
@@ -234,12 +249,14 @@ class CinecalidadSource : AnimeSource {
                     else -> null
                 }
                 if (embedUrl != null) {
-                    return@withContext StreamResult(
-                        videoUrl = embedUrl,
-                        isHls = false,
-                        isEmbed = true,
-                        serverName = s,
-                        headers = mapOf("Referer" to baseUrl)
+                    list.add(
+                        StreamResult(
+                            videoUrl = embedUrl,
+                            isHls = false,
+                            isEmbed = true,
+                            serverName = "Cinecalidad (Latino - $s)",
+                            headers = mapOf("Referer" to baseUrl)
+                        )
                     )
                 }
             }
@@ -254,12 +271,14 @@ class CinecalidadSource : AnimeSource {
                 java.net.URLDecoder.decode(encodedLink, "UTF-8")
             } catch (e: Exception) { encodedLink }
             if (decoded.startsWith("http")) {
-                return@withContext StreamResult(
-                    videoUrl = decoded,
-                    isHls = decoded.contains(".m3u8"),
-                    isEmbed = true,
-                    serverName = "Cinecalidad (VIP)",
-                    headers = mapOf("Referer" to baseUrl)
+                list.add(
+                    StreamResult(
+                        videoUrl = decoded,
+                        isHls = decoded.contains(".m3u8"),
+                        isEmbed = true,
+                        serverName = "Cinecalidad (Latino - VIP)",
+                        headers = mapOf("Referer" to baseUrl)
+                    )
                 )
             }
         }
@@ -275,15 +294,18 @@ class CinecalidadSource : AnimeSource {
 
             if (url.contains("filemoon") || url.contains("vidoza") || url.contains("upstream") ||
                 url.contains("streamtape") || url.contains("dood") || url.contains("waaw")) {
-                return@withContext StreamResult(
-                    videoUrl = url,
-                    isHls = url.contains(".m3u8"),
-                    isEmbed = true,
-                    serverName = "Cinecalidad Embed",
-                    headers = mapOf("Referer" to baseUrl)
+                list.add(
+                    StreamResult(
+                        videoUrl = url,
+                        isHls = url.contains(".m3u8"),
+                        isEmbed = true,
+                        serverName = "Cinecalidad (Latino - Embed)",
+                        headers = mapOf("Referer" to baseUrl)
+                    )
                 )
             }
         }
-        null
+
+        return@withContext list
     }
 }

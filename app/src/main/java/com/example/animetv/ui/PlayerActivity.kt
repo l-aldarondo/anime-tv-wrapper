@@ -22,6 +22,7 @@ import android.widget.FrameLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -39,6 +40,7 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.PlayerView
 import com.example.animetv.R
 import com.example.animetv.adblock.AdBlockEngine
+import com.example.animetv.core.model.StreamResult
 import com.example.animetv.core.util.CoverUtils
 import java.util.Locale
 
@@ -60,6 +62,7 @@ class PlayerActivity : AppCompatActivity() {
         const val EXTRA_SEASON_NUMBER = "extra_season_number"
         const val EXTRA_START_OVER = "extra_start_over"
         const val EXTRA_SYNOPSIS = "extra_synopsis"
+        const val EXTRA_AVAILABLE_STREAMS = "extra_available_streams"
 
         fun start(
             context: Context,
@@ -77,7 +80,8 @@ class PlayerActivity : AppCompatActivity() {
             episodeNumber: Int = 1,
             seasonNumber: Int = 1,
             startOver: Boolean = false,
-            synopsis: String = ""
+            synopsis: String = "",
+            availableStreams: ArrayList<StreamResult> = arrayListOf()
         ) {
             val intent = Intent(context, PlayerActivity::class.java).apply {
                 putExtra(EXTRA_VIDEO_URL, videoUrl)
@@ -95,6 +99,7 @@ class PlayerActivity : AppCompatActivity() {
                 putExtra(EXTRA_SEASON_NUMBER, seasonNumber)
                 putExtra(EXTRA_START_OVER, startOver)
                 putExtra(EXTRA_SYNOPSIS, synopsis)
+                putExtra(EXTRA_AVAILABLE_STREAMS, availableStreams)
             }
             context.startActivity(intent)
         }
@@ -116,6 +121,10 @@ class PlayerActivity : AppCompatActivity() {
     private var isEmbedMode = false
     private var hasExoPlayerFailed = false
     private var isInterceptingMedia = false
+
+    // Multi-source stream list (ranked by quality score)
+    private var availableStreams: ArrayList<StreamResult> = arrayListOf()
+    private var currentStreamIndex: Int = 0
 
     private var animeDetailUrl: String = ""
     private var animeTitle: String = ""
@@ -259,6 +268,13 @@ class PlayerActivity : AppCompatActivity() {
         val referer = intent.getStringExtra(EXTRA_REFERER) ?: ""
         isEmbedMode = intent.getBooleanExtra(EXTRA_IS_EMBED, false)
         startOverFromBeginning = intent.getBooleanExtra(EXTRA_START_OVER, false)
+
+        @Suppress("UNCHECKED_CAST")
+        val streams = intent.getSerializableExtra(EXTRA_AVAILABLE_STREAMS) as? ArrayList<StreamResult>
+        if (!streams.isNullOrEmpty()) {
+            availableStreams = streams
+            currentStreamIndex = 0
+        }
 
         animeDetailUrl = intent.getStringExtra(EXTRA_ANIME_URL) ?: ""
         animeTitle = intent.getStringExtra(EXTRA_ANIME_TITLE) ?: ""
@@ -442,9 +458,27 @@ class PlayerActivity : AppCompatActivity() {
                             return
                         }
 
+                        // Try next stream from ranked list before falling back to WebView
+                        val nextIndex = currentStreamIndex + 1
+                        if (nextIndex < availableStreams.size) {
+                            val nextStream = availableStreams[nextIndex]
+                            currentStreamIndex = nextIndex
+                            android.util.Log.w("PlayerActivity", "ExoPlayer failed. Auto-failover to stream #$nextIndex: ${nextStream.videoUrl}")
+                            showFeedback("⚠ Cambiando servidor (${nextIndex + 1}/${availableStreams.size})...")
+                            exoPlayer?.release()
+                            exoPlayer = null
+                            isInterceptingMedia = false
+                            if (nextStream.isEmbed || (!nextStream.videoUrl.contains(".m3u8") && !nextStream.videoUrl.contains(".mp4"))) {
+                                startCleanWebPlayer(nextStream.videoUrl, nextStream.headers["Referer"] ?: referer)
+                            } else {
+                                initializeExoPlayer(nextStream.videoUrl, nextStream.headers["Referer"] ?: referer)
+                            }
+                            return
+                        }
+
                         hasExoPlayerFailed = true
                         isInterceptingMedia = false
-                        // Fallback gracefully without showing a black screen or infinite loops
+                        // All streams exhausted — fallback gracefully to WebView
                         Toast.makeText(this@PlayerActivity, "Cargando en reproductor alternativo...", Toast.LENGTH_SHORT).show()
                         if (cleanWebPlayer.url != null && cleanWebPlayer.url!!.isNotEmpty() && cleanWebPlayer.url != "about:blank") {
                             exoPlayer?.release()
@@ -1251,6 +1285,10 @@ class PlayerActivity : AppCompatActivity() {
                 }
                 return true
             }
+            KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_INFO -> {
+                showServerSelectorDialog()
+                return true
+            }
             KeyEvent.KEYCODE_0, KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
                 player.seekTo(0)
                 player.play()
@@ -1268,6 +1306,68 @@ class PlayerActivity : AppCompatActivity() {
             }
         }
         return super.onKeyDown(keyCode, event)
+    }
+
+    /**
+     * Shows a dialog listing all available ranked streams.
+     * The user can manually switch to any server/source from here.
+     */
+    private fun showServerSelectorDialog() {
+        if (availableStreams.isEmpty()) {
+            Toast.makeText(this, "No hay servidores adicionales disponibles", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val items = availableStreams.mapIndexed { index, stream ->
+            val qualityTag = when {
+                stream.isHls && !stream.isEmbed && stream.videoUrl.contains("master.m3u8") -> "[HLS Master]"
+                stream.isHls && !stream.isEmbed -> "[HLS Direct]"
+                !stream.isEmbed && (stream.videoUrl.contains(".mp4") || stream.videoUrl.contains(".mkv")) -> "[MP4 Direct]"
+                stream.isEmbed -> "[Embed]"
+                else -> "[Stream]"
+            }
+            val resTag = when {
+                stream.serverName.contains("1080", ignoreCase = true) || stream.videoUrl.contains("1080") -> " 1080p"
+                stream.serverName.contains("720", ignoreCase = true) || stream.videoUrl.contains("720") -> " 720p"
+                stream.serverName.contains("4k", ignoreCase = true) || stream.videoUrl.contains("2160") -> " 4K"
+                else -> ""
+            }
+            val activeMarker = if (index == currentStreamIndex) " ✓" else ""
+            "${index + 1}. ${stream.serverName.ifEmpty { stream.source }}$resTag $qualityTag$activeMarker"
+        }.toTypedArray()
+
+        val currentPos = exoPlayer?.currentPosition ?: 0L
+        exoPlayer?.pause()
+
+        AlertDialog.Builder(this, androidx.appcompat.R.style.Theme_AppCompat_Dialog_Alert)
+            .setTitle("🎬 Seleccionar Servidor")
+            .setItems(items) { _, which ->
+                if (which == currentStreamIndex) {
+                    // Same stream - just resume
+                    exoPlayer?.play()
+                    return@setItems
+                }
+                val chosen = availableStreams[which]
+                currentStreamIndex = which
+                android.util.Log.d("PlayerActivity", "User selected stream #$which: ${chosen.videoUrl}")
+                showFeedback("▶ ${chosen.serverName.ifEmpty { chosen.source }}")
+                exoPlayer?.release()
+                exoPlayer = null
+                isInterceptingMedia = false
+                hasExoPlayerFailed = false
+                if (chosen.isEmbed || (!chosen.videoUrl.contains(".m3u8") && !chosen.videoUrl.contains(".mp4"))) {
+                    startCleanWebPlayer(chosen.videoUrl, chosen.headers["Referer"] ?: "")
+                } else {
+                    initializeExoPlayer(chosen.videoUrl, chosen.headers["Referer"] ?: "")
+                    // Restore approximate position
+                    if (currentPos > 5000) {
+                        mainHandler.postDelayed({
+                            exoPlayer?.seekTo(currentPos)
+                        }, 1500)
+                    }
+                }
+            }
+            .setNegativeButton("Cancelar") { _, _ -> exoPlayer?.play() }
+            .show()
     }
 
     private fun openExternalYouTube(videoId: String) {

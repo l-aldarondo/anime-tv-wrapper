@@ -79,5 +79,7 @@ data class StreamResult(
     val isHls: Boolean = true,
     val isEmbed: Boolean = false,
     val serverName: String = "Principal",
-    val headers: Map<String, String> = emptyMap()
+    val headers: Map<String, String> = emptyMap(),
+    /** Human-readable source name (SoloLatino, Cinecalidad, LaMovie, etc.) */
+    val source: String = ""
 ) : Serializable
