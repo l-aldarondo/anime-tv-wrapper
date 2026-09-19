@@ -83,11 +83,9 @@ class TvNestedScrollView @JvmOverloads constructor(
             return
         }
 
-        // 2. We align the entire row (title + cards) so it is 100% visible on screen.
-        // In Netflix and Nuvio, the focused row is aligned with a comfortable top margin
-        // so that the title is fully readable and cards are completely in view.
-        val topPadding = (16 * resources.displayMetrics.density).toInt()
-        val targetY = (rowTop - topPadding).coerceAtLeast(0)
+        // 2. We align the entire row (title + cards) flush to its top coordinate,
+        // ensuring the previous row is 100% scrolled away without any chopped poster slivers.
+        val targetY = rowTop.coerceAtLeast(0)
 
         // Only scroll if we are not already at the target position (prevents jitter)
         if (Math.abs(currentScrollY - targetY) > 6) {

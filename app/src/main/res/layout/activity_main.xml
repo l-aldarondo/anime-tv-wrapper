@@ -50,7 +50,7 @@
                 android:orientation="vertical"
                 android:paddingHorizontal="@dimen/safe_zone_margin"
                 android:paddingTop="18dp"
-                android:paddingBottom="6dp">
+                android:paddingBottom="16dp">
 
             <!-- Official Transparent PNG Logo or Bold Fallback Title (Nuvio Signature) -->
             <FrameLayout
