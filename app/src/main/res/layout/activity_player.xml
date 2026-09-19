@@ -100,7 +100,7 @@
                     android:id="@+id/txtGuideTip"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="◄/►: ±10s  •  ▲: Saltar Intro (+85s)  •  OK: Pausa  •  0/↺: Reiniciar"
+                    android:text="◄/►: ±10s  •  ▲: Saltar Intro  •  ▼: Servidores  •  OK: Pausa  •  0: Reiniciar"
                     android:textColor="@color/secondary_text"
                     android:textSize="13sp" />
 
@@ -118,6 +118,22 @@
                     android:textSize="14sp" />
 
             </LinearLayout>
+
+            <!-- Server Selector Button — visible when OSD shows and streams available -->
+            <Button
+                android:id="@+id/btnServerSelector"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="12dp"
+                android:text="📺 Cambiar Servidor"
+                android:textSize="14sp"
+                android:textColor="#FFFFFF"
+                android:backgroundTint="#CC1A1A2E"
+                android:paddingHorizontal="20dp"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:visibility="gone" />
 
         </LinearLayout>
 

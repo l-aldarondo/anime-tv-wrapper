@@ -114,6 +114,7 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var txtCurrentTime: TextView
     private lateinit var txtTotalTime: TextView
     private lateinit var playerBuffering: ProgressBar
+    private lateinit var btnServerSelector: android.widget.Button
 
     private var exoPlayer: ExoPlayer? = null
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -262,6 +263,8 @@ class PlayerActivity : AppCompatActivity() {
         txtCurrentTime = findViewById(R.id.txtCurrentTime)
         txtTotalTime = findViewById(R.id.txtTotalTime)
         playerBuffering = findViewById(R.id.playerBuffering)
+        btnServerSelector = findViewById(R.id.btnServerSelector)
+        btnServerSelector.setOnClickListener { showServerSelectorDialog() }
 
         var videoUrl = intent.getStringExtra(EXTRA_VIDEO_URL) ?: ""
         val title = intent.getStringExtra(EXTRA_TITLE) ?: "Reproductor"
@@ -929,6 +932,8 @@ class PlayerActivity : AppCompatActivity() {
         osdOverlay.bringToFront()
         osdOverlay.visibility = View.VISIBLE
         isOsdVisible = true
+        // Show server selector button only if multiple streams available
+        btnServerSelector.visibility = if (availableStreams.size > 1) View.VISIBLE else View.GONE
         mainHandler.removeCallbacks(hideOsdRunnable)
         mainHandler.postDelayed(hideOsdRunnable, delayMs)
     }
@@ -937,12 +942,14 @@ class PlayerActivity : AppCompatActivity() {
         osdOverlay.bringToFront()
         osdOverlay.visibility = View.VISIBLE
         isOsdVisible = true
+        btnServerSelector.visibility = if (availableStreams.size > 1) View.VISIBLE else View.GONE
         mainHandler.removeCallbacks(hideOsdRunnable)
     }
 
     private fun hideOsd() {
         osdOverlay.visibility = View.GONE
         txtFeedback.visibility = View.GONE
+        btnServerSelector.visibility = View.GONE
         isOsdVisible = false
     }
 
@@ -1166,31 +1173,8 @@ class PlayerActivity : AppCompatActivity() {
                         updateEmbedOsdUI(embedCurrentPositionMs, embedDurationMs)
                         showOsdBriefly()
                     } else {
-                        cleanWebPlayer.evaluateJavascript(
-                            """
-                            (function() {
-                                try {
-                                    if (window.jwplayer && typeof window.jwplayer === 'function') {
-                                        var jw = window.jwplayer();
-                                        jw.seek(Math.max(0, jw.getPosition() - 30));
-                                        return;
-                                    }
-                                } catch(e) {}
-                                try {
-                                    var v = document.querySelector('video');
-                                    if (v) {
-                                        v.currentTime = Math.max(0, (v.currentTime || 0) - 30);
-                                        return;
-                                    }
-                                } catch(e) {}
-                            })();
-                            """.trimIndent(), null
-                        )
-                        embedCurrentPositionMs = (embedCurrentPositionMs - 30000L).coerceAtLeast(0L)
-                        updateEmbedOsdUI(embedCurrentPositionMs, embedDurationMs)
-                        saveCurrentPlaybackPosition(embedCurrentPositionMs, embedDurationMs.coerceAtLeast(1440_000L))
-                        showFeedback("⏪ -30s")
-                        showOsdBriefly()
+                        // OSD ya visible -> abrir selector de servidores
+                        showServerSelectorDialog()
                     }
                     return true
                 }
@@ -1278,10 +1262,8 @@ class PlayerActivity : AppCompatActivity() {
                 if (!isOsdVisible) {
                     showOsdBriefly()
                 } else {
-                    val newPos = (player.currentPosition - 30000).coerceAtLeast(0)
-                    player.seekTo(newPos)
-                    showFeedback("⏪ -30s")
-                    updateProgress()
+                    // OSD ya visible -> abrir selector de servidores
+                    showServerSelectorDialog()
                 }
                 return true
             }
