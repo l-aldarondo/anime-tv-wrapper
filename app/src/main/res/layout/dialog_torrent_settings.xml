@@ -205,6 +205,16 @@
             android:textSize="11sp"
             android:textStyle="bold" />
 
+        <CheckBox
+            android:id="@+id/chkPreferSpanish"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Priorizar Español en la lista (si se desactiva, ordena por más semillas)"
+            android:textColor="@color/secondary_text"
+            android:textSize="11sp"
+            android:focusable="true" />
+
         <!-- 3. Acción al pulsar un Episodio en el Carrusel -->
         <TextView
             android:layout_width="wrap_content"

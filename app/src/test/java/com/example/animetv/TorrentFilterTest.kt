@@ -50,4 +50,25 @@ class TorrentFilterTest {
         assertFalse(filtered.any { it.sizeFormatted == "6.2 GB" })
         assertFalse(filtered.any { it.sizeFormatted == "9.8 GB" })
     }
+
+    @Test
+    fun testPreferSpanishSorting() {
+        val items = listOf(
+            TorrentStreamItem("Show S01E01 English High Seeds", "magnet:?xt=urn:btih:1", 250, 0L, "1 GB", "1080p", "Inglés", 4, "YTS"),
+            TorrentStreamItem("Show S01E01 Spanish Low Seeds", "magnet:?xt=urn:btih:2", 15, 0L, "1 GB", "1080p", "Latino", 1, "Torrentio"),
+            TorrentStreamItem("Show S01E01 Dual Mid Seeds", "magnet:?xt=urn:btih:3", 50, 0L, "1 GB", "1080p", "Dual", 3, "AnimeTosho")
+        )
+
+        // When preferSpanish = true: Latino (1) -> Dual (3) -> English (4)
+        val sortedPreferSpanish = items.sortedWith(compareBy({ it.languagePriority }, { -it.seeders }))
+        assertEquals("Show S01E01 Spanish Low Seeds", sortedPreferSpanish[0].title)
+        assertEquals("Show S01E01 Dual Mid Seeds", sortedPreferSpanish[1].title)
+        assertEquals("Show S01E01 English High Seeds", sortedPreferSpanish[2].title)
+
+        // When preferSpanish = false: High Seeds (250) -> Mid Seeds (50) -> Low Seeds (15)
+        val sortedBySeeds = items.sortedWith(compareBy({ -it.seeders }))
+        assertEquals("Show S01E01 English High Seeds", sortedBySeeds[0].title)
+        assertEquals("Show S01E01 Dual Mid Seeds", sortedBySeeds[1].title)
+        assertEquals("Show S01E01 Spanish Low Seeds", sortedBySeeds[2].title)
+    }
 }

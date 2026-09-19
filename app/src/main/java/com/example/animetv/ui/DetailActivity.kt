@@ -5,16 +5,23 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import java.util.Locale
+import android.graphics.Typeface
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.ProgressBar
+import android.widget.RadioButton
+import android.widget.RadioGroup
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
-import android.widget.ScrollView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -1182,6 +1189,8 @@ class DetailActivity : AppCompatActivity() {
         val progressBar = dialogView.findViewById<ProgressBar>(R.id.progressBarTorrents)
         val txtEmpty = dialogView.findViewById<TextView>(R.id.txtEmptyTorrents)
         val recycler = dialogView.findViewById<RecyclerView>(R.id.recyclerTorrents)
+        val scrollProviderFilters = dialogView.findViewById<HorizontalScrollView>(R.id.scrollProviderFilters)
+        val rgProviderFilters = dialogView.findViewById<RadioGroup>(R.id.rgProviderFilters)
 
         val layoutEpisodeNavigator = dialogView.findViewById<View>(R.id.layoutEpisodeNavigator)
         val btnTorrentEpFirst = dialogView.findViewById<Button>(R.id.btnTorrentEpFirst)
@@ -1235,6 +1244,9 @@ class DetailActivity : AppCompatActivity() {
                 layoutEpisodeNavigator.visibility = View.GONE
             }
 
+            scrollProviderFilters.visibility = View.GONE
+            rgProviderFilters.removeAllViews()
+
             progressBar.visibility = View.VISIBLE
             txtEmpty.visibility = View.VISIBLE
             txtEmpty.text = "Buscando torrents exclusivos para ${if (isMovie) "película" else epCode}..."
@@ -1277,17 +1289,92 @@ class DetailActivity : AppCompatActivity() {
 
                     progressBar.visibility = View.GONE
                     if (results.isEmpty()) {
+                        scrollProviderFilters.visibility = View.GONE
                         txtEmpty.visibility = View.VISIBLE
                         txtEmpty.text = "No se encontraron torrents para $epCode.\nPuedes verificar los ajustes de Jackett / Prowlarr o reproducir desde Web."
                         recycler.visibility = View.GONE
                     } else {
-                        txtEmpty.visibility = View.GONE
-                        recycler.visibility = View.VISIBLE
-                        adapter.updateList(results)
+                        var activeProviderKey = "all"
+                        fun applyProviderFilter() {
+                            val filtered = if (activeProviderKey == "all") {
+                                results
+                            } else {
+                                results.filter { getProviderKey(it) == activeProviderKey }
+                            }
+                            if (filtered.isEmpty()) {
+                                txtEmpty.visibility = View.VISIBLE
+                                txtEmpty.text = "No se encontraron torrents para este proveedor."
+                                recycler.visibility = View.GONE
+                            } else {
+                                txtEmpty.visibility = View.GONE
+                                recycler.visibility = View.VISIBLE
+                                adapter.updateList(filtered)
+                            }
+                        }
+
+                        val providerGroups = results.groupBy { getProviderKey(it) }
+                        rgProviderFilters.removeAllViews()
+
+                        if (providerGroups.size > 1) {
+                            val density = resources.displayMetrics.density
+                            fun dp(v: Int) = (v * density).toInt()
+
+                            fun createProviderChip(text: String, tagValue: String, isChecked: Boolean): RadioButton {
+                                return RadioButton(this@DetailActivity).apply {
+                                    id = View.generateViewId()
+                                    this.text = text
+                                    tag = tagValue
+                                    buttonDrawable = null
+                                    background = ContextCompat.getDrawable(this@DetailActivity, R.drawable.bg_filter_chip_selector)
+                                    setTextColor(ContextCompat.getColorStateList(this@DetailActivity, R.color.color_filter_chip_text))
+                                    textSize = 12f
+                                    typeface = Typeface.DEFAULT_BOLD
+                                    gravity = Gravity.CENTER
+                                    setPadding(dp(14), dp(6), dp(14), dp(6))
+                                    isFocusable = true
+                                    isFocusableInTouchMode = true
+                                    val params = RadioGroup.LayoutParams(
+                                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                                        dp(36)
+                                    ).apply {
+                                        if (rgProviderFilters.childCount > 0) {
+                                            marginStart = dp(8)
+                                        }
+                                    }
+                                    layoutParams = params
+                                    this.isChecked = isChecked
+                                }
+                            }
+
+                            // 1. All chip
+                            val allRb = createProviderChip("🌟 Todos (${results.size})", "all", true)
+                            rgProviderFilters.addView(allRb)
+
+                            // 2. Individual provider chips
+                            providerGroups.keys.sorted().forEach { pKey ->
+                                val count = providerGroups[pKey]?.size ?: 0
+                                val label = "${getProviderDisplayLabel(pKey)} ($count)"
+                                val rb = createProviderChip(label, pKey, false)
+                                rgProviderFilters.addView(rb)
+                            }
+
+                            rgProviderFilters.setOnCheckedChangeListener { _, checkedId ->
+                                val checkedRb = dialogView.findViewById<RadioButton>(checkedId)
+                                activeProviderKey = checkedRb?.tag as? String ?: "all"
+                                applyProviderFilter()
+                            }
+
+                            scrollProviderFilters.visibility = View.VISIBLE
+                        } else {
+                            scrollProviderFilters.visibility = View.GONE
+                        }
+
+                        applyProviderFilter()
                         recycler.requestFocus()
                     }
                 } catch (e: Exception) {
                     if (e !is kotlinx.coroutines.CancellationException) {
+                        scrollProviderFilters.visibility = View.GONE
                         progressBar.visibility = View.GONE
                         txtEmpty.visibility = View.VISIBLE
                         txtEmpty.text = "Error al buscar torrents: ${e.message}"
@@ -1478,6 +1565,32 @@ class DetailActivity : AppCompatActivity() {
             }
             .setNegativeButton("Cancelar", null)
             .show()
+    }
+
+    private fun getProviderKey(item: TorrentStreamItem): String {
+        val p = item.provider.lowercase(Locale.ROOT)
+        return when {
+            p.startsWith("yts") -> "YTS"
+            p.startsWith("torrentio") -> "Torrentio"
+            p.startsWith("nyaa") -> "Nyaa"
+            p.startsWith("animetosho") || p.startsWith("tosho") -> "AnimeTosho"
+            p.startsWith("jackett") -> "Jackett"
+            p.startsWith("prowlarr") -> "Prowlarr"
+            else -> item.provider.split(" ").firstOrNull() ?: item.provider
+        }
+    }
+
+    private fun getProviderDisplayLabel(key: String): String {
+        return when (key) {
+            "all" -> "🌟 Todos"
+            "YTS" -> "🎬 YTS"
+            "Torrentio" -> "⚡ Torrentio"
+            "Nyaa" -> "🐱 Nyaa"
+            "AnimeTosho" -> "📦 Tosho"
+            "Jackett" -> "🔍 Jackett"
+            "Prowlarr" -> "🔍 Prowlarr"
+            else -> key
+        }
     }
 
 }

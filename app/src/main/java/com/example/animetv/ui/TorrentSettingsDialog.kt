@@ -33,6 +33,7 @@ object TorrentSettingsDialog {
         val rbQuality720p = dialogView.findViewById<RadioButton>(R.id.rbQuality720p)
         val rbQualityAll = dialogView.findViewById<RadioButton>(R.id.rbQualityAll)
         val chkAllow4k = dialogView.findViewById<CheckBox>(R.id.chkAllow4k)
+        val chkPreferSpanish = dialogView.findViewById<CheckBox>(R.id.chkPreferSpanish)
         val txtQualitySummary = dialogView.findViewById<TextView>(R.id.txtQualitySummary)
 
         val rgLanguage = dialogView.findViewById<RadioGroup>(R.id.rgLanguage)
@@ -98,6 +99,7 @@ object TorrentSettingsDialog {
             else -> rgQuality.check(R.id.rbQuality1080p)
         }
         chkAllow4k.isChecked = !TorrentSettingsStore.isDisallow4k(context)
+        chkPreferSpanish.isChecked = TorrentSettingsStore.isPreferSpanish(context)
 
         when (TorrentSettingsStore.getLanguageFilter(context)) {
             "spanish_only" -> rgLanguage.check(R.id.rbLangSpanish)
@@ -150,6 +152,7 @@ object TorrentSettingsDialog {
             }
             TorrentSettingsStore.setQualityFilter(context, qualityChoice)
             TorrentSettingsStore.setDisallow4k(context, !chkAllow4k.isChecked)
+            TorrentSettingsStore.setPreferSpanish(context, chkPreferSpanish.isChecked)
 
             val langChoice = when (rgLanguage.checkedRadioButtonId) {
                 R.id.rbLangSpanish -> "spanish_only"

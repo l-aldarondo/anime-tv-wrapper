@@ -157,6 +157,22 @@
 
         </LinearLayout>
 
+        <!-- Provider Filter Bar (Horizontal Tabs / Chips) -->
+        <HorizontalScrollView
+            android:id="@+id/scrollProviderFilters"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none"
+            android:layout_marginBottom="10dp"
+            android:visibility="gone">
+
+            <RadioGroup
+                android:id="@+id/rgProviderFilters"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
+
         <!-- Progress Spinner -->
         <ProgressBar
             android:id="@+id/progressBarTorrents"

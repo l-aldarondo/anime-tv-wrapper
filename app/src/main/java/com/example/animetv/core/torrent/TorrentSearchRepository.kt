@@ -57,7 +57,6 @@ object TorrentSearchRepository {
             async { if (jackettUrl.isNotEmpty()) fetchFromIndexer(jackettUrl, jackettKey, query, seasonNumber, episodeNumber, isMovie) else emptyList() },
             async { if (resolvedImdbId.isNotEmpty()) fetchFromTorrentio(resolvedImdbId, seasonNumber, episodeNumber, isMovie) else emptyList() },
             async { fetchFromYtsLu(query, originalQuery, englishQuery, seasonNumber, episodeNumber, isMovie, year) },
-            async { fetchFromEliteTorrent(query, originalQuery, seasonNumber, episodeNumber, isMovie) },
             async { fetchFromNyaa(query, englishQuery, episodeNumber, isMovie, isLiveAction) },
             async { fetchFromAnimeTosho(originalQuery.ifEmpty { query }, episodeNumber, isLiveAction) }
         )
@@ -68,8 +67,9 @@ object TorrentSearchRepository {
         val disallow4k = TorrentSettingsStore.isDisallow4k(context)
         val qualityFilter = TorrentSettingsStore.getQualityFilter(context)
         val languageFilter = TorrentSettingsStore.getLanguageFilter(context)
+        val preferSpanish = TorrentSettingsStore.isPreferSpanish(context)
 
-        rawResults.distinctBy { extractInfoHash(it.magnetUrl).ifEmpty { it.title } }
+        val filtered = rawResults.distinctBy { extractInfoHash(it.magnetUrl).ifEmpty { it.title } }
             .filter { isTitleRelevant(it.title, query, originalQuery, englishQuery, seasonNumber, episodeNumber, isMovie) }
             .filter { item ->
                 // 1. Max File Size filter (e.g. <= 1.5 GB, <= 3 GB)
@@ -106,7 +106,12 @@ object TorrentSearchRepository {
                     else -> true
                 }
             }
-            .sortedWith(compareBy({ it.languagePriority }, { -it.seeders }))
+
+        if (preferSpanish) {
+            filtered.sortedWith(compareBy({ it.languagePriority }, { -it.seeders }))
+        } else {
+            filtered.sortedWith(compareBy({ -it.seeders }))
+        }
     }
 
     suspend fun searchTorrentsDirectForTest(
@@ -217,173 +222,6 @@ object TorrentSearchRepository {
             if (list.size >= 15) break
         }
         list.distinctBy { extractInfoHash(it.magnetUrl).ifEmpty { it.title } }
-    }
-
-    private suspend fun fetchFromEliteTorrent(
-        query: String,
-        originalQuery: String,
-        seasonNumber: Int,
-        episodeNumber: Int,
-        isMovie: Boolean
-    ): List<TorrentStreamItem> = coroutineScope {
-        val list = mutableListOf<TorrentStreamItem>()
-        val candidates = listOfNotNull(
-            originalQuery.takeIf { it.isNotBlank() },
-            query.takeIf { it.isNotBlank() }
-        ).distinct()
-        if (candidates.isEmpty()) return@coroutineScope list
-
-        val epSuffix = if (!isMovie) String.format(Locale.US, "%dx%02d", seasonNumber, episodeNumber) else ""
-        val searchQueries = candidates.map { if (isMovie) it.trim() else "${it.trim()} $epSuffix" }
-
-        val mirrors = listOf("https://www.elitetorrent.com")
-        for (baseUrl in mirrors) {
-            try {
-                for (searchQuery in searchQueries) {
-                    val searchUrl = "$baseUrl/?s=${URLEncoder.encode(searchQuery, "UTF-8")}"
-                    android.util.Log.d("EliteTorrent", "Searching: $searchUrl")
-                    val request = Request.Builder()
-                        .url(searchUrl)
-                        .header("User-Agent", userAgent)
-                        .header("Referer", "$baseUrl/")
-                        .build()
-                    val response = client.newCall(request).execute()
-                    if (!response.isSuccessful) continue
-
-                    val html = response.body?.string() ?: ""
-                    val doc = Jsoup.parse(html, baseUrl)
-                    var links = doc.select(".meta a.nombre, .miniboxs li a, a.nombre, .post_box a, article a")
-                        .mapNotNull { it.absUrl("href").takeIf { u -> u.contains("/peliculas/") || u.contains("/series/") } }
-                        .distinct()
-
-                    // Fallback to searching all a tags with href matching /peliculas/ or /series/
-                    if (links.isEmpty()) {
-                        links = doc.select("a[href]")
-                            .map { it.absUrl("href") }
-                            .filter { u ->
-                                (u.contains("/peliculas/") || u.contains("/series/")) &&
-                                        !u.endsWith("/peliculas/") && !u.endsWith("/series/") &&
-                                        !u.contains("/genero/") && !u.contains("/estreno/")
-                            }
-                            .distinct()
-                    }
-
-                    android.util.Log.d("EliteTorrent", "Found ${links.size} candidate links for $searchQuery")
-                    if (links.isEmpty()) continue
-
-                    val itemJobs = links.take(6).map { pageUrl ->
-                        async(Dispatchers.IO) {
-                            extractEliteTorrentItem(pageUrl, baseUrl)
-                        }
-                    }
-                    val items = itemJobs.awaitAll().filterNotNull()
-                    list.addAll(items)
-                    if (list.isNotEmpty()) break
-                }
-                if (list.isNotEmpty()) break
-            } catch (e: Exception) {
-                android.util.Log.e("EliteTorrent", "Error querying mirror $baseUrl", e)
-            }
-        }
-        list
-    }
-
-    private fun extractEliteTorrentItem(pageUrl: String, baseUrl: String): TorrentStreamItem? {
-        return try {
-            val pageReq = Request.Builder()
-                .url(pageUrl)
-                .header("User-Agent", userAgent)
-                .header("Referer", "$baseUrl/")
-                .build()
-            client.newCall(pageReq).execute().use { pageRes ->
-                if (!pageRes.isSuccessful) return null
-                val html = pageRes.body?.string() ?: return null
-                val doc = Jsoup.parse(html, baseUrl)
-
-                val pageTitle = doc.selectFirst("h1, .titulo, .entry-title")?.text()?.trim() ?: "EliteTorrent Item"
-                var resolvedMagnet = ""
-
-                val iMatches = Regex("""[?&]i=([^"'\s&<>]+)""").findAll(html)
-                for (m in iMatches) {
-                    val encoded = m.groupValues[1]
-                    val decoded = decodeEliteMagnet(encoded).replace("&amp;", "&")
-                    android.util.Log.d("EliteTorrent", "Decoded magnet/link: $decoded")
-                    if (decoded.startsWith("magnet:?") || decoded.startsWith("http")) {
-                        resolvedMagnet = decoded
-                        break
-                    }
-                }
-
-                if (resolvedMagnet.isEmpty()) {
-                    resolvedMagnet = Regex("""magnet:\?xt=urn:btih:[a-zA-Z0-9]+[^"' \s<>]*""").find(html)?.value?.replace("&amp;", "&") ?: ""
-                }
-
-                if (resolvedMagnet.isNotEmpty()) {
-                    val isLatino = pageTitle.contains("latino", ignoreCase = true) || html.contains("latino", ignoreCase = true)
-                    val (lang, priority) = if (isLatino) Pair("🇲🇽 Latino", 1) else Pair("🇪🇸 Castellano", 2)
-                    val res = if (pageTitle.contains("1080p", ignoreCase = true) || html.contains("1080p", ignoreCase = true)) "1080p"
-                    else if (pageTitle.contains("720p", ignoreCase = true) || html.contains("720p", ignoreCase = true)) "720p"
-                    else "HDRip"
-
-                    val sizeMatch = Regex("""(?i)(?:tamaño|peso)[^0-9]*([\d\.]+\s*(?:gb|mb))""").find(html)
-                    val sizeFormatted = sizeMatch?.groupValues?.get(1)?.trim() ?: "Elite"
-                    val sizeBytes = parseSizeToBytes(sizeFormatted)
-
-                    TorrentStreamItem(
-                        title = pageTitle,
-                        magnetUrl = resolvedMagnet,
-                        seeders = 40,
-                        sizeBytes = sizeBytes,
-                        sizeFormatted = sizeFormatted,
-                        resolutionBadge = res,
-                        languageBadge = lang,
-                        languagePriority = priority,
-                        provider = "EliteTorrent"
-                    )
-                } else {
-                    android.util.Log.w("EliteTorrent", "No magnet resolved on page $pageUrl")
-                    null
-                }
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("EliteTorrent", "Error extracting item from $pageUrl", e)
-            null
-        }
-    }
-
-    /**
-     * EliteTorrent encodes magnet links in acortame-esto.com using 5-layer Base64 + ROT13 cipher.
-     * Decodes it mathematically without visiting the ad-shortener site.
-     */
-    private fun decodeEliteMagnet(paramI: String): String {
-        return try {
-            // Keep '+' intact for Base64 (do NOT use URLDecoder directly as it turns '+' into ' ')
-            var cur = paramI.replace(" ", "+").trim()
-            for (i in 0 until 5) {
-                val clean = cur.replace("\n", "").replace("\r", "").replace(" ", "+").trim()
-                val bytes = android.util.Base64.decode(clean, android.util.Base64.DEFAULT)
-                cur = String(bytes, Charsets.UTF_8).trim()
-            }
-            val sb = StringBuilder(cur.length)
-            for (c in cur) {
-                when (c) {
-                    in 'a'..'z' -> sb.append(((c - 'a' + 13) % 26 + 'a'.code).toChar())
-                    in 'A'..'Z' -> sb.append(((c - 'A' + 13) % 26 + 'A'.code).toChar())
-                    else -> sb.append(c)
-                }
-            }
-            val res = sb.toString()
-            when {
-                res.startsWith("magnet:?") -> res
-                res.contains(".torrent") -> {
-                    if (res.startsWith("http")) res else "https://www.elitetorrent.com" + if (res.startsWith("/")) res else "/$res"
-                }
-                else -> res
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("EliteTorrent", "Error decoding param: $paramI", e)
-            ""
-        }
     }
 
     private fun isTitleRelevant(
