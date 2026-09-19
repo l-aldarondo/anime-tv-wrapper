@@ -89,9 +89,6 @@ class ContinueWatchingCardAdapter(
                 if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT && pos >= items.size - 1) {
                     return@setOnKeyListener true // Clamp at end of row
                 }
-                if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT && pos <= 0) {
-                    return@setOnKeyListener true // Clamp at start of row
-                }
             }
             false
         }

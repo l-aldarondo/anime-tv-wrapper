@@ -43,10 +43,6 @@ class TvRowLayoutManager(context: Context) : LinearLayoutManager(context, HORIZO
                 if (direction == View.FOCUS_RIGHT && position >= count - 1) {
                     return focused
                 }
-                // If moving left on the first item, trap focus on the same card
-                if (direction == View.FOCUS_LEFT && position <= 0) {
-                    return focused
-                }
             }
         }
         return super.onInterceptFocusSearch(focused, direction)

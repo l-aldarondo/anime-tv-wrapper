@@ -82,7 +82,7 @@ class AnimeCardAdapter(
                     } catch (_: Exception) { null }
                 }
 
-                if (isActive && meta != null && meta.posterUrl.isNotEmpty()) {
+                if (isActive && meta != null && meta.posterUrl.isNotEmpty() && validPoster.isEmpty()) {
                     Glide.with(holder.itemView)
                         .load(meta.posterUrl)
                         .centerCrop()
@@ -112,9 +112,6 @@ class AnimeCardAdapter(
                         if (pos == RecyclerView.NO_POSITION) return@setOnKeyListener false
                         if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT && pos >= items.size - 1) {
                             return@setOnKeyListener true // Clamp at end of row
-                        }
-                        if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT && pos <= 0) {
-                            return@setOnKeyListener true // Clamp at start of row
                         }
                     }
                     false

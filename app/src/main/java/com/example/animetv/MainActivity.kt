@@ -71,6 +71,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var txtHeroImdbScore: TextView
     private lateinit var txtHeroSynopsis: TextView
 
+    // Left Navigation Drawer Views (Auto-Hide Overlay)
+    private lateinit var layoutNavRail: LinearLayout
+    private var isNavSidebarOpen = false
+    private var lastFocusedCardView: View? = null
+
     // Top Header Navigation Buttons
     private lateinit var btnNavCatalog: Button
     private lateinit var btnNavMyList: Button
@@ -143,6 +148,7 @@ class MainActivity : AppCompatActivity() {
         txtHeroImdbScore = findViewById(R.id.txtHeroImdbScore)
         txtHeroSynopsis = findViewById(R.id.txtHeroSynopsis)
 
+        layoutNavRail = findViewById(R.id.layoutNavRail)
         btnNavCatalog = findViewById(R.id.btnNavCatalog)
         btnNavMyList = findViewById(R.id.btnNavMyList)
         btnNavSearch = findViewById(R.id.btnNavSearch)
@@ -250,14 +256,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
-        // Red highlight dynamically follows focus; default focus on Catálogo
-        btnNavCatalog.requestFocus()
-
         val sidebarButtons = listOf(btnNavCatalog, btnNavMyList, btnNavSearch, btnNavRefresh, btnNavSettings)
         for (btn in sidebarButtons) {
             btn.setOnKeyListener { _, keyCode, event ->
                 if (event.action == android.view.KeyEvent.ACTION_DOWN && keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT) {
-                    focusFirstCard()
+                    closeNavSidebar()
                     return@setOnKeyListener true
                 }
                 false
@@ -265,25 +268,153 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnNavCatalog.setOnClickListener {
+            closeNavSidebar()
             scrollMain.smoothScrollTo(0, 0)
             focusFirstCard()
         }
 
         btnNavMyList.setOnClickListener {
+            closeNavSidebar()
             scrollToMyListRow()
         }
 
         btnNavSearch.setOnClickListener {
+            closeNavSidebar()
             showSearchDialog()
         }
 
         btnNavRefresh.setOnClickListener {
+            closeNavSidebar()
             fetchCatalog(forceRefresh = true, isSilent = false)
         }
 
         btnNavSettings.setOnClickListener {
+            closeNavSidebar()
             com.example.animetv.ui.TorrentSettingsDialog.show(this)
         }
+    }
+
+    private fun openNavSidebar() {
+        if (isNavSidebarOpen) return
+        isNavSidebarOpen = true
+        lastFocusedCardView = currentFocus
+        layoutNavRail.visibility = View.VISIBLE
+        val width = if (layoutNavRail.width > 0) layoutNavRail.width.toFloat() else (160 * resources.displayMetrics.density)
+        layoutNavRail.translationX = -width
+        layoutNavRail.alpha = 0f
+        layoutNavRail.animate()
+            .translationX(0f)
+            .alpha(1f)
+            .setDuration(200)
+            .withEndAction {
+                btnNavCatalog.requestFocus()
+            }
+            .start()
+    }
+
+    private fun closeNavSidebar() {
+        if (!isNavSidebarOpen) return
+        isNavSidebarOpen = false
+        val width = if (layoutNavRail.width > 0) layoutNavRail.width.toFloat() else (160 * resources.displayMetrics.density)
+        layoutNavRail.animate()
+            .translationX(-width)
+            .alpha(0f)
+            .setDuration(180)
+            .withEndAction {
+                layoutNavRail.visibility = View.GONE
+                val target = lastFocusedCardView
+                if (target != null && target.isAttachedToWindow) {
+                    target.requestFocus()
+                } else {
+                    focusFirstCard()
+                }
+            }
+            .start()
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        if (isNavSidebarOpen) {
+            closeNavSidebar()
+            return
+        }
+        super.onBackPressed()
+    }
+
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+            // Case 1: If sidebar is currently open, DPAD_RIGHT or BACK closes it and restores focus to card
+            if (isNavSidebarOpen) {
+                if (event.keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT ||
+                    event.keyCode == android.view.KeyEvent.KEYCODE_BACK) {
+                    closeNavSidebar()
+                    return true
+                }
+                return super.dispatchKeyEvent(event)
+            }
+
+            // Case 2: D-pad navigation on catalog cards
+            val focused = currentFocus
+            val recycler = findParentRowRecycler(focused)
+            if (recycler != null) {
+                val lm = recycler.layoutManager as? LinearLayoutManager
+                val cardView = recycler.findContainingItemView(focused ?: return super.dispatchKeyEvent(event))
+                val pos = if (cardView != null && lm != null) lm.getPosition(cardView) else RecyclerView.NO_POSITION
+                val count = recycler.adapter?.itemCount ?: 0
+
+                when (event.keyCode) {
+                    android.view.KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        if (pos <= 0) {
+                            openNavSidebar()
+                            return true
+                        }
+                        val targetPos = pos - 1
+                        val prevView = lm?.findViewByPosition(targetPos)
+                        if (prevView != null) {
+                            prevView.requestFocus()
+                        } else {
+                            recycler.scrollToPosition(targetPos)
+                            recycler.post {
+                                lm?.findViewByPosition(targetPos)?.requestFocus()
+                            }
+                        }
+                        return true
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        if (pos >= count - 1 && count > 0) {
+                            // Strictly clamp at row end. NEVER escape to row above!
+                            return true
+                        }
+                        val targetPos = if (pos != RecyclerView.NO_POSITION) pos + 1 else {
+                            (lm?.findFirstVisibleItemPosition() ?: 0) + 1
+                        }.coerceAtMost((count - 1).coerceAtLeast(0))
+
+                        val nextView = lm?.findViewByPosition(targetPos)
+                        if (nextView != null) {
+                            nextView.requestFocus()
+                        } else {
+                            recycler.scrollToPosition(targetPos)
+                            recycler.post {
+                                lm?.findViewByPosition(targetPos)?.requestFocus()
+                            }
+                        }
+                        return true // 100% CONSUMED. FocusFinder never runs!
+                    }
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    private fun findParentRowRecycler(view: View?): RecyclerView? {
+        var curr: Any? = view
+        while (curr is View) {
+            if (curr is RecyclerView && curr.id == R.id.recyclerRowCards) {
+                return curr
+            }
+            curr = curr.parent
+        }
+        return null
     }
 
     private fun scrollToMyListRow() {

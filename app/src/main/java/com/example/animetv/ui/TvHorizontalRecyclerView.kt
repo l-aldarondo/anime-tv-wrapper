@@ -44,7 +44,7 @@ class TvHorizontalRecyclerView @JvmOverloads constructor(
                                 nextChild.requestFocus()
                                 return true
                             } else {
-                                smoothScrollToPosition(pos + 1)
+                                scrollToPosition(pos + 1)
                                 post {
                                     lm.findViewByPosition(pos + 1)?.requestFocus()
                                 }
@@ -61,7 +61,7 @@ class TvHorizontalRecyclerView @JvmOverloads constructor(
                                 prevChild.requestFocus()
                                 return true
                             } else {
-                                smoothScrollToPosition(pos - 1)
+                                scrollToPosition(pos - 1)
                                 post {
                                     lm.findViewByPosition(pos - 1)?.requestFocus()
                                 }
