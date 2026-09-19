@@ -174,7 +174,7 @@
             android:layout_height="0dp"
             android:layout_weight="1">
 
-            <androidx.core.widget.NestedScrollView
+            <com.example.animetv.ui.TvNestedScrollView
                 android:id="@+id/scrollMain"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
@@ -193,7 +193,7 @@
                     android:paddingTop="0dp"
                     android:paddingBottom="40dp" />
 
-            </androidx.core.widget.NestedScrollView>
+            </com.example.animetv.ui.TvNestedScrollView>
 
             <!-- Global Progress Bar -->
             <ProgressBar

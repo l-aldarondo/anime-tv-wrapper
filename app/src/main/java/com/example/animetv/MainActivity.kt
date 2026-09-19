@@ -204,19 +204,6 @@ class MainActivity : AppCompatActivity() {
         }
         val onCardFocus: (AnimeCard) -> Unit = { card ->
             onCardFocused(card)
-            val rowTop = rowView.top
-            val rowBottom = rowView.bottom
-            val scrollY = scrollMain.scrollY
-            val vHeight = scrollMain.height
-            if (vHeight > 0) {
-                if (rowBottom > scrollY + vHeight) {
-                    val delta = (rowBottom - (scrollY + vHeight)) + (24 * resources.displayMetrics.density).toInt()
-                    scrollMain.smoothScrollBy(0, delta)
-                } else if (rowTop < scrollY) {
-                    val delta = (rowTop - scrollY) - (16 * resources.displayMetrics.density).toInt()
-                    scrollMain.smoothScrollBy(0, delta)
-                }
-            }
         }
         val onCardClick: (AnimeCard) -> Unit = { card ->
             if (card.detailUrl.isNotEmpty()) {
