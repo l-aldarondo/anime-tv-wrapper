@@ -241,30 +241,131 @@ class DetailActivity : AppCompatActivity() {
         }
     }
 
+    data class TargetEpisodeResult(
+        val episode: AnimeEpisode,
+        val targetSeason: Int,
+        val isResume: Boolean,
+        val actionText: String
+    )
+
+    private fun findNextChronologicalEpisode(currentEp: AnimeEpisode, allEpisodes: List<AnimeEpisode>): AnimeEpisode? {
+        if (allEpisodes.isEmpty()) return null
+        val sorted = allEpisodes.sortedWith(compareBy({ if (it.seasonNumber > 0) it.seasonNumber else 1 }, { it.episodeNumber }))
+        val curSeason = if (currentEp.seasonNumber > 0) currentEp.seasonNumber else 1
+        val curIndex = sorted.indexOfFirst {
+            (it.episodeUrl.isNotEmpty() && it.episodeUrl == currentEp.episodeUrl) ||
+            (it.episodeNumber == currentEp.episodeNumber && (if (it.seasonNumber > 0) it.seasonNumber else 1) == curSeason)
+        }
+        return if (curIndex >= 0 && curIndex < sorted.size - 1) sorted[curIndex + 1] else null
+    }
+
+    private fun resolveActiveOrNextEpisode(): TargetEpisodeResult? {
+        val card = currentCard ?: return null
+        val record = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this, card.detailUrl)
+
+        if (record != null) {
+            val recSeason = if (record.seasonNumber > 0) record.seasonNumber else 1
+            val matchedEp = rawEpisodes.firstOrNull {
+                (it.episodeUrl.isNotEmpty() && it.episodeUrl == record.episodeUrl) ||
+                ((if (it.seasonNumber > 0) it.seasonNumber else 1) == recSeason && it.episodeNumber == record.episodeNumber) ||
+                (record.seasonNumber <= 0 && it.episodeNumber == record.episodeNumber)
+            }
+            val currentEp = matchedEp ?: AnimeEpisode(
+                episodeNumber = record.episodeNumber,
+                seasonNumber = recSeason,
+                title = record.episodeTitle,
+                episodeUrl = record.episodeUrl
+            )
+
+            val isExplicitUnwatched = WatchedEpisodeStore.isEpisodeExplicitlyUnwatched(
+                this, card.detailUrl, recSeason, record.episodeNumber, record.episodeUrl
+            )
+            val isExplicitWatched = WatchedEpisodeStore.isEpisodeWatched(
+                this, card.detailUrl, recSeason, record.episodeNumber, record.episodeUrl
+            )
+            val isHistoryCompleted = record.durationMs > 0 && record.positionMs >= (record.durationMs * 0.85f)
+            val isEpisodeFinished = !isExplicitUnwatched && (isExplicitWatched || isHistoryCompleted)
+
+            if (isEpisodeFinished) {
+                // Current episode finished -> find next chronological episode
+                val nextEp = findNextChronologicalEpisode(currentEp, rawEpisodes)
+                if (nextEp != null) {
+                    val nextSeason = if (nextEp.seasonNumber > 0) nextEp.seasonNumber else 1
+                    val btnText = if (isCurrentMovie) "▶ Reproducir" else "▶ Next S$nextSeason E${nextEp.episodeNumber}"
+                    return TargetEpisodeResult(
+                        episode = nextEp,
+                        targetSeason = nextSeason,
+                        isResume = false,
+                        actionText = btnText
+                    )
+                } else {
+                    // All episodes finished / finale
+                    val firstEp = rawEpisodes.firstOrNull() ?: currentEp
+                    val firstSeason = if (firstEp.seasonNumber > 0) firstEp.seasonNumber else 1
+                    return TargetEpisodeResult(
+                        episode = firstEp,
+                        targetSeason = firstSeason,
+                        isResume = false,
+                        actionText = if (isCurrentMovie) "▶ Ver de nuevo" else "▶ Ver de nuevo (S1 E1)"
+                    )
+                }
+            } else {
+                // In progress (or unwatched): resume current episode
+                val epSeason = if (currentEp.seasonNumber > 0) currentEp.seasonNumber else recSeason
+                val btnText = if (isCurrentMovie) "▶ Continuar" else "▶ Continuar S$epSeason E${currentEp.episodeNumber}"
+                return TargetEpisodeResult(
+                    episode = currentEp,
+                    targetSeason = epSeason,
+                    isResume = true,
+                    actionText = btnText
+                )
+            }
+        } else if (rawEpisodes.isNotEmpty()) {
+            val sorted = rawEpisodes.sortedWith(compareBy({ if (it.seasonNumber > 0) it.seasonNumber else 1 }, { it.episodeNumber }))
+            val firstUnwatched = sorted.firstOrNull { ep ->
+                val s = if (ep.seasonNumber > 0) ep.seasonNumber else 1
+                !WatchedEpisodeStore.isEpisodeWatched(this, card.detailUrl, s, ep.episodeNumber, ep.episodeUrl)
+            } ?: sorted.first()
+
+            val targetSeason = if (firstUnwatched.seasonNumber > 0) firstUnwatched.seasonNumber else 1
+            val isFirst = (firstUnwatched == sorted.first())
+            val btnText = if (isCurrentMovie) {
+                "▶ Reproducir"
+            } else if (isFirst) {
+                "▶ Reproducir S$targetSeason E${firstUnwatched.episodeNumber}"
+            } else {
+                "▶ Next S$targetSeason E${firstUnwatched.episodeNumber}"
+            }
+            return TargetEpisodeResult(
+                episode = firstUnwatched,
+                targetSeason = targetSeason,
+                isResume = false,
+                actionText = btnText
+            )
+        }
+
+        return null
+    }
+
     private fun refreshPlaybackState() {
         val card = currentCard ?: return
-        val record = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this, card.detailUrl)
-        
-        if (record != null) {
-            val matchedEp = rawEpisodes.firstOrNull { it.episodeUrl == record.episodeUrl || it.episodeNumber == record.episodeNumber }
-            val sNum = matchedEp?.seasonNumber?.takeIf { it > 0 } ?: selectedSeason
-            val eNum = record.episodeNumber
-            btnPlayFirst.text = if (isCurrentMovie) "▶ Continuar" else "▶ Next S$sNum E$eNum"
+        val target = resolveActiveOrNextEpisode()
+
+        if (target != null) {
+            val ep = target.episode
+            btnPlayFirst.text = target.actionText
             btnPlayFirst.setOnClickListener {
-                // Play last watched episode with auto-resume
                 val detail = currentDetail
-                val ep = matchedEp ?: AnimeEpisode(record.episodeNumber, sNum, record.episodeTitle, record.episodeUrl)
                 if (detail != null) {
-                    playEpisode(detail, ep, startOver = false)
+                    playEpisode(detail, ep, startOver = !target.isResume)
                 } else {
-                    playEpisodeDirect(card, ep, startOver = false)
+                    playEpisodeDirect(card, ep, startOver = !target.isResume)
                 }
             }
 
-            // Long-click on Continuar to restart from beginning
+            // Long-click to restart from beginning
             btnPlayFirst.setOnLongClickListener {
                 val detail = currentDetail
-                val ep = matchedEp ?: AnimeEpisode(record.episodeNumber, sNum, record.episodeTitle, record.episodeUrl)
                 Toast.makeText(this, "↺ Reiniciando ${ep.title} desde el inicio...", Toast.LENGTH_SHORT).show()
                 if (detail != null) {
                     playEpisode(detail, ep, startOver = true)
@@ -274,13 +375,12 @@ class DetailActivity : AppCompatActivity() {
                 true
             }
 
-            // Show dedicated Restart button if user has watched more than 5s
-            if (record.positionMs > 5000) {
+            val record = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this, card.detailUrl)
+            if (target.isResume && record != null && record.positionMs > 5000) {
                 btnRestartEpisode.visibility = View.VISIBLE
                 btnRestartEpisode.text = "↺"
                 btnRestartEpisode.setOnClickListener {
                     val detail = currentDetail
-                    val ep = matchedEp ?: AnimeEpisode(record.episodeNumber, sNum, record.episodeTitle, record.episodeUrl)
                     Toast.makeText(this, "↺ Reiniciando ${ep.title} desde el inicio...", Toast.LENGTH_SHORT).show()
                     if (detail != null) {
                         playEpisode(detail, ep, startOver = true)
@@ -291,23 +391,25 @@ class DetailActivity : AppCompatActivity() {
             } else {
                 btnRestartEpisode.visibility = View.GONE
             }
-        } else if (rawEpisodes.isNotEmpty()) {
-            val firstEp = rawEpisodes.first()
-            val sNum = if (firstEp.seasonNumber > 0) firstEp.seasonNumber else 1
-            btnPlayFirst.text = if (isCurrentMovie) "▶ Reproducir" else "▶ Next S$sNum E${firstEp.episodeNumber}"
+
+            // Refresh progress indicators on current cards without destroying viewholders
+            episodeAdapter?.updateRecord(record)
+        } else {
+            btnPlayFirst.text = if (isCurrentMovie) "▶ Película" else "▶ Reproducir"
             btnPlayFirst.setOnLongClickListener(null)
             btnPlayFirst.setOnClickListener {
-                currentDetail?.let { playEpisode(it, firstEp, startOver = false) }
+                currentDetail?.let { playDirectUrl(it.detailUrl, it.title) }
             }
-            btnRestartEpisode.visibility = View.GONE
-        } else {
-            btnPlayFirst.text = "▶ Reproducir"
             btnRestartEpisode.visibility = View.GONE
         }
 
         btnPlayTorrent.text = "⚡ Torrent"
-
-        displayEpisodesForSeason(selectedSeason)
+        btnPlayTorrent.setOnClickListener {
+            val ep = target?.episode ?: currentlyFocusedEpisode ?: rawEpisodes.firstOrNull()
+            if (ep != null) {
+                showTorrentSelectorDialog(ep)
+            }
+        }
     }
 
     private fun getSortedEpisodes(list: List<AnimeEpisode>, ascending: Boolean): List<AnimeEpisode> {
@@ -326,15 +428,32 @@ class DetailActivity : AppCompatActivity() {
         currentlyFocusedEpisode = ep
         val sNum = if (ep.seasonNumber > 0) ep.seasonNumber else selectedSeason
         val eNum = ep.episodeNumber
+        val card = currentCard
+        val rec = card?.let { PlaybackHistoryStore.getRecordForAnime(this, it.detailUrl) }
+        val isSameEp = rec != null && (
+            (ep.episodeUrl.isNotEmpty() && rec.episodeUrl.trimEnd('/') == ep.episodeUrl.trimEnd('/')) ||
+            (rec.episodeNumber == eNum && (if (rec.seasonNumber > 0) rec.seasonNumber else 1) == sNum)
+        )
+        val isExplicitWatched = card?.let { WatchedEpisodeStore.isEpisodeWatched(this, it.detailUrl, sNum, eNum, ep.episodeUrl) } ?: false
+        val isExplicitUnwatched = card?.let { WatchedEpisodeStore.isEpisodeExplicitlyUnwatched(this, it.detailUrl, sNum, eNum, ep.episodeUrl) } ?: false
+        val isHistoryCompleted = isSameEp && rec!!.durationMs > 0 && rec.positionMs >= (rec.durationMs * 0.85f)
+        val isWatched = if (isExplicitUnwatched) false else (isExplicitWatched || isHistoryCompleted)
+
         if (isCurrentMovie) {
-            btnPlayFirst.text = "▶ Reproducir"
+            btnPlayFirst.text = if (isSameEp && rec!!.positionMs > 5000 && !isWatched) "▶ Continuar" else "▶ Reproducir"
         } else {
-            btnPlayFirst.text = "▶ Next S$sNum E$eNum"
+            if (isSameEp && rec!!.positionMs > 5000 && !isWatched) {
+                btnPlayFirst.text = "▶ Continuar S$sNum E$eNum"
+            } else if (isWatched) {
+                btnPlayFirst.text = "▶ Ver de nuevo S$sNum E$eNum"
+            } else {
+                btnPlayFirst.text = "▶ Reproducir S$sNum E$eNum"
+            }
         }
         btnPlayTorrent.text = "⚡ Torrent"
         btnPlayFirst.setOnClickListener {
-            currentDetail?.let { playEpisode(it, ep, startOver = false) }
-                ?: currentCard?.let { playEpisodeDirect(it, ep, startOver = false) }
+            currentDetail?.let { playEpisode(it, ep, startOver = isWatched) }
+                ?: currentCard?.let { playEpisodeDirect(it, ep, startOver = isWatched) }
         }
         btnPlayTorrent.setOnClickListener {
             showTorrentSelectorDialog(ep)
@@ -649,13 +768,11 @@ class DetailActivity : AppCompatActivity() {
 
                 if (detail.episodes.isNotEmpty()) {
                     val uniqueSeasons = detail.episodes.map { if (it.seasonNumber > 0) it.seasonNumber else 1 }.distinct().sorted()
-                    val record = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this@DetailActivity, card.detailUrl)
+                    val targetRes = resolveActiveOrNextEpisode()
+                    val targetSeason = targetRes?.targetSeason ?: uniqueSeasons.firstOrNull() ?: 1
 
                     if (uniqueSeasons.isNotEmpty()) {
-                        val lastWatchedSeason = record?.let { rec ->
-                            detail.episodes.firstOrNull { it.episodeUrl == rec.episodeUrl || it.episodeNumber == rec.episodeNumber }?.seasonNumber
-                        } ?: uniqueSeasons.first()
-                        selectedSeason = if (uniqueSeasons.contains(lastWatchedSeason)) lastWatchedSeason else uniqueSeasons.first()
+                        selectedSeason = if (uniqueSeasons.contains(targetSeason)) targetSeason else uniqueSeasons.first()
 
                         recyclerSeasons.visibility = View.VISIBLE
                         val sAdapter = SeasonCapsuleAdapter(uniqueSeasons, selectedSeason) { chosenSeason ->
@@ -664,6 +781,10 @@ class DetailActivity : AppCompatActivity() {
                         }
                         seasonAdapter = sAdapter
                         recyclerSeasons.adapter = sAdapter
+                        val sPos = uniqueSeasons.indexOf(selectedSeason)
+                        if (sPos > 0) {
+                            recyclerSeasons.scrollToPosition(sPos)
+                        }
                     }
 
                     val initialEpisodes = if (uniqueSeasons.size > 1) {
@@ -673,6 +794,7 @@ class DetailActivity : AppCompatActivity() {
                     }
                     val sortedList = getSortedEpisodes(initialEpisodes, isAscendingOrder)
                     val showPoster = CoverUtils.pickBestCover(currentTmdbMeta?.posterUrl ?: detail.posterUrl, card.posterUrl)
+                    val record = com.example.animetv.core.history.PlaybackHistoryStore.getRecordForAnime(this@DetailActivity, card.detailUrl)
                     val adapter = EpisodeAdapter(
                         episodes = sortedList,
                         animeDetailUrl = card.detailUrl,
@@ -692,14 +814,21 @@ class DetailActivity : AppCompatActivity() {
                         },
                         onWatchedChanged = {
                             refreshWatchedButtonState()
+                            refreshPlaybackState()
                         }
                     )
                     episodeAdapter = adapter
                     recyclerEpisodes.adapter = adapter
                     if (sortedList.isNotEmpty()) {
-                        val resumeIndex = record?.let { rec ->
-                            sortedList.indexOfFirst { it.episodeUrl == rec.episodeUrl || it.episodeNumber == rec.episodeNumber }
-                        }?.takeIf { it >= 0 } ?: 0
+                        val targetEp = targetRes?.episode
+                        val resumeIndex = if (targetEp != null) {
+                            sortedList.indexOfFirst {
+                                (it.episodeUrl.isNotEmpty() && it.episodeUrl == targetEp.episodeUrl) ||
+                                (it.episodeNumber == targetEp.episodeNumber)
+                            }.takeIf { it >= 0 } ?: 0
+                        } else {
+                            0
+                        }
                         bindFocusedEpisode(sortedList[resumeIndex])
                         if (resumeIndex > 0) {
                             recyclerEpisodes.scrollToPosition(resumeIndex)
@@ -811,8 +940,17 @@ class DetailActivity : AppCompatActivity() {
                         )
                         val msg = if (nowWatched) "✓ Episodio $eNum marcado como visto" else "↩ Episodio $eNum marcado como no visto"
                         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-                        episodeAdapter?.notifyDataSetChanged()
+                        val pos = episodeAdapter?.getEpisodePosition(ep) ?: -1
+                        if (pos >= 0) {
+                            episodeAdapter?.notifyItemChanged(pos)
+                            recyclerEpisodes.post {
+                                recyclerEpisodes.findViewHolderForAdapterPosition(pos)?.itemView?.requestFocus()
+                            }
+                        } else {
+                            episodeAdapter?.notifyDataSetChanged()
+                        }
                         refreshWatchedButtonState()
+                        refreshPlaybackState()
                     }
                 }
             }
@@ -908,7 +1046,10 @@ class DetailActivity : AppCompatActivity() {
         }
         seasonAdapter = sAdapter
         recyclerSeasons.adapter = sAdapter
-
+        val sPos = seasonList.indexOf(selectedSeason)
+        if (sPos > 0) {
+            recyclerSeasons.scrollToPosition(sPos)
+        }
     }
 
     /**

@@ -67,6 +67,23 @@ class EpisodeAdapter(
         notifyDataSetChanged()
     }
 
+    fun getEpisodes(): List<AnimeEpisode> = episodes
+
+    fun getEpisodePosition(ep: AnimeEpisode): Int {
+        val targetSeason = if (ep.seasonNumber > 0) ep.seasonNumber else 1
+        return episodes.indexOfFirst {
+            (it.episodeUrl.isNotEmpty() && it.episodeUrl == ep.episodeUrl) ||
+            (it.episodeNumber == ep.episodeNumber && (if (it.seasonNumber > 0) it.seasonNumber else 1) == targetSeason)
+        }
+    }
+
+    fun updateRecord(record: PlaybackRecord?) {
+        this.lastWatchedRecord = record
+        if (episodes.isNotEmpty()) {
+            notifyItemRangeChanged(0, episodes.size)
+        }
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_episode_card, parent, false)
@@ -120,6 +137,13 @@ class EpisodeAdapter(
             eNum,
             ep.episodeUrl
         )
+        val isExplicitUnwatched = WatchedEpisodeStore.isEpisodeExplicitlyUnwatched(
+            context,
+            animeDetailUrl,
+            sNum,
+            eNum,
+            ep.episodeUrl
+        )
 
         val rec = lastWatchedRecord
         val isSameEpisode = rec != null && (
@@ -129,7 +153,7 @@ class EpisodeAdapter(
         val isHistoryWatched = isSameEpisode &&
                 rec!!.durationMs > 0 && rec.positionMs >= (rec.durationMs * 0.85)
 
-        val isWatched = isExplicitWatched || isHistoryWatched
+        val isWatched = if (isExplicitUnwatched) false else (isExplicitWatched || isHistoryWatched)
         holder.watchedBadge.visibility = if (isWatched) View.VISIBLE else View.GONE
 
         // Playback progress indicator

@@ -119,16 +119,26 @@ object WatchedEpisodeStore {
         } else {
             watchedSet.remove(key)
             if (episodeUrl.isNotEmpty()) watchedSet.remove(episodeUrl.trimEnd('/'))
-            if (isFully) {
-                unwatchSet.add(key)
-                if (episodeUrl.isNotEmpty()) unwatchSet.add(episodeUrl.trimEnd('/'))
-            }
+            unwatchSet.add(key)
+            if (episodeUrl.isNotEmpty()) unwatchSet.add(episodeUrl.trimEnd('/'))
         }
 
         getPrefs(context).edit()
             .putStringSet(KEY_WATCHED_SET, watchedSet)
             .putStringSet(KEY_EXPLICIT_UNWATCHED, unwatchSet)
             .apply()
+    }
+
+    fun isEpisodeExplicitlyUnwatched(
+        context: Context,
+        animeDetailUrl: String,
+        seasonNumber: Int,
+        episodeNumber: Int,
+        episodeUrl: String = ""
+    ): Boolean {
+        val key = buildEpisodeKey(animeDetailUrl, seasonNumber, episodeNumber, episodeUrl)
+        val unwatchSet = getSet(context, KEY_EXPLICIT_UNWATCHED)
+        return unwatchSet.contains(key) || (episodeUrl.isNotEmpty() && unwatchSet.contains(episodeUrl.trimEnd('/')))
     }
 
     fun toggleEpisodeWatched(

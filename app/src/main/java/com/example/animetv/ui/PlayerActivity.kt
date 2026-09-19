@@ -224,6 +224,18 @@ class PlayerActivity : AppCompatActivity() {
                 durationMs = durMs,
                 synopsis = synopsis
             )
+
+            // Auto-mark episode watched if finished or passed 85%
+            if (durMs > 0 && posMs >= (durMs * 0.85f).toLong()) {
+                com.example.animetv.core.history.WatchedEpisodeStore.setEpisodeWatched(
+                    context = this,
+                    animeDetailUrl = animeDetailUrl,
+                    seasonNumber = seasonNumber,
+                    episodeNumber = episodeNumber,
+                    episodeUrl = episodeUrl,
+                    watched = true
+                )
+            }
         }
     }
 
@@ -431,6 +443,16 @@ class PlayerActivity : AppCompatActivity() {
                             Player.STATE_ENDED -> {
                                 playerBuffering.visibility = View.GONE
                                 showOsd()
+                                if (animeDetailUrl.isNotEmpty() || episodeUrl.isNotEmpty()) {
+                                    com.example.animetv.core.history.WatchedEpisodeStore.setEpisodeWatched(
+                                        context = this@PlayerActivity,
+                                        animeDetailUrl = animeDetailUrl,
+                                        seasonNumber = seasonNumber,
+                                        episodeNumber = episodeNumber,
+                                        episodeUrl = episodeUrl,
+                                        watched = true
+                                    )
+                                }
                             }
                             else -> {
                                 playerBuffering.visibility = View.GONE
