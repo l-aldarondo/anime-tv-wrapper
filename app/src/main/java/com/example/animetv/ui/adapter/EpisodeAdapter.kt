@@ -78,8 +78,9 @@ class EpisodeAdapter(
         val sNum = if (ep.seasonNumber > 0) ep.seasonNumber else 1
         val eNum = ep.episodeNumber
 
-        // Episode Badge (e.g. EPISODIO 11)
-        holder.badge.text = "EPISODIO $eNum"
+        // Episode Badge (e.g. T2 • E1 or EPISODIO 1)
+        val hasMultiSeason = sNum > 1 || episodes.any { it.seasonNumber > 1 }
+        holder.badge.text = if (hasMultiSeason) "T$sNum • E$eNum" else "EPISODIO $eNum"
         val cleanTitle = ep.title
             .replace(Regex("""^(?:Episodio|Episode|Capítulo|Capitulo|Cap\.?|Ep\.?)\s*\d+[\s:\.\-–—]*""", RegexOption.IGNORE_CASE), "")
             .replace(Regex("""^\d+[\s:\.\-–—]+"""), "")

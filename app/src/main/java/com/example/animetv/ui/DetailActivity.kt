@@ -353,11 +353,13 @@ class DetailActivity : AppCompatActivity() {
         episodeAdapter?.updateList(sortedList, record = record)
         if (sortedList.isNotEmpty()) {
             val focused = currentlyFocusedEpisode
-            val focusedIndex = focused?.let { f ->
-                sortedList.indexOfFirst { it.episodeUrl == f.episodeUrl || (((if (it.seasonNumber > 0) it.seasonNumber else 1) == season) && it.episodeNumber == f.episodeNumber) }
+            val focusedSeason = if ((focused?.seasonNumber ?: 0) > 0) focused!!.seasonNumber else selectedSeason
+            val focusedIndex = focused?.takeIf { focusedSeason == season }?.let { f ->
+                sortedList.indexOfFirst { it.episodeUrl == f.episodeUrl || it.episodeNumber == f.episodeNumber }
             }?.takeIf { it >= 0 }
-            val recordIndex = record?.let { rec ->
-                sortedList.indexOfFirst { it.episodeUrl == rec.episodeUrl || (((if (rec.seasonNumber > 0) rec.seasonNumber else 1) == season) && it.episodeNumber == rec.episodeNumber) }
+            val recordSeason = if ((record?.seasonNumber ?: 0) > 0) record!!.seasonNumber else 1
+            val recordIndex = record?.takeIf { recordSeason == season }?.let { rec ->
+                sortedList.indexOfFirst { it.episodeUrl == rec.episodeUrl || it.episodeNumber == rec.episodeNumber }
             }?.takeIf { it >= 0 }
             val resumeIndex = focusedIndex ?: recordIndex ?: 0
             bindFocusedEpisode(sortedList[resumeIndex])

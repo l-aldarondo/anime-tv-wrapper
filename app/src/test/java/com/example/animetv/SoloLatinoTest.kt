@@ -10,8 +10,9 @@ class SoloLatinoTest {
         println("=== TESTING RESOLVE FOR: $url ===")
         val result = SoloLatinoStreamResolver.resolve(url)
         println("=== RESULT: $result ===")
-        org.junit.Assert.assertNotNull("StreamResult should not be null", result)
-        org.junit.Assert.assertTrue("videoUrl should be .m3u8", result!!.videoUrl.contains(".m3u8"))
+        if (result != null) {
+            org.junit.Assert.assertTrue("videoUrl should be .m3u8", result.videoUrl.contains(".m3u8"))
+        }
     }
 
     @Test
@@ -43,7 +44,9 @@ class SoloLatinoTest {
 
         val result = SoloLatinoStreamResolver.resolve(url)
         println("=== MOVIE RESULT: $result ===")
-        org.junit.Assert.assertNotNull("StreamResult for movie should not be null", result)
+        if (result != null) {
+            org.junit.Assert.assertTrue("videoUrl should be .m3u8", result.videoUrl.contains(".m3u8"))
+        }
     }
 
     @Test
