@@ -235,8 +235,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
-        val sidebarButtons = listOf(btnNavCatalog, btnNavMyList, btnNavSearch, btnNavRefresh, btnNavSettings)
+        val sidebarButtons = listOf(btnNavSearch, btnNavCatalog, btnNavMyList, btnNavRefresh, btnNavSettings)
         for (btn in sidebarButtons) {
+            btn.isFocusable = true
+            btn.isFocusableInTouchMode = true
             btn.setOnKeyListener { _, keyCode, event ->
                 if (event.action == android.view.KeyEvent.ACTION_DOWN && keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT) {
                     closeNavSidebar()
@@ -244,6 +246,11 @@ class MainActivity : AppCompatActivity() {
                 }
                 false
             }
+        }
+
+        btnNavSearch.setOnClickListener {
+            closeNavSidebar()
+            showSearchDialog()
         }
 
         btnNavCatalog.setOnClickListener {
@@ -255,11 +262,6 @@ class MainActivity : AppCompatActivity() {
         btnNavMyList.setOnClickListener {
             closeNavSidebar()
             scrollToMyListRow()
-        }
-
-        btnNavSearch.setOnClickListener {
-            closeNavSidebar()
-            showSearchDialog()
         }
 
         btnNavRefresh.setOnClickListener {
@@ -321,17 +323,73 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
-        if (event.action == android.view.KeyEvent.ACTION_DOWN) {
-            // Case 1: If sidebar is currently open, DPAD_RIGHT or BACK closes it and restores focus to card
-            if (isNavSidebarOpen) {
-                if (event.keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT ||
-                    event.keyCode == android.view.KeyEvent.KEYCODE_BACK) {
-                    closeNavSidebar()
-                    return true
+        // Case 1: If sidebar is currently open, handle all sidebar navigation with 100% containment
+        if (isNavSidebarOpen) {
+            val sidebarButtons = listOf(
+                btnNavSearch,
+                btnNavCatalog,
+                btnNavMyList,
+                btnNavRefresh,
+                btnNavSettings
+            )
+            if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+                when (event.keyCode) {
+                    android.view.KeyEvent.KEYCODE_DPAD_RIGHT,
+                    android.view.KeyEvent.KEYCODE_BACK -> {
+                        closeNavSidebar()
+                        return true
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        // Clamp on the left edge: do not allow focus to jump or disappear
+                        return true
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        val currFocus = currentFocus
+                        val currIndex = sidebarButtons.indexOfFirst { it == currFocus || it.hasFocus() }
+                        if (currIndex in 0 until sidebarButtons.size - 1) {
+                            sidebarButtons[currIndex + 1].requestFocus()
+                        } else if (currIndex == -1) {
+                            sidebarButtons.first().requestFocus()
+                        }
+                        // Always consume DPAD_DOWN while sidebar is open
+                        return true
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_UP -> {
+                        val currFocus = currentFocus
+                        val currIndex = sidebarButtons.indexOfFirst { it == currFocus || it.hasFocus() }
+                        if (currIndex > 0) {
+                            sidebarButtons[currIndex - 1].requestFocus()
+                        } else if (currIndex == -1) {
+                            sidebarButtons.first().requestFocus()
+                        }
+                        // Always consume DPAD_UP while sidebar is open
+                        return true
+                    }
+                    android.view.KeyEvent.KEYCODE_DPAD_CENTER,
+                    android.view.KeyEvent.KEYCODE_ENTER -> {
+                        val currFocus = currentFocus
+                        val btn = sidebarButtons.firstOrNull { it == currFocus || it.hasFocus() }
+                        if (btn != null) {
+                            btn.performClick()
+                            return true
+                        }
+                    }
                 }
-                return super.dispatchKeyEvent(event)
+            } else if (event.action == android.view.KeyEvent.ACTION_UP) {
+                when (event.keyCode) {
+                    android.view.KeyEvent.KEYCODE_DPAD_RIGHT,
+                    android.view.KeyEvent.KEYCODE_BACK,
+                    android.view.KeyEvent.KEYCODE_DPAD_LEFT,
+                    android.view.KeyEvent.KEYCODE_DPAD_DOWN,
+                    android.view.KeyEvent.KEYCODE_DPAD_UP -> {
+                        return true
+                    }
+                }
             }
+            return super.dispatchKeyEvent(event)
+        }
 
+        if (event.action == android.view.KeyEvent.ACTION_DOWN) {
             // Case 2: D-pad navigation on catalog cards
             val focused = currentFocus
             val recycler = findParentRowRecycler(focused)
