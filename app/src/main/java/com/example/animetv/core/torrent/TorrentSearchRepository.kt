@@ -55,6 +55,7 @@ object TorrentSearchRepository {
         val jobs = listOf(
             async { if (jackettUrl.isNotEmpty()) fetchFromIndexer(jackettUrl, jackettKey, query, seasonNumber, episodeNumber, isMovie) else emptyList() },
             async { if (resolvedImdbId.isNotEmpty()) fetchFromTorrentio(resolvedImdbId, seasonNumber, episodeNumber, isMovie) else emptyList() },
+            async { fetchFromYtsLu(query, originalQuery, seasonNumber, episodeNumber, isMovie) },
             async { fetchFromEliteTorrent(query, originalQuery, seasonNumber, episodeNumber, isMovie) },
             async { fetchFromNyaa(query, englishQuery, episodeNumber, isMovie, isLiveAction) },
             async { fetchFromAnimeTosho(originalQuery.ifEmpty { query }, episodeNumber, isLiveAction) }
@@ -107,6 +108,98 @@ object TorrentSearchRepository {
             .sortedWith(compareBy({ it.languagePriority }, { -it.seeders }))
     }
 
+    private suspend fun fetchFromYtsLu(
+        query: String,
+        originalQuery: String,
+        seasonNumber: Int,
+        episodeNumber: Int,
+        isMovie: Boolean
+    ): List<TorrentStreamItem> = withContext(Dispatchers.IO) {
+        val list = mutableListOf<TorrentStreamItem>()
+        val candidates = listOfNotNull(
+            originalQuery.takeIf { it.isNotBlank() },
+            query.takeIf { it.isNotBlank() }
+        ).distinct()
+        if (candidates.isEmpty()) return@withContext list
+
+        for (candidate in candidates) {
+            val yearMatch = Regex("""\b(19\d\d|20\d\d)\b""").find(candidate)
+            val yr = yearMatch?.groupValues?.get(1) ?: ""
+            val cleanTitle = candidate.replace(Regex("""\b(19\d\d|20\d\d)\b"""), "").trim()
+            if (cleanTitle.isEmpty()) continue
+
+            val apiUrl = if (isMovie) {
+                "https://en.yts.lu/?api=torrents&mode=movie&name=${URLEncoder.encode(cleanTitle, "UTF-8")}&year=$yr&quality=all"
+            } else {
+                val s = if (seasonNumber > 0) seasonNumber else 1
+                val e = if (episodeNumber > 0) episodeNumber else 1
+                "https://en.yts.lu/?api=torrents&mode=tv&name=${URLEncoder.encode(cleanTitle, "UTF-8")}&year=$yr&season=$s&episode=$e&quality=all"
+            }
+
+            try {
+                val request = Request.Builder()
+                    .url(apiUrl)
+                    .header("User-Agent", userAgent)
+                    .header("Referer", "https://en.yts.lu/")
+                    .build()
+                val response = client.newCall(request).execute()
+                if (!response.isSuccessful) continue
+                val body = response.body?.string() ?: continue
+                val json = JSONObject(body)
+                val hits = json.optJSONArray("hits") ?: continue
+
+                for (i in 0 until hits.length()) {
+                    val hit = hits.getJSONObject(i)
+                    val rawMagnet = hit.optString("magnetUrl", "").trim()
+                    val magnet = rawMagnet.replace("&amp;", "&")
+                    if (!magnet.startsWith("magnet:?")) continue
+
+                    val itemTitle = hit.optString("title", "").trim()
+                    val seeds = hit.optInt("seeds", 0)
+                    val bytes = hit.optLong("bytes", 0L)
+                    val source = hit.optString("source", "YTS").trim()
+
+                    val res = when {
+                        itemTitle.contains("2160p", true) || itemTitle.contains("4k", true) -> "4K"
+                        itemTitle.contains("1080p", true) -> "1080p"
+                        itemTitle.contains("720p", true) -> "720p"
+                        itemTitle.contains("480p", true) -> "480p"
+                        else -> "HD"
+                    }
+
+                    val sizeFormatted = if (bytes > 0L) {
+                        val gb = bytes.toDouble() / (1024 * 1024 * 1024)
+                        if (gb >= 1.0) String.format(Locale.US, "%.1f GB", gb)
+                        else String.format(Locale.US, "%.0f MB", bytes.toDouble() / (1024 * 1024))
+                    } else "Torrent"
+
+                    val isDual = itemTitle.contains("dual", true) || itemTitle.contains("latino", true) ||
+                            itemTitle.contains("castellano", true) || itemTitle.contains("spanish", true)
+                    val langBadge = if (isDual) "🌐 Multi/Latino" else "🇬🇧 English"
+                    val langPriority = if (isDual) 2 else 3
+
+                    list.add(
+                        TorrentStreamItem(
+                            title = itemTitle,
+                            magnetUrl = magnet,
+                            seeders = seeds,
+                            sizeBytes = bytes,
+                            sizeFormatted = sizeFormatted,
+                            resolutionBadge = res,
+                            languageBadge = langBadge,
+                            languagePriority = langPriority,
+                            provider = "YTS ($source)"
+                        )
+                    )
+                }
+                if (list.isNotEmpty()) break
+            } catch (e: Exception) {
+                android.util.Log.e("YtsLu", "Error querying YtsLu API: $apiUrl", e)
+            }
+        }
+        list
+    }
+
     private suspend fun fetchFromEliteTorrent(
         query: String,
         originalQuery: String,
@@ -124,7 +217,7 @@ object TorrentSearchRepository {
         val epSuffix = if (!isMovie) String.format(Locale.US, "%dx%02d", seasonNumber, episodeNumber) else ""
         val searchQueries = candidates.map { if (isMovie) it.trim() else "${it.trim()} $epSuffix" }
 
-        val mirrors = listOf("https://www.elitetorrent.com", "https://elitetorrent.app")
+        val mirrors = listOf("https://www.elitetorrent.com")
         for (baseUrl in mirrors) {
             try {
                 for (searchQuery in searchQueries) {
@@ -140,38 +233,33 @@ object TorrentSearchRepository {
 
                     val html = response.body?.string() ?: ""
                     val doc = Jsoup.parse(html, baseUrl)
-                    var links = doc.select(".meta a.nombre, .miniboxs li a, a.nombre")
+                    var links = doc.select(".meta a.nombre, .miniboxs li a, a.nombre, .post_box a, article a")
                         .mapNotNull { it.absUrl("href").takeIf { u -> u.contains("/peliculas/") || u.contains("/series/") } }
                         .distinct()
-                        .take(8)
 
-                    if (links.isEmpty() && !isMovie) {
-                        // Fallback: search just title and filter by episode code in URL
-                        val baseOnly = searchQuery.substringBeforeLast(" $epSuffix").trim()
-                        val fbUrl = "$baseUrl/?s=${URLEncoder.encode(baseOnly, "UTF-8")}"
-                        val fbReq = Request.Builder().url(fbUrl).header("User-Agent", userAgent).build()
-                        client.newCall(fbReq).execute().use { fbResp ->
-                            if (fbResp.isSuccessful) {
-                                val fbDoc = Jsoup.parse(fbResp.body?.string() ?: "", baseUrl)
-                                val epPattern = epSuffix.lowercase(Locale.ROOT)
-                                links = fbDoc.select(".meta a.nombre, a.nombre")
-                                    .filter { it.attr("href").lowercase(Locale.ROOT).contains(epPattern) }
-                                    .map { it.absUrl("href") }
-                                    .distinct()
-                                    .take(6)
+                    // Fallback to searching all a tags with href matching /peliculas/ or /series/
+                    if (links.isEmpty()) {
+                        links = doc.select("a[href]")
+                            .map { it.absUrl("href") }
+                            .filter { u ->
+                                (u.contains("/peliculas/") || u.contains("/series/")) &&
+                                        !u.endsWith("/peliculas/") && !u.endsWith("/series/") &&
+                                        !u.contains("/genero/") && !u.contains("/estreno/")
                             }
-                        }
+                            .distinct()
                     }
 
                     android.util.Log.d("EliteTorrent", "Found ${links.size} candidate links for $searchQuery")
-                    if (links.isNotEmpty()) {
-                        val jobs = links.map { pageUrl ->
-                            async { extractEliteItemFromPage(pageUrl) }
+                    if (links.isEmpty()) continue
+
+                    val itemJobs = links.take(6).map { pageUrl ->
+                        async(Dispatchers.IO) {
+                            extractEliteTorrentItem(pageUrl, baseUrl)
                         }
-                        val items = jobs.awaitAll().filterNotNull()
-                        list.addAll(items)
-                        if (list.isNotEmpty()) break
                     }
+                    val items = itemJobs.awaitAll().filterNotNull()
+                    list.addAll(items)
+                    if (list.isNotEmpty()) break
                 }
                 if (list.isNotEmpty()) break
             } catch (e: Exception) {
@@ -181,27 +269,27 @@ object TorrentSearchRepository {
         list
     }
 
-    private fun extractEliteItemFromPage(pageUrl: String): TorrentStreamItem? {
+    private fun extractEliteTorrentItem(pageUrl: String, baseUrl: String): TorrentStreamItem? {
         return try {
-            val req = Request.Builder().url(pageUrl).header("User-Agent", userAgent).build()
-            client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) return null
-                val html = resp.body?.string() ?: return null
-                val doc = Jsoup.parse(html, pageUrl)
+            val pageReq = Request.Builder()
+                .url(pageUrl)
+                .header("User-Agent", userAgent)
+                .header("Referer", "$baseUrl/")
+                .build()
+            client.newCall(pageReq).execute().use { pageRes ->
+                if (!pageRes.isSuccessful) return null
+                val html = pageRes.body?.string() ?: return null
+                val doc = Jsoup.parse(html, baseUrl)
 
-                val h1Title = doc.selectFirst("h1")?.text()
-                    ?.replace(Regex("""(?i)descargar\s*"""), "")
-                    ?.replace(Regex("""(?i)\s*por torrent.*"""), "")?.trim()
-                val pageTitle = if (!h1Title.isNullOrEmpty()) h1Title else doc.title().trim()
-
-                // Extract all acortame-esto.com links or raw magnet: links
-                val iMatches = Regex("""acortame-esto\.com/s\.php\?i=([^"&'\s]+)""").findAll(html).toList()
+                val pageTitle = doc.selectFirst("h1, .titulo, .entry-title")?.text()?.trim() ?: "EliteTorrent Item"
                 var resolvedMagnet = ""
+
+                val iMatches = Regex("""[?&]i=([^"'\s&<>]+)""").findAll(html)
                 for (m in iMatches) {
                     val encoded = m.groupValues[1]
                     val decoded = decodeEliteMagnet(encoded).replace("&amp;", "&")
                     android.util.Log.d("EliteTorrent", "Decoded magnet/link: $decoded")
-                    if (decoded.startsWith("magnet:?")) {
+                    if (decoded.startsWith("magnet:?") || decoded.startsWith("http")) {
                         resolvedMagnet = decoded
                         break
                     }
@@ -265,7 +353,14 @@ object TorrentSearchRepository {
                     else -> sb.append(c)
                 }
             }
-            sb.toString()
+            val res = sb.toString()
+            when {
+                res.startsWith("magnet:?") -> res
+                res.contains(".torrent") -> {
+                    if (res.startsWith("http")) res else "https://www.elitetorrent.com" + if (res.startsWith("/")) res else "/$res"
+                }
+                else -> res
+            }
         } catch (e: Exception) {
             android.util.Log.e("EliteTorrent", "Error decoding param: $paramI", e)
             ""

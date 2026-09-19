@@ -21,6 +21,7 @@ object CatalogRepository {
     val animeYtSource: AnimeSource = AnimeYTSource()
     val gogoAnimeSource: AnimeSource = GogoAnimeSource()
     val cinecalidadSource = CinecalidadSource()
+    val ytsLuSource = YtsLuSource()
 
     suspend fun loadHomeContent(context: Context? = null, forceRefresh: Boolean = false): HomeCatalogData = coroutineScope {
         val rotationJob = async {
@@ -63,17 +64,19 @@ object CatalogRepository {
     suspend fun searchAll(query: String): List<AnimeCard> = coroutineScope {
         val jobs = listOf(
             async { runCatching { soloLatinoSource.search(query) }.getOrDefault(emptyList()) },
+            async { runCatching { cinecalidadSource.search(query) }.getOrDefault(emptyList()) },
+            async { runCatching { ytsLuSource.search(query) }.getOrDefault(emptyList()) },
             async { runCatching { jkAnimeSource.search(query) }.getOrDefault(emptyList()) },
             async { runCatching { nineAnimeSource.search(query) }.getOrDefault(emptyList()) },
             async { runCatching { gogoAnimeSource.search(query) }.getOrDefault(emptyList()) },
-            async { runCatching { animeYtSource.search(query) }.getOrDefault(emptyList()) },
-            async { runCatching { cinecalidadSource.search(query) }.getOrDefault(emptyList()) }
+            async { runCatching { animeYtSource.search(query) }.getOrDefault(emptyList()) }
         )
         jobs.awaitAll().flatten().distinctBy { it.detailUrl }
     }
 
     suspend fun getAnimeDetail(card: AnimeCard): AnimeDetail {
         return when {
+            card.source.contains("YTS") -> ytsLuSource.getAnimeDetail(card.detailUrl)
             card.source.contains("Cinecalidad") -> cinecalidadSource.getAnimeDetail(card.detailUrl)
             card.source.contains("9Anime") -> nineAnimeSource.getAnimeDetail(card.detailUrl)
             card.source.contains("JKAnime") -> jkAnimeSource.getAnimeDetail(card.detailUrl)
@@ -88,6 +91,7 @@ object CatalogRepository {
         val primaryDeferred = async {
             runCatching {
                 when {
+                    source.contains("YTS") -> ytsLuSource.resolveStream(episodeUrl)
                     source.contains("JKAnime") -> jkAnimeSource.resolveStream(episodeUrl)
                     source.contains("9Anime") -> nineAnimeSource.resolveStream(episodeUrl)
                     source.contains("Cinecalidad") -> cinecalidadSource.resolveStream(episodeUrl)
