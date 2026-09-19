@@ -141,25 +141,7 @@ object CatalogRepository {
         val isLatinoTrio = source.contains("SoloLatino") || source.contains("SoloStream") || source.contains("Cinecalidad") || source.contains("LaMovie")
 
         if (isLatinoTrio) {
-            // Fast-path: query the chosen primary source first to avoid slow multi-source waits
-            if (source.contains("SoloLatino") || source.contains("SoloStream")) {
-                val primary = runCatching { soloLatinoSource.resolveStream(episodeUrl) }.getOrNull()
-                if (primary != null && primary.videoUrl.isNotEmpty()) {
-                    return@coroutineScope listOf(primary.copy(source = "SoloLatino"))
-                }
-            } else if (source.contains("Cinecalidad")) {
-                val primaryList = runCatching { cinecalidadSource.resolveAllStreams(episodeUrl) }.getOrDefault(emptyList())
-                if (primaryList.isNotEmpty()) {
-                    return@coroutineScope primaryList.map { it.copy(source = "Cinecalidad") }
-                }
-            } else if (source.contains("LaMovie")) {
-                val primaryList = runCatching { laMovieSource.resolveAllStreams(episodeUrl) }.getOrDefault(emptyList())
-                if (primaryList.isNotEmpty()) {
-                    return@coroutineScope primaryList.map { it.copy(source = "LaMovie") }
-                }
-            }
-
-            // Fallback: query all 3 sources in parallel if primary source yielded no streams
+            // Query all 3 sources in parallel
             val soloLatinoJob = async {
                 runCatching {
                     if (source.contains("SoloLatino") || source.contains("SoloStream")) {
