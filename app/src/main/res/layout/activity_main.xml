@@ -178,7 +178,8 @@
                 android:id="@+id/scrollMain"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:clipChildren="false"
+                android:clipChildren="true"
+                android:clipToPadding="false"
                 android:fillViewport="true"
                 android:background="@android:color/transparent">
 
@@ -209,20 +210,75 @@
     <!-- End of layoutMainContent -->
 
     <!-- 3. Left Navigation Rail (Auto-Hide Overlay Drawer, Nuvio / Stremio / Netflix TV Style)
-         Auto-hides by default; slides in from the left over the content when DPAD_LEFT is pressed from position 0 -->
+         Auto-hides by default; slides in from the left over the content when DPAD_LEFT is clicked at position 0 -->
     <LinearLayout
         android:id="@+id/layoutNavRail"
-        android:layout_width="160dp"
+        android:layout_width="200dp"
         android:layout_height="match_parent"
         android:layout_gravity="start"
         android:orientation="vertical"
         android:gravity="center_horizontal"
-        android:paddingTop="36dp"
+        android:paddingTop="28dp"
         android:paddingBottom="24dp"
-        android:paddingHorizontal="12dp"
+        android:paddingHorizontal="16dp"
         android:background="@drawable/bg_sidebar_rail"
         android:elevation="16dp"
         android:visibility="gone">
+
+        <!-- Brand Header (Nuvio / Stremio TV Style) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="24dp"
+            android:paddingHorizontal="4dp">
+
+            <FrameLayout
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="@drawable/bg_brand_badge">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_tv"
+                    android:contentDescription="@null" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="ANIME"
+                    android:textColor="@color/primary_text"
+                    android:textSize="17sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.04" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:background="@drawable/bg_tv_accent_badge"
+                    android:paddingHorizontal="5dp"
+                    android:paddingVertical="1dp"
+                    android:text="TV"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.06" />
+
+            </LinearLayout>
+
+        </LinearLayout>
 
         <Button
             android:id="@+id/btnNavCatalog"
@@ -231,10 +287,14 @@
             android:background="@drawable/bg_topbar_pill"
             android:focusable="true"
             android:focusableInTouchMode="true"
-            android:paddingHorizontal="14dp"
-            android:text=""
+            android:paddingHorizontal="16dp"
+            android:drawableStart="@drawable/ic_home"
+            android:drawablePadding="12dp"
+            android:drawableTint="@color/primary_text"
+            android:gravity="center_vertical|start"
+            android:text="Inicio"
             android:textColor="@color/primary_text"
-            android:textSize="12sp"
+            android:textSize="13sp"
             android:textStyle="bold"
             android:maxLines="1"
             android:ellipsize="end" />
@@ -243,14 +303,18 @@
             android:id="@+id/btnNavMyList"
             android:layout_width="match_parent"
             android:layout_height="44dp"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="10dp"
             android:background="@drawable/bg_topbar_pill"
             android:focusable="true"
             android:focusableInTouchMode="true"
-            android:paddingHorizontal="14dp"
-            android:text=""
+            android:paddingHorizontal="16dp"
+            android:drawableStart="@drawable/ic_star"
+            android:drawablePadding="12dp"
+            android:drawableTint="@color/primary_text"
+            android:gravity="center_vertical|start"
+            android:text="Mi Lista"
             android:textColor="@color/primary_text"
-            android:textSize="12sp"
+            android:textSize="13sp"
             android:textStyle="bold"
             android:maxLines="1"
             android:ellipsize="end" />
@@ -259,14 +323,19 @@
             android:id="@+id/btnNavSearch"
             android:layout_width="match_parent"
             android:layout_height="44dp"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="10dp"
             android:background="@drawable/bg_topbar_pill"
             android:focusable="true"
             android:focusableInTouchMode="true"
-            android:paddingHorizontal="14dp"
-            android:text=""
+            android:paddingHorizontal="16dp"
+            android:drawableStart="@drawable/ic_search"
+            android:drawablePadding="12dp"
+            android:drawableTint="@color/primary_text"
+            android:gravity="center_vertical|start"
+            android:text="Buscar"
             android:textColor="@color/primary_text"
-            android:textSize="12sp"
+            android:textSize="13sp"
+            android:textStyle="bold"
             android:maxLines="1"
             android:ellipsize="end" />
 
@@ -274,33 +343,39 @@
             android:id="@+id/btnNavRefresh"
             android:layout_width="match_parent"
             android:layout_height="44dp"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="10dp"
             android:background="@drawable/bg_topbar_pill"
             android:focusable="true"
             android:focusableInTouchMode="true"
-            android:paddingHorizontal="14dp"
-            android:text="↻"
+            android:paddingHorizontal="16dp"
+            android:drawableStart="@drawable/ic_refresh"
+            android:drawablePadding="12dp"
+            android:drawableTint="@color/primary_text"
+            android:gravity="center_vertical|start"
+            android:text="Actualizar"
             android:textColor="@color/primary_text"
-            android:textSize="14sp"
+            android:textSize="13sp"
+            android:textStyle="bold"
             android:maxLines="1"
             android:ellipsize="end" />
-
-        <View
-            android:layout_width="1dp"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
 
         <Button
             android:id="@+id/btnNavSettings"
             android:layout_width="match_parent"
             android:layout_height="44dp"
+            android:layout_marginTop="10dp"
             android:background="@drawable/bg_topbar_pill"
             android:focusable="true"
             android:focusableInTouchMode="true"
-            android:paddingHorizontal="14dp"
-            android:text="⚙"
+            android:paddingHorizontal="16dp"
+            android:drawableStart="@drawable/ic_settings"
+            android:drawablePadding="12dp"
+            android:drawableTint="@color/primary_text"
+            android:gravity="center_vertical|start"
+            android:text="Ajustes"
             android:textColor="@color/primary_text"
-            android:textSize="14sp"
+            android:textSize="13sp"
+            android:textStyle="bold"
             android:maxLines="1"
             android:ellipsize="end" />
 

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Brand badge emblem gradient for the sidebar drawer header (Nuvio style) -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="135"
+        android:startColor="#5842F4"
+        android:centerColor="#3A28B7"
+        android:endColor="#00E5FF"
+        android:type="linear" />
+    <corners android:radius="8dp" />
+    <stroke
+        android:width="1dp"
+        android:color="#40FFFFFF" />
+</shape>

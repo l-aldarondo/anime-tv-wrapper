@@ -75,6 +75,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var layoutNavRail: LinearLayout
     private var isNavSidebarOpen = false
     private var lastFocusedCardView: View? = null
+    private var lastSettledCardPosition = -1
+    private var lastSettledRecycler: RecyclerView? = null
 
     // Top Header Navigation Buttons
     private lateinit var btnNavCatalog: Button
@@ -82,13 +84,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnNavSearch: Button
     private lateinit var btnNavRefresh: Button
     private lateinit var btnNavSettings: Button
-
-    // Icon-only/focus-reveal-label wrappers around the buttons above (same order as the bar)
-    private lateinit var navCatalog: com.example.animetv.ui.IconDrawableRevealButton
-    private lateinit var navMyList: com.example.animetv.ui.IconDrawableRevealButton
-    private lateinit var navSearch: com.example.animetv.ui.IconDrawableRevealButton
-    private lateinit var navRefresh: com.example.animetv.ui.IconDrawableRevealButton
-    private lateinit var navSettings: com.example.animetv.ui.IconDrawableRevealButton
 
     private var lastLoadedCatalog: HomeCatalogData? = null
 
@@ -154,12 +149,6 @@ class MainActivity : AppCompatActivity() {
         btnNavSearch = findViewById(R.id.btnNavSearch)
         btnNavRefresh = findViewById(R.id.btnNavRefresh)
         btnNavSettings = findViewById(R.id.btnNavSettings)
-
-        navCatalog = com.example.animetv.ui.IconDrawableRevealButton(btnNavCatalog, R.drawable.ic_home, "Home")
-        navMyList = com.example.animetv.ui.IconDrawableRevealButton(btnNavMyList, R.drawable.ic_star, "Mi Lista")
-        navSearch = com.example.animetv.ui.IconDrawableRevealButton(btnNavSearch, R.drawable.ic_search, "Buscar")
-        navRefresh = com.example.animetv.ui.IconDrawableRevealButton(btnNavRefresh, R.drawable.ic_refresh, "Actualizar")
-        navSettings = com.example.animetv.ui.IconDrawableRevealButton(btnNavSettings, R.drawable.ic_settings, "Ajustes")
     }
 
     /**
@@ -215,14 +204,17 @@ class MainActivity : AppCompatActivity() {
         }
         val onCardFocus: (AnimeCard) -> Unit = { card ->
             onCardFocused(card)
-            rowView.post {
-                val rowTop = rowView.top
-                val rowBottom = rowView.bottom
-                val scrollY = scrollMain.scrollY
-                val vHeight = scrollMain.height
-                if (vHeight > 0 && (rowBottom > scrollY + vHeight || rowTop < scrollY)) {
-                    val targetY = (rowTop - 20).coerceAtLeast(0)
-                    scrollMain.smoothScrollTo(0, targetY)
+            val rowTop = rowView.top
+            val rowBottom = rowView.bottom
+            val scrollY = scrollMain.scrollY
+            val vHeight = scrollMain.height
+            if (vHeight > 0) {
+                if (rowBottom > scrollY + vHeight) {
+                    val delta = (rowBottom - (scrollY + vHeight)) + (24 * resources.displayMetrics.density).toInt()
+                    scrollMain.smoothScrollBy(0, delta)
+                } else if (rowTop < scrollY) {
+                    val delta = (rowTop - scrollY) - (16 * resources.displayMetrics.density).toInt()
+                    scrollMain.smoothScrollBy(0, delta)
                 }
             }
         }
@@ -299,7 +291,7 @@ class MainActivity : AppCompatActivity() {
         isNavSidebarOpen = true
         lastFocusedCardView = currentFocus
         layoutNavRail.visibility = View.VISIBLE
-        val width = if (layoutNavRail.width > 0) layoutNavRail.width.toFloat() else (160 * resources.displayMetrics.density)
+        val width = if (layoutNavRail.width > 0) layoutNavRail.width.toFloat() else (200 * resources.displayMetrics.density)
         layoutNavRail.translationX = -width
         layoutNavRail.alpha = 0f
         layoutNavRail.animate()
@@ -315,7 +307,7 @@ class MainActivity : AppCompatActivity() {
     private fun closeNavSidebar() {
         if (!isNavSidebarOpen) return
         isNavSidebarOpen = false
-        val width = if (layoutNavRail.width > 0) layoutNavRail.width.toFloat() else (160 * resources.displayMetrics.density)
+        val width = if (layoutNavRail.width > 0) layoutNavRail.width.toFloat() else (200 * resources.displayMetrics.density)
         layoutNavRail.animate()
             .translationX(-width)
             .alpha(0f)
@@ -365,10 +357,27 @@ class MainActivity : AppCompatActivity() {
                 when (event.keyCode) {
                     android.view.KeyEvent.KEYCODE_DPAD_LEFT -> {
                         if (pos <= 0) {
-                            openNavSidebar()
-                            return true
+                            // Fast scroll left: while remote key is being held (repeatCount > 0), clamp at card 0
+                            // and NEVER jump into sidebar drawer during fast scroll!
+                            if (event.repeatCount > 0) {
+                                lastSettledCardPosition = 0
+                                lastSettledRecycler = recycler
+                                return true
+                            }
+                            // Single click: only open sidebar if user was ALREADY resting at position 0
+                            if (lastSettledCardPosition == 0 && lastSettledRecycler == recycler) {
+                                openNavSidebar()
+                                return true
+                            } else {
+                                // First arrival at pos 0: clamp here!
+                                lastSettledCardPosition = 0
+                                lastSettledRecycler = recycler
+                                return true
+                            }
                         }
                         val targetPos = pos - 1
+                        lastSettledCardPosition = targetPos
+                        lastSettledRecycler = recycler
                         val prevView = lm?.findViewByPosition(targetPos)
                         if (prevView != null) {
                             prevView.requestFocus()
@@ -381,6 +390,7 @@ class MainActivity : AppCompatActivity() {
                         return true
                     }
                     android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        lastSettledCardPosition = -1 // Reset left boundary tracker
                         if (pos >= count - 1 && count > 0) {
                             // Strictly clamp at row end. NEVER escape to row above!
                             return true
