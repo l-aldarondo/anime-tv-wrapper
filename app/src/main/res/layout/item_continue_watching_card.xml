@@ -10,6 +10,8 @@
     android:focusable="true"
     android:focusableInTouchMode="true"
     android:clickable="true"
+    android:foreground="@drawable/bg_card_focus_border"
+    android:foregroundGravity="fill"
     app:cardCornerRadius="12dp"
     app:cardElevation="0dp"
     app:cardPreventCornerOverlap="false"
@@ -100,12 +102,6 @@
             android:maxHeight="3dp"
             android:progressTint="#FFFFFF"
             android:progressBackgroundTint="#33FFFFFF" />
-
-        <!-- Focus border overlay: perfectly matches the 12dp CardView contour -->
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="@drawable/bg_card_focus_border" />
 
     </FrameLayout>
 

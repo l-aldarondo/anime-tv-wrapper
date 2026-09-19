@@ -11,6 +11,8 @@
     android:focusable="true"
     android:focusableInTouchMode="true"
     android:clickable="true"
+    android:foreground="@drawable/bg_card_focus_border"
+    android:foregroundGravity="fill"
     app:cardCornerRadius="12dp"
     app:cardElevation="0dp"
     app:cardPreventCornerOverlap="false"

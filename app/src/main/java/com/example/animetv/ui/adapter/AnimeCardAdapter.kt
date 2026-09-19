@@ -6,6 +6,7 @@ import android.view.ViewGroup
 import android.view.animation.AnimationUtils
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.engine.DiskCacheStrategy
@@ -15,11 +16,13 @@ import com.example.animetv.core.util.CoverUtils
 import kotlinx.coroutines.*
 
 class AnimeCardAdapter(
-    private val items: MutableList<AnimeCard>,
     private val onCardClick: (AnimeCard) -> Unit,
     private val onCardLongClick: ((AnimeCard) -> Unit)? = null,
     private val onCardFocus: ((AnimeCard) -> Unit)? = null
 ) : RecyclerView.Adapter<AnimeCardAdapter.ViewHolder>() {
+
+    // Immutable snapshot — swapped via submitList() with DiffUtil
+    private var items: List<AnimeCard> = emptyList()
 
     private val adapterScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
@@ -38,11 +41,13 @@ class AnimeCardAdapter(
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val item = items[position]
+        // Guard: position may be stale if list was updated during fast scroll
+        val item = items.getOrNull(position) ?: return
+
         holder.title?.text = item.title
         holder.source.text = formatSourceTag(item.source)
 
-        // Badge logic simplification
+        // Badge logic
         val badgeText = item.episodeBadge.ifEmpty { item.rating }
         if (badgeText.isNotEmpty()) {
             holder.badge.visibility = View.VISIBLE
@@ -66,7 +71,7 @@ class AnimeCardAdapter(
         holder.tmdbJob = adapterScope.launch {
             val isMovie = item.detailUrl.contains("/pelicula/") || item.episodeBadge.equals("Película", ignoreCase = true)
             val isLiveAction = item.source.contains("SoloLatino", ignoreCase = true) && !item.detailUrl.contains("/animes")
-            
+
             val meta = withContext(Dispatchers.IO) {
                 try {
                     com.example.animetv.core.tmdb.TmdbMetadataRepository.searchMetadata(
@@ -85,7 +90,7 @@ class AnimeCardAdapter(
             }
         }
 
-        // TV Focus Animation
+        // TV Focus Animation — scale up + elevate on focus
         val focusInterpolator = AnimationUtils.loadInterpolator(holder.itemView.context, R.interpolator.premium_focus)
         holder.itemView.apply {
             setOnFocusChangeListener { view, hasFocus ->
@@ -101,6 +106,7 @@ class AnimeCardAdapter(
             setOnKeyListener { _, keyCode, event ->
                 if (event.action == android.view.KeyEvent.ACTION_DOWN) {
                     val pos = holder.bindingAdapterPosition
+                    if (pos == RecyclerView.NO_ID.toInt()) return@setOnKeyListener false
                     if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT && pos >= items.size - 1) {
                         return@setOnKeyListener true // Clamp at end of row
                     }
@@ -123,6 +129,7 @@ class AnimeCardAdapter(
     override fun onViewRecycled(holder: ViewHolder) {
         super.onViewRecycled(holder)
         holder.tmdbJob?.cancel()
+        holder.tmdbJob = null
         Glide.with(holder.itemView).clear(holder.poster)
     }
 
@@ -131,10 +138,22 @@ class AnimeCardAdapter(
         adapterScope.cancel()
     }
 
+    /**
+     * Submits a new list using DiffUtil so only changed items are updated.
+     * This preserves RecyclerView scroll position and D-pad focus — no jump to position 0.
+     */
     fun submitList(newItems: List<AnimeCard>) {
-        items.clear()
-        items.addAll(newItems)
-        notifyDataSetChanged()
+        val oldItems = items
+        val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+            override fun getOldListSize() = oldItems.size
+            override fun getNewListSize() = newItems.size
+            override fun areItemsTheSame(oldPos: Int, newPos: Int) =
+                oldItems[oldPos].detailUrl == newItems[newPos].detailUrl
+            override fun areContentsTheSame(oldPos: Int, newPos: Int) =
+                oldItems[oldPos] == newItems[newPos]
+        })
+        items = newItems.toList() // snapshot
+        diff.dispatchUpdatesTo(this) // granular updates — NO notifyDataSetChanged()
     }
 
     companion object {

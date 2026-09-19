@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Nuvio-style poster card: pure poster artwork without title text underneath.
-     CardView with 10dp radius strictly clips the poster image so sharp corners never spill out. -->
+     CardView with 10dp radius strictly clips the poster image so sharp corners never spill out.
+     Focus border is applied as foreground so it receives the CardView's focused state correctly. -->
 <androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="110dp"
@@ -9,6 +10,8 @@
     android:focusable="true"
     android:focusableInTouchMode="true"
     android:clickable="true"
+    android:foreground="@drawable/bg_card_focus_border"
+    android:foregroundGravity="fill"
     app:cardCornerRadius="10dp"
     app:cardElevation="0dp"
     app:cardPreventCornerOverlap="false"
@@ -61,12 +64,6 @@
             android:layout_width="0dp"
             android:layout_height="0dp"
             android:visibility="gone" />
-
-        <!-- Focus stroke overlay: perfectly matches the 10dp CardView contour -->
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="@drawable/bg_card_focus_border" />
 
     </FrameLayout>
 

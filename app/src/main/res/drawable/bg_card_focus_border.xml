@@ -1,27 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Focused state on TV remote D-Pad: Pure crisp white outline with slight glow -->
+
+    <!-- Focused: bright cyan glow border — clearly visible on TV at distance -->
     <item android:state_focused="true">
-        <shape android:shape="rectangle">
-            <solid android:color="#00000000" />
-            <stroke android:width="3dp" android:color="#FFFFFF" />
-            <corners android:radius="12dp" />
-        </shape>
+        <layer-list>
+            <!-- Soft outer glow (blurred effect via semi-transparent wider stroke) -->
+            <item android:left="-4dp" android:top="-4dp" android:right="-4dp" android:bottom="-4dp">
+                <shape android:shape="rectangle">
+                    <solid android:color="#00000000" />
+                    <stroke android:width="4dp" android:color="#5500E5FF" />
+                    <corners android:radius="14dp" />
+                </shape>
+            </item>
+            <!-- Inner crisp border -->
+            <item>
+                <shape android:shape="rectangle">
+                    <solid android:color="#00000000" />
+                    <stroke android:width="3dp" android:color="#00E5FF" />
+                    <corners android:radius="10dp" />
+                </shape>
+            </item>
+        </layer-list>
     </item>
-    <!-- Pressed state -->
+
+    <!-- Pressed: white flash -->
     <item android:state_pressed="true">
         <shape android:shape="rectangle">
-            <solid android:color="#20FFFFFF" />
+            <solid android:color="#30FFFFFF" />
             <stroke android:width="3dp" android:color="#FFFFFF" />
-            <corners android:radius="12dp" />
+            <corners android:radius="10dp" />
         </shape>
     </item>
-    <!-- Normal idle state -->
+
+    <!-- Normal idle: invisible (no border clutter) -->
     <item>
         <shape android:shape="rectangle">
             <solid android:color="#00000000" />
-            <stroke android:width="1dp" android:color="#1AFFFFFF" />
-            <corners android:radius="12dp" />
+            <corners android:radius="10dp" />
         </shape>
     </item>
+
 </selector>

@@ -217,7 +217,7 @@ class MainActivity : AppCompatActivity() {
         recycler.adapter = if (row.type == CatalogRowType.CONTINUE_WATCHING) {
             ContinueWatchingCardAdapter(row.cards.toMutableList(), onCardClick, onCardLongClick, onCardFocus)
         } else {
-            AnimeCardAdapter(row.cards.toMutableList(), onCardClick, onCardLongClick, onCardFocus)
+            AnimeCardAdapter(onCardClick, onCardLongClick, onCardFocus).also { it.submitList(row.cards) }
         }
         return rowView
     }
@@ -814,7 +814,7 @@ class MainActivity : AppCompatActivity() {
         val recycler = dialog.findViewById<RecyclerView>(R.id.recyclerSearchResults)
 
         recycler.layoutManager = com.example.animetv.ui.TvRowLayoutManager(this)
-        val searchAdapter = AnimeCardAdapter(mutableListOf(), onCardClick = { card ->
+        val searchAdapter = AnimeCardAdapter(onCardClick = { card ->
             dialog.dismiss()
             DetailActivity.start(this, card)
         })
