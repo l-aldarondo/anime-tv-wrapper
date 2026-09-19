@@ -34,13 +34,39 @@ class TvHorizontalRecyclerView @JvmOverloads constructor(
                     val pos = lm.getPosition(itemView)
                     val count = adapter?.itemCount ?: 0
                     if (count > 0 && pos != NO_POSITION) {
-                        // Trapping focus at left edge: consume key event completely so it NEVER escapes
-                        if (event.keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT && pos <= 0) {
-                            return true
+                        // Trapping focus at right edge: ALWAYS advance within row and NEVER let event escape
+                        if (event.keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT) {
+                            if (pos >= count - 1) {
+                                return true // Clamp at end of row
+                            }
+                            val nextChild = lm.findViewByPosition(pos + 1)
+                            if (nextChild != null) {
+                                nextChild.requestFocus()
+                                return true
+                            } else {
+                                smoothScrollToPosition(pos + 1)
+                                post {
+                                    lm.findViewByPosition(pos + 1)?.requestFocus()
+                                }
+                                return true
+                            }
                         }
-                        // Trapping focus at right edge: consume key event completely so it NEVER escapes
-                        if (event.keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT && pos >= count - 1) {
-                            return true
+                        // Left edge: within row advance left; at position 0 allow event to enter Left Sidebar
+                        if (event.keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT) {
+                            if (pos <= 0) {
+                                return super.dispatchKeyEvent(event)
+                            }
+                            val prevChild = lm.findViewByPosition(pos - 1)
+                            if (prevChild != null) {
+                                prevChild.requestFocus()
+                                return true
+                            } else {
+                                smoothScrollToPosition(pos - 1)
+                                post {
+                                    lm.findViewByPosition(pos - 1)?.requestFocus()
+                                }
+                                return true
+                            }
                         }
                     }
                 }
@@ -51,9 +77,8 @@ class TvHorizontalRecyclerView @JvmOverloads constructor(
 
     override fun focusSearch(focused: View, direction: Int): View? {
         val result = super.focusSearch(focused, direction)
-        // If moving horizontally (LEFT or RIGHT) and the candidate view is outside of this RecyclerView,
-        // clamp focus on the current view to prevent focus escaping across rows or into the header!
-        if (direction == View.FOCUS_RIGHT || direction == View.FOCUS_LEFT) {
+        // Strictly prevent horizontal RIGHT escaping. Allow horizontal LEFT to reach the Left Sidebar when at pos 0.
+        if (direction == View.FOCUS_RIGHT) {
             if (result == null || !isDescendantOfThis(result)) {
                 return focused
             }

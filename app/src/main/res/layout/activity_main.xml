@@ -34,36 +34,34 @@
 
     </FrameLayout>
 
-    <!-- 2. Foreground content layer: top nav, reactive hero info, and scrollable catalog rows -->
+    <!-- 2. Foreground content layer: Left sidebar rail, reactive hero info, and scrollable catalog rows -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical">
+        android:orientation="horizontal">
 
-        <!-- Top Navigation Bar: sleek translucent pill bar over backdrop -->
+        <!-- Left Sidebar Navigation Rail (Nuvio / Stremio TV Style) -->
         <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:paddingHorizontal="@dimen/safe_zone_margin"
-            android:paddingTop="14dp"
-            android:paddingBottom="4dp">
-
-
-            <View
-                android:layout_width="0dp"
-                android:layout_height="1dp"
-                android:layout_weight="1" />
+            android:id="@+id/layoutNavRail"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center_horizontal"
+            android:paddingTop="36dp"
+            android:paddingBottom="24dp"
+            android:paddingHorizontal="10dp"
+            android:background="@drawable/bg_sidebar_rail"
+            android:elevation="8dp">
 
             <Button
                 android:id="@+id/btnNavCatalog"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
+                android:layout_height="40dp"
+                android:minWidth="40dp"
                 android:background="@drawable/bg_topbar_pill"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
-                android:paddingHorizontal="12dp"
+                android:paddingHorizontal="10dp"
                 android:text=""
                 android:textColor="@color/primary_text"
                 android:textSize="12sp"
@@ -74,12 +72,13 @@
             <Button
                 android:id="@+id/btnNavMyList"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:layout_marginStart="8dp"
+                android:layout_height="40dp"
+                android:minWidth="40dp"
+                android:layout_marginTop="12dp"
                 android:background="@drawable/bg_topbar_pill"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
-                android:paddingHorizontal="12dp"
+                android:paddingHorizontal="10dp"
                 android:text=""
                 android:textColor="@color/primary_text"
                 android:textSize="12sp"
@@ -90,12 +89,13 @@
             <Button
                 android:id="@+id/btnNavSearch"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:layout_marginStart="8dp"
+                android:layout_height="40dp"
+                android:minWidth="40dp"
+                android:layout_marginTop="12dp"
                 android:background="@drawable/bg_topbar_pill"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
-                android:paddingHorizontal="12dp"
+                android:paddingHorizontal="10dp"
                 android:text=""
                 android:textColor="@color/primary_text"
                 android:textSize="12sp"
@@ -105,27 +105,33 @@
             <Button
                 android:id="@+id/btnNavRefresh"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:layout_marginStart="8dp"
+                android:layout_height="40dp"
+                android:minWidth="40dp"
+                android:layout_marginTop="12dp"
                 android:background="@drawable/bg_topbar_pill"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
-                android:paddingHorizontal="12dp"
+                android:paddingHorizontal="10dp"
                 android:text="↻"
                 android:textColor="@color/primary_text"
                 android:textSize="14sp"
                 android:maxLines="1"
                 android:ellipsize="end" />
 
+            <View
+                android:layout_width="1dp"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
             <Button
                 android:id="@+id/btnNavSettings"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:layout_marginStart="8dp"
+                android:layout_height="40dp"
+                android:minWidth="40dp"
                 android:background="@drawable/bg_topbar_pill"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
-                android:paddingHorizontal="12dp"
+                android:paddingHorizontal="10dp"
                 android:text="⚙"
                 android:textColor="@color/primary_text"
                 android:textSize="14sp"
@@ -134,15 +140,23 @@
 
         </LinearLayout>
 
-        <!-- Reactive Hero Information (Logo / Title, Metadata, Badges, Synopsis) -->
+        <!-- Right Content Column: Reactive Hero Information + Scrollable Catalog Rows -->
         <LinearLayout
-            android:id="@+id/layoutHeroInfo"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingHorizontal="@dimen/safe_zone_margin"
-            android:paddingTop="2dp"
-            android:paddingBottom="10dp">
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <!-- Reactive Hero Information (Logo / Title, Metadata, Badges, Synopsis) -->
+            <LinearLayout
+                android:id="@+id/layoutHeroInfo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="145dp"
+                android:orientation="vertical"
+                android:paddingHorizontal="@dimen/safe_zone_margin"
+                android:paddingTop="18dp"
+                android:paddingBottom="6dp">
 
             <!-- Official Transparent PNG Logo or Bold Fallback Title (Nuvio Signature) -->
             <FrameLayout
@@ -249,6 +263,7 @@
                 android:layout_width="540dp"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
+                android:minLines="2"
                 android:maxLines="2"
                 android:ellipsize="end"
                 android:textColor="#B0B4C3"
@@ -295,6 +310,8 @@
                 android:visibility="gone" />
 
         </FrameLayout>
+
+    </LinearLayout>
 
     </LinearLayout>
 

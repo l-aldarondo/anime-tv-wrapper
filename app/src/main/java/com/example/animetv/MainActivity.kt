@@ -97,7 +97,7 @@ class MainActivity : AppCompatActivity() {
         currentFocusedCard = card
         heroDebounceJob?.cancel()
         heroDebounceJob = lifecycleScope.launch {
-            kotlinx.coroutines.delay(150)
+            kotlinx.coroutines.delay(350)
             if (isActive && currentFocusedCard?.detailUrl == card.detailUrl) {
                 updateInfoPanel(card)
             }
@@ -252,6 +252,17 @@ class MainActivity : AppCompatActivity() {
     private fun setupListeners() {
         // Red highlight dynamically follows focus; default focus on Catálogo
         btnNavCatalog.requestFocus()
+
+        val sidebarButtons = listOf(btnNavCatalog, btnNavMyList, btnNavSearch, btnNavRefresh, btnNavSettings)
+        for (btn in sidebarButtons) {
+            btn.setOnKeyListener { _, keyCode, event ->
+                if (event.action == android.view.KeyEvent.ACTION_DOWN && keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    focusFirstCard()
+                    return@setOnKeyListener true
+                }
+                false
+            }
+        }
 
         btnNavCatalog.setOnClickListener {
             scrollMain.smoothScrollTo(0, 0)
@@ -423,31 +434,32 @@ class MainActivity : AppCompatActivity() {
             txtHeroTitle.text = card.title
         }
 
-        txtHeroSynopsis.text = if (card.synopsis.isNotEmpty()) card.synopsis else "Cargando información..."
-        layoutHeroBadges.visibility = View.GONE
+        // Never flash "Cargando información..." which causes jarring text jumps
+        if (card.synopsis.isNotEmpty()) {
+            txtHeroSynopsis.text = card.synopsis
+        }
         loadHeroMeta(card)
 
         val imageToLoad = card.backdropUrl.ifEmpty { card.posterUrl }
         if (imageToLoad.isNotEmpty()) {
             Glide.with(this)
                 .load(imageToLoad)
+                .placeholder(imgHeroBackdrop.drawable)
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
                 .override(Target.SIZE_ORIGINAL)
                 .listener(heroFocalCropListener)
-                .transition(DrawableTransitionOptions.withCrossFade(250))
+                .transition(DrawableTransitionOptions.withCrossFade(400))
                 .into(imgHeroBackdrop)
         }
     }
 
     /**
      * Quick-scan metadata line (year • rating • runtime/seasons) for the currently focused card.
-     * Resolved lazily per-card as focus moves, and the row stays hidden until a confident TMDB
-     * match comes back — silently doing nothing on failure is safer than showing a wrong or
-     * franchise-mismatched year/rating.
+     * Resolved lazily per-card as focus moves, keeping space reserved with INVISIBLE to avoid jumpy layouts.
      */
     private fun loadHeroMeta(card: AnimeCard) {
-        txtHeroMeta.visibility = View.GONE
-        layoutHeroBadges.visibility = View.GONE
+        txtHeroMeta.visibility = View.INVISIBLE
+        layoutHeroBadges.visibility = View.INVISIBLE
         heroMetaJob?.cancel()
         heroMetaJob = lifecycleScope.launch {
             val isMovie = card.detailUrl.contains("/pelicula/") || card.episodeBadge.equals("Película", ignoreCase = true)
