@@ -44,7 +44,8 @@ object TorrentSearchRepository {
         seasonNumber: Int = 1,
         episodeNumber: Int = 1,
         isMovie: Boolean = false,
-        isLiveAction: Boolean = false
+        isLiveAction: Boolean = false,
+        year: String = ""
     ): List<TorrentStreamItem> = withContext(Dispatchers.IO) {
         val jackettUrl = TorrentSettingsStore.getJackettUrl(context)
         val jackettKey = TorrentSettingsStore.getJackettApiKey(context)
@@ -55,7 +56,7 @@ object TorrentSearchRepository {
         val jobs = listOf(
             async { if (jackettUrl.isNotEmpty()) fetchFromIndexer(jackettUrl, jackettKey, query, seasonNumber, episodeNumber, isMovie) else emptyList() },
             async { if (resolvedImdbId.isNotEmpty()) fetchFromTorrentio(resolvedImdbId, seasonNumber, episodeNumber, isMovie) else emptyList() },
-            async { fetchFromYtsLu(query, originalQuery, seasonNumber, episodeNumber, isMovie) },
+            async { fetchFromYtsLu(query, originalQuery, seasonNumber, episodeNumber, isMovie, year) },
             async { fetchFromEliteTorrent(query, originalQuery, seasonNumber, episodeNumber, isMovie) },
             async { fetchFromNyaa(query, englishQuery, episodeNumber, isMovie, isLiveAction) },
             async { fetchFromAnimeTosho(originalQuery.ifEmpty { query }, episodeNumber, isLiveAction) }
@@ -113,7 +114,8 @@ object TorrentSearchRepository {
         originalQuery: String,
         seasonNumber: Int,
         episodeNumber: Int,
-        isMovie: Boolean
+        isMovie: Boolean,
+        year: String = ""
     ): List<TorrentStreamItem> = withContext(Dispatchers.IO) {
         val list = mutableListOf<TorrentStreamItem>()
         val candidates = listOfNotNull(
@@ -124,7 +126,7 @@ object TorrentSearchRepository {
 
         for (candidate in candidates) {
             val yearMatch = Regex("""\b(19\d\d|20\d\d)\b""").find(candidate)
-            val yr = yearMatch?.groupValues?.get(1) ?: ""
+            val yr = if (year.isNotBlank()) year else (yearMatch?.groupValues?.get(1) ?: "")
             val cleanTitle = candidate.replace(Regex("""\b(19\d\d|20\d\d)\b"""), "").trim()
             if (cleanTitle.isEmpty()) continue
 
@@ -394,7 +396,22 @@ object TorrentSearchRepository {
             }
         }
 
-        // 2. Title matching
+        // 2. Anti-hijack for spinoffs and sequels (e.g. Fionna and Cake vs Adventure Time Finn & Jake)
+        val combinedQueryLower = "${originalQuery.lowercase(Locale.ROOT)} ${query.lowercase(Locale.ROOT)}"
+        val isTargetAdventureTime = combinedQueryLower.contains("adventure time") || combinedQueryLower.contains("hora de aventura")
+        val isTargetFionna = combinedQueryLower.contains("fionna") || combinedQueryLower.contains("cake")
+        val isTorrentFionna = tLower.contains("fionna") || tLower.contains("cake")
+        val isTorrentDistant = tLower.contains("distant lands") || tLower.contains("tierras lejanas")
+        val isTorrentSideQuests = tLower.contains("side quests")
+
+        if (isTargetAdventureTime) {
+            if (!isTargetFionna && isTorrentFionna) return false
+            if (!combinedQueryLower.contains("distant") && isTorrentDistant) return false
+            if (!combinedQueryLower.contains("side quest") && isTorrentSideQuests) return false
+            if (isTargetFionna && !isTorrentFionna) return false
+        }
+
+        // 3. Title matching
         val stopWords = setOf("the", "a", "an", "el", "la", "los", "las", "un", "una", "de", "del", "y", "en", "por", "para", "con")
         val candidates = listOfNotNull(
             originalQuery.takeIf { it.isNotBlank() },
@@ -465,19 +482,20 @@ object TorrentSearchRepository {
 
             val phrase = candWords.joinToString("""\s+""")
             if (Regex("""(?i)\b$phrase\b""").containsMatchIn(tLower)) {
-                if (candWords.size == 1) {
-                    val singleWord = candWords[0]
-                    val afterMatch = Regex("""(?i)\b$singleWord\s+([a-z]+)""").find(tLower)
-                    if (afterMatch != null) {
-                        val nextWord = afterMatch.groupValues[1]
-                        val allowedNext = setOf(
-                            "s01", "s02", "s03", "s1", "s2", "1x01", "1x1",
-                            "2024", "2025", "2026", "2027", "season", "temporada",
-                            "complete", "1080p", "720p", "4k", "hdtv", "web"
-                        )
-                        if (nextWord !in allowedNext && !nextWord.startsWith("s0") && !nextWord.startsWith("1x")) {
-                            continue
-                        }
+                val afterMatch = Regex("""(?i)\b$phrase\s+([a-z0-9]+)""").find(tLower)
+                if (afterMatch != null) {
+                    val nextWord = afterMatch.groupValues[1]
+                    val allowedNext = setOf(
+                        "s01", "s02", "s03", "s04", "s05", "s06", "s07", "s08", "s09", "s10",
+                        "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9",
+                        "1x01", "1x1", "2x01", "season", "temporada", "complete", "completa",
+                        "1080p", "720p", "4k", "2160p", "hdtv", "web", "bdrip", "bluray", "dual", "latino",
+                        "the", "movie", "pelicula"
+                    )
+                    val isYear = nextWord.matches(Regex("""(19|20)\d{2}"""))
+                    val isSeasonMarker = nextWord.startsWith("s0") || nextWord.startsWith("s1") || nextWord.startsWith("1x") || nextWord.startsWith("2x")
+                    if (!isYear && !isSeasonMarker && nextWord !in allowedNext) {
+                        continue
                     }
                 }
                 return true

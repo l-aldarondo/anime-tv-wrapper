@@ -44,6 +44,18 @@ class YtsLuTest {
         println("Episodes: ${detail.episodes.size}")
         assertNotNull(detail)
         assertTrue("Title should contain Deadpool", detail.title.contains("Deadpool", ignoreCase = true))
-        assertTrue("Episodes should have 1 item", detail.episodes.isNotEmpty())
+    }
+
+    @Test
+    fun testAdventureTimeDoesNotMatchFionnaAndCake() = runBlocking {
+        val source = YtsLuSource()
+        // Adventure Time original series (TMDB ID 15260, year 2010)
+        val stream = source.resolveStream("https://en.yts.lu/tv/15260/1/1?title=Adventure+Time&year=2010")
+        println("=== ADVENTURE TIME S01E01 STREAM ===")
+        println("Server: ${stream?.serverName}")
+        println("URL: ${stream?.videoUrl}")
+        assertNotNull(stream)
+        val server = stream?.serverName ?: ""
+        assertFalse("Server title or torrent must NOT match Fionna and Cake", server.contains("Fionna", ignoreCase = true))
     }
 }

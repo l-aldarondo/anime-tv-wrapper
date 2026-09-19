@@ -224,6 +224,9 @@ class YtsLuSource : AnimeSource {
             }
             if (seasonNumbers.isEmpty()) seasonNumbers.add(1)
 
+            val firstAirDate = tvJson?.optString("first_air_date", "").orEmpty()
+            val year = if (firstAirDate.length >= 4) firstAirDate.take(4) else ""
+
             val episodes = mutableListOf<AnimeEpisode>()
             val seasonJobs = seasonNumbers.map { sNum ->
                 async {
@@ -245,7 +248,7 @@ class YtsLuSource : AnimeSource {
                                     episodeNumber = eNum,
                                     seasonNumber = sNum,
                                     title = if (epName.isNotEmpty()) "$eNum. $epName" else "Episodio $eNum",
-                                    episodeUrl = "$baseUrl/tv/$id/$sNum/$eNum?title=${URLEncoder.encode(title, "UTF-8")}",
+                                    episodeUrl = "$baseUrl/tv/$id/$sNum/$eNum?title=${URLEncoder.encode(title, "UTF-8")}&year=$year",
                                     synopsis = epOverview,
                                     stillUrl = epStill,
                                     releaseDate = airDate
@@ -315,12 +318,18 @@ class YtsLuSource : AnimeSource {
                 }
             }
 
+            val relDate = if (id > 0) {
+                val tmdbJson = getJson("https://api.themoviedb.org/3/movie/$id?api_key=${TorrentSettingsStore.DEFAULT_TMDB_API_KEY}&language=es-MX")
+                tmdbJson?.optString("release_date", "").orEmpty()
+            } else ""
+            val movieYear = if (relDate.length >= 4) relDate.take(4) else ""
+
             val episodes = listOf(
                 AnimeEpisode(
                     episodeNumber = 1,
                     seasonNumber = 1,
                     title = "Película Completa",
-                    episodeUrl = "$baseUrl/movie/$id?title=${URLEncoder.encode(movieTitle, "UTF-8")}",
+                    episodeUrl = "$baseUrl/movie/$id?title=${URLEncoder.encode(movieTitle, "UTF-8")}&year=$movieYear",
                     synopsis = movieSynopsis
                 )
             )
@@ -357,22 +366,55 @@ class YtsLuSource : AnimeSource {
         } else emptyMap()
 
         val title = queryParams["title"].orEmpty()
+        val year = queryParams["year"].orEmpty()
         val torrentName = if (title.isNotEmpty()) title else id.toString()
 
         val torrentApiUrl = if (isTv) {
-            "$baseUrl/?api=torrents&mode=tv&name=${URLEncoder.encode(torrentName, "UTF-8")}&season=$sNum&episode=$eNum&quality=all"
+            "$baseUrl/?api=torrents&mode=tv&name=${URLEncoder.encode(torrentName, "UTF-8")}&year=$year&season=$sNum&episode=$eNum&quality=all"
         } else {
-            "$baseUrl/?api=torrents&mode=movie&name=${URLEncoder.encode(torrentName, "UTF-8")}&quality=all"
+            "$baseUrl/?api=torrents&mode=movie&name=${URLEncoder.encode(torrentName, "UTF-8")}&year=$year&quality=all"
+        }
+
+        val lowerName = torrentName.lowercase(Locale.ROOT)
+        val isTargetAdventureTime = lowerName.contains("adventure time") || lowerName.contains("hora de aventura")
+        val isTargetFionna = lowerName.contains("fionna") || lowerName.contains("cake")
+
+        fun isHitRelevant(hitTitle: String): Boolean {
+            val hRaw = hitTitle.replace(".", " ").replace("_", " ")
+            val hLower = hRaw.lowercase(Locale.ROOT)
+
+            // Anti-spinoff check (e.g. Adventure Time vs Fionna and Cake)
+            if (isTargetAdventureTime) {
+                if (!isTargetFionna && (hLower.contains("fionna") || hLower.contains("cake"))) return false
+                if (!lowerName.contains("distant") && (hLower.contains("distant lands") || hLower.contains("tierras lejanas"))) return false
+                if (!lowerName.contains("side quest") && hLower.contains("side quests")) return false
+                if (isTargetFionna && !hLower.contains("fionna") && !hLower.contains("cake")) return false
+            }
+
+            // Episode check for TV series
+            if (isTv && sNum > 0 && eNum > 0) {
+                val epMatch = Regex("""(?i)\b(?:s0*(\d+)e0*(\d+)|(\d+)x0*(\d+))\b""").find(hLower)
+                if (epMatch != null) {
+                    val s = (epMatch.groupValues[1].ifEmpty { epMatch.groupValues[3] }).toIntOrNull()
+                    val e = (epMatch.groupValues[2].ifEmpty { epMatch.groupValues[4] }).toIntOrNull()
+                    if (s != null && s != sNum) return false
+                    if (e != null && e != eNum) return false
+                }
+            }
+            return true
         }
 
         val json = getJson(torrentApiUrl)
         val hits = json?.optJSONArray("hits")
         if (hits != null && hits.length() > 0) {
-            // Pick top hit by seeders
+            // Pick top hit by seeders that passes relevance
             var bestHit: JSONObject? = null
             var maxSeeds = -1
             for (i in 0 until hits.length()) {
                 val hit = hits.optJSONObject(i) ?: continue
+                val itemTitle = hit.optString("title", "")
+                if (!isHitRelevant(itemTitle)) continue
+
                 val seeds = hit.optInt("seeds", 0)
                 if (seeds > maxSeeds && hit.optString("magnetUrl", "").startsWith("magnet:?")) {
                     maxSeeds = seeds

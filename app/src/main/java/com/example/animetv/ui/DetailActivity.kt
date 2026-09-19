@@ -1271,7 +1271,8 @@ class DetailActivity : AppCompatActivity() {
                         seasonNumber = seasonNum,
                         episodeNumber = epNum,
                         isMovie = isMovie,
-                        isLiveAction = isLiveAction
+                        isLiveAction = isLiveAction,
+                        year = currentTmdbMeta?.releaseYear ?: ""
                     )
 
                     progressBar.visibility = View.GONE
